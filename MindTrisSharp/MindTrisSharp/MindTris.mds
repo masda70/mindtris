@@ -1,0 +1,24 @@
+<Combine fileversion="2.0">
+  <Configurations active="Debug">
+    <Configuration name="Debug" ctype="CombineConfiguration">
+      <Entry build="True" name="MindTris" configuration="Debug" />
+      <Entry build="True" name="MindTrisServer" configuration="Debug" />
+      <Entry build="True" name="MindTrisCore" configuration="Debug" />
+    </Configuration>
+    <Configuration name="Release" ctype="CombineConfiguration">
+      <Entry build="True" name="MindTris" configuration="Release" />
+      <Entry build="True" name="MindTrisServer" configuration="Release" />
+      <Entry build="True" name="MindTrisCore" configuration="Release" />
+    </Configuration>
+  </Configurations>
+  <StartMode startupentry="MindTris" single="True">
+    <Execute type="None" entry="MindTris" />
+    <Execute type="None" entry="MindTrisServer" />
+    <Execute type="None" entry="MindTrisCore" />
+  </StartMode>
+  <Entries>
+    <Entry filename="MindTris\MindTris.mdp" />
+    <Entry filename="MindTrisServer\MindTrisServer.mdp" />
+    <Entry filename="MindTrisCore\MindTrisCore.mdp" />
+  </Entries>
+</Combine>

@@ -3,3 +3,8 @@ C:\Users\ZenithM\Documents\Visual Studio 2008\Projects\MindTris\MindTrisCore\bin
 C:\Users\ZenithM\Documents\Visual Studio 2008\Projects\MindTris\MindTrisCore\obj\Debug\ResolveAssemblyReference.cache
 C:\Users\ZenithM\Documents\Visual Studio 2008\Projects\MindTris\MindTrisCore\obj\Debug\MindTrisCore.dll
 C:\Users\ZenithM\Documents\Visual Studio 2008\Projects\MindTris\MindTrisCore\obj\Debug\MindTrisCore.pdb
+C:\mindtris\MindTrisSharp\MindTrisCore\bin\Debug\MindTrisCore.dll
+C:\mindtris\MindTrisSharp\MindTrisCore\bin\Debug\MindTrisCore.pdb
+C:\mindtris\MindTrisSharp\MindTrisCore\obj\Debug\ResolveAssemblyReference.cache
+C:\mindtris\MindTrisSharp\MindTrisCore\obj\Debug\MindTrisCore.dll
+C:\mindtris\MindTrisSharp\MindTrisCore\obj\Debug\MindTrisCore.pdb

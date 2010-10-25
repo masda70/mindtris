@@ -1,0 +1,5 @@
+C:\Users\ZenithM\Documents\Visual Studio 2008\Projects\MindTris\MindTrisServer\bin\Debug\MindTrisServer.exe
+C:\Users\ZenithM\Documents\Visual Studio 2008\Projects\MindTris\MindTrisServer\bin\Debug\MindTrisServer.pdb
+C:\Users\ZenithM\Documents\Visual Studio 2008\Projects\MindTris\MindTrisServer\obj\Debug\ResolveAssemblyReference.cache
+C:\Users\ZenithM\Documents\Visual Studio 2008\Projects\MindTris\MindTrisServer\obj\Debug\MindTrisServer.exe
+C:\Users\ZenithM\Documents\Visual Studio 2008\Projects\MindTris\MindTrisServer\obj\Debug\MindTrisServer.pdb

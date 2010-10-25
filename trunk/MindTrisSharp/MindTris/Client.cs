@@ -5,6 +5,7 @@ using System.Text;
 using System.Net;
 using System.Net.Sockets;
 using MindTrisCore;
+using MindTrisCore.DGMTEncoding;
 
 namespace MindTris
 {
@@ -52,11 +53,12 @@ namespace MindTris
             ushort length = (ushort)size;
             i += NetworkProtocol.PROTOCOL_ID_LENGTH;
             BitConverter.GetBytes(length).CopyTo(packet, i);
+            BigE.E(packet, i, NetworkProtocol.PACKET_LENGTH_LENGTH);
             i += NetworkProtocol.PACKET_LENGTH_LENGTH;
             packet[i] = (byte)NetworkProtocol.PacketID.HelloFromClient;
             i++;
             BitConverter.GetBytes(NetworkProtocol.VERSION).CopyTo(packet, i);
-
+            BigE.E(packet, i, NetworkProtocol.PROTOCOL_VERSION_LENGTH);
             //Sending
             Console.WriteLine("Sending...");
             _socket.Send(packet, 0, packet.Length, SocketFlags.None);
@@ -78,6 +80,7 @@ namespace MindTris
             //Checks
             //...
             //Read la length
+            BigE.E(buffer, NetworkProtocol.PROTOCOL_ID_LENGTH, NetworkProtocol.PACKET_LENGTH_LENGTH);
             ushort content_length = (ushort)(BitConverter.ToUInt16(buffer, NetworkProtocol.PROTOCOL_ID_LENGTH) - NetworkProtocol.HEADER_LENGTH);
             //Continue receiving
             buffer = new byte[content_length];

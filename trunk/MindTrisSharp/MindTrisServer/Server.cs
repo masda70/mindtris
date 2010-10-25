@@ -8,6 +8,7 @@ using System.Threading;
 using System.IO;
 using System.Collections;
 using MindTrisCore;
+using MindTrisCore.DGMTEncoding;
 
 namespace MindTrisServer
 {
@@ -183,6 +184,8 @@ namespace MindTrisServer
             if (NetworkProtocol.DGMTCheck(buffer, 0))
             {
                 Console.WriteLine("{0}: DGMT passed.", socket.RemoteEndPoint);
+                //On assure l'endianness
+                BigE.E(buffer, NetworkProtocol.PROTOCOL_ID_LENGTH, NetworkProtocol.PACKET_LENGTH_LENGTH);
                 //Attention, dépend du protocole : sizeof(ushort) == PACKET_LENGTH_LENGTH
                 ushort content_length = (ushort)(BitConverter.ToUInt16(buffer, NetworkProtocol.PROTOCOL_ID_LENGTH) - NetworkProtocol.HEADER_LENGTH);
                 byte id = buffer[NetworkProtocol.PROTOCOL_ID_LENGTH + NetworkProtocol.PACKET_LENGTH_LENGTH];
@@ -202,6 +205,7 @@ namespace MindTrisServer
                         qte += socket.Receive(buffer, qte, content_length - qte, SocketFlags.None);
                     }
                     Console.WriteLine("{0}: Version number #{1}", socket.RemoteEndPoint, BitConverter.ToUInt32(buffer, 0));
+                    BigE.E(buffer, 0, NetworkProtocol.PROTOCOL_VERSION_LENGTH);
                     if (BitConverter.ToUInt32(buffer, 0) == NetworkProtocol.VERSION)
                     {
                         //Connection success
@@ -232,6 +236,8 @@ namespace MindTrisServer
             ushort length = (ushort)size;
             i += NetworkProtocol.PROTOCOL_ID_LENGTH;
             BitConverter.GetBytes(length).CopyTo(packet, i);
+            //On assure le BigEndian
+            BigE.E(packet, i, NetworkProtocol.PACKET_LENGTH_LENGTH);
             i += NetworkProtocol.PACKET_LENGTH_LENGTH;
             packet[i] = (byte)NetworkProtocol.PacketID.HelloFromServer;
             i++;

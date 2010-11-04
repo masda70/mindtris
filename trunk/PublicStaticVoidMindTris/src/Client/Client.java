@@ -18,7 +18,7 @@ import javax.crypto.spec.SecretKeySpec;
 
 public class Client {
 	private static final boolean DEBUG = true;
-	private static final short KEY_LEN = 1024;
+	private static final short KEY_LEN = 512;
 	private Window _w;
 	private Hashtable<Channel, PeerInfo> _peers;
 	private Channel _srvCh;
@@ -124,20 +124,23 @@ public class Client {
 			switch( data[0] ) {
 			case 0x00:
 				debug("receive protocol succes. Display welcome message.");
-				int len = Channel.bytes2short(new byte[]{data[1], data[2]});
+				int len = Channel.bytes2short(new byte[]{data[1], data[2]}) / 8;
+				System.out.println(len+" "+data.length);
+				System.out.println(Channel.byteToString(data));
+				
 				Key serverKey = new SecretKeySpec(data, 3, len, "RSA");
 				try {
-						_serverCrypter = Cipher.getInstance("RSA");
-						_serverCrypter.init(Cipher.ENCRYPT_MODE, serverKey);
-					} catch (NoSuchAlgorithmException e) {
-						e.printStackTrace();
-					} catch (NoSuchPaddingException e) {
-						e.printStackTrace();
-					} catch (InvalidKeyException e) {
-						e.printStackTrace();
-					}
+					_serverCrypter = Cipher.getInstance("RSA");
+					_serverCrypter.init(Cipher.ENCRYPT_MODE, serverKey);
+				} catch (NoSuchAlgorithmException e) {
+					e.printStackTrace();
+				} catch (NoSuchPaddingException e) {
+					e.printStackTrace();
+				} catch (InvalidKeyException e) {
+					e.printStackTrace();
+				}
 				
-				_w.print( new String(data, 3+len, data.length-1) );
+				_w.print( new String(data, 3+len, data.length-3-len) );
 				break;
 			case 0x01:
 				debug("wrong protocol");

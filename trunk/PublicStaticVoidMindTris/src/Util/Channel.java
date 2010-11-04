@@ -5,7 +5,7 @@ import java.net.UnknownHostException;
 import java.nio.ByteBuffer;
 
 public class Channel {
-	private static final boolean DEBUG = false;
+	private static final boolean DEBUG = true;
 	public static final byte [] protocolId = {'D','G','M','T'};
 	public static final byte [] protocolVersion = {0x00, 0x00, 0x00, 0x01};
 

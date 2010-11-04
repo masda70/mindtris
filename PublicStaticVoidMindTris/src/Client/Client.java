@@ -4,23 +4,50 @@ import Util.*;
 
 import java.io.*;
 import java.net.*;
+import java.security.*;
 import java.util.Enumeration;
 import java.util.Hashtable;
 import java.util.Vector;
 
+import javax.crypto.BadPaddingException;
+import javax.crypto.Cipher;
+import javax.crypto.IllegalBlockSizeException;
+import javax.crypto.NoSuchPaddingException;
+import javax.crypto.spec.SecretKeySpec;
+
 
 public class Client {
 	private static final boolean DEBUG = true;
+	private static final short KEY_LEN = 1024;
 	private Window _w;
 	private Hashtable<Channel, PeerInfo> _peers;
 	private Channel _srvCh;
 	private PeerInfo _myInfo;
 	private short _serverPort;
-		
+	private Cipher _serverCrypter;
+	private Cipher _decrypter;
+	private PublicKey _publicKey;
+	
 	public Client ( short serverPort ) {
 		_w = new Window(this);
 		_peers = new Hashtable<Channel, PeerInfo> ();
 		_serverPort = serverPort;
+
+		KeyPair keyPair;
+		try {
+			KeyPairGenerator gen = KeyPairGenerator.getInstance("RSA");
+			gen.initialize(KEY_LEN);
+			keyPair = gen.generateKeyPair();
+			_publicKey = keyPair.getPublic();
+			_decrypter = Cipher.getInstance("RSA");
+			_decrypter.init(Cipher.DECRYPT_MODE, keyPair.getPrivate());
+		} catch (NoSuchAlgorithmException e) {
+			e.printStackTrace();
+		} catch (InvalidKeyException e) {
+			e.printStackTrace();
+		} catch (NoSuchPaddingException e) {
+			e.printStackTrace();
+		}
 	}
 
 	public void connectToSrv ( String serverIp, short myPort, String myPseudo ) throws IOException {
@@ -75,17 +102,16 @@ public class Client {
 		_peers.put(ch, info);
 	}
 	
-
 	private void debug ( String m ) {
 		if( DEBUG ) System.out.println(m);
 	}
-
+	
 	////////// HANDLERS ///////////
 	private class ClientHandler extends MsgHandler {
 		public ClientHandler(Channel ch) {
 			super(ch);
 			
-			addHandler(Msg.S_HELLO, new HelloHandler());
+			addHandler(Msg.S_HELLO, new ServerHelloHandler());
 			addHandler(Msg.TEST_CHAT_LIST_PEERS, new TestChatListHandler());
 			addHandler(Msg.C_HELLO, new CHelloHandler());
 			addHandler(Msg.SEND_MSG, new ChatHandler());
@@ -93,17 +119,25 @@ public class Client {
 		
 	}
 	
-	private class HelloHandler implements Handler {
+	private class ServerHelloHandler implements Handler {
 		public void handle(byte[] data, Channel ch) throws IOException {
 			switch( data[0] ) {
 			case 0x00:
 				debug("receive protocol succes. Display welcome message.");
-				_w.print( new String(data, 1, data.length-1) );
+				int len = Channel.bytes2short(new byte[]{data[1], data[2]});
+				Key serverKey = new SecretKeySpec(data, 3, len, "RSA");
+				try {
+						_serverCrypter = Cipher.getInstance("RSA");
+						_serverCrypter.init(Cipher.ENCRYPT_MODE, serverKey);
+					} catch (NoSuchAlgorithmException e) {
+						e.printStackTrace();
+					} catch (NoSuchPaddingException e) {
+						e.printStackTrace();
+					} catch (InvalidKeyException e) {
+						e.printStackTrace();
+					}
 				
-				/* */
-				debug("ask for the list of peers. Send my info by the way");
-				_srvCh.write(new Msg(Msg.TEST_CHAT_LIST_PEERS, _myInfo.toBytes()));
-				/* */
+				_w.print( new String(data, 3+len, data.length-1) );
 				break;
 			case 0x01:
 				debug("wrong protocol");

@@ -3,18 +3,45 @@ import Util.*;
 
 import java.io.*;
 import java.net.*;
+import java.security.InvalidKeyException;
+import java.security.KeyPair;
+import java.security.KeyPairGenerator;
+import java.security.NoSuchAlgorithmException;
+import java.security.PublicKey;
 import java.util.Arrays;
 import java.util.Enumeration;
 import java.util.Hashtable;
 
+import javax.crypto.Cipher;
+import javax.crypto.NoSuchPaddingException;
+
 public class Server {
 	public static final short PORT = 1337+42;
 	private static final boolean DEBUG = true;
+	private static final short KEY_LEN = 1024;
 	private static String HELLO_MSG = "Welcome to MindTris Server\n";
 	private Hashtable<Channel, PeerInfo> _clients;
+	private PublicKey _publicKey;
+	private Cipher _cipher;
 	
 	public Server () {
 		_clients = new Hashtable<Channel, PeerInfo>();
+
+		KeyPair keyPair;
+		try {
+			KeyPairGenerator gen = KeyPairGenerator.getInstance("RSA");
+			gen.initialize(KEY_LEN);
+			keyPair = gen.generateKeyPair();
+			_publicKey = keyPair.getPublic();
+			_cipher = Cipher.getInstance("RSA");
+			_cipher.init(Cipher.DECRYPT_MODE, keyPair.getPrivate());
+		} catch (NoSuchAlgorithmException e) {
+			e.printStackTrace();
+		} catch (InvalidKeyException e) {
+			e.printStackTrace();
+		} catch (NoSuchPaddingException e) {
+			e.printStackTrace();
+		}
 		
 		try {
 			ServerSocket srvr = new ServerSocket(PORT);
@@ -66,13 +93,12 @@ public class Server {
 	private class HelloHandler implements Handler {
 		public void handle(byte[] data, Channel ch) throws IOException {
 			if( Arrays.equals(data, Channel.protocolVersion) ) {
-				debug("Sending protocol success");
-				byte [] answer = {0x00};
-				ch.write(new Msg(Msg.S_HELLO, answer, HELLO_MSG.getBytes()));
+				debug("Send hello message");
+				ch.write(new Msg(Msg.S_HELLO, new byte[]{0x00}, Channel.short2bytes(KEY_LEN), _publicKey.getEncoded(), HELLO_MSG.getBytes()));
+				
 			} else {
 				debug("Wrong protocol version");
-				byte [] answer = {0x01};
-				ch.write(new Msg(Msg.S_HELLO, answer));
+				ch.write(new Msg(Msg.S_HELLO, new byte[]{0x01, 0x00}, HELLO_MSG.getBytes()));
 			}
 		}
 	}

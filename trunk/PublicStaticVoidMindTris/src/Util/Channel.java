@@ -86,20 +86,20 @@ public class Channel {
 		return _s.getLocalAddress().getAddress();
 	}
 	
-	private int bytes2short (byte[]  i) {
+	public static int bytes2short (byte[]  i) {
 //		return i[0] + (i[1] << 8);
 		
 		ByteBuffer buf = ByteBuffer.wrap(i);
 		return buf.getShort();
 	}
 	
-	private byte [] short2bytes ( short i ) {
+	public static byte [] short2bytes ( short i ) {
 		ByteBuffer buf = ByteBuffer.allocate(2);
 		buf.putShort(i);
 		return buf.array();
 	}
 	
-	private static String byteToString ( byte ... raw ) {
+	public static String byteToString ( byte ... raw ) {
 		final String HEX = "0123456789ABCDEF";
 		
 		if ( raw == null ) return null;

@@ -14,7 +14,7 @@ public class Msg {
 		TEST_CHAT_LIST_PEERS = 0x07,
 		
 		S_HELLO = 0x00 - 0x80,	// HELLO ANSWER = 1 BYTE) : 0x00 = SUCCESS, 0x01 = WRONG PROTOCOL VERSION, 0x02 = UNKNOWN ERROR
-		 						// MESSAGE FOR CLIENT = UTF-8 STRING, occupe le reste du message): Un message du serveur qui peut lu par un humain. Si HELLO ANSWER= SUCCESS  = 0x00, alors ça sera un message of the day  = MOTD, dans tous les autres cas, ce n'est pas spécifié.
+		 						// MESSAGE FOR CLIENT = UTF-8 STRING, occupe le reste du message): Un message du serveur qui peut lu par un humain. Si HELLO ANSWER= SUCCESS  = 0x00, alors ÔøΩa sera un message of the day  = MOTD, dans tous les autres cas, ce n'est pas spÔøΩcifiÔøΩ.
 		
 		LOGIN_SUCCESS = 0x01 - 0x80,
 		LOBBY_CREATED = 0x02 - 0x80,

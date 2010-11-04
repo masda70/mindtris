@@ -8,6 +8,8 @@ import java.security.KeyPair;
 import java.security.KeyPairGenerator;
 import java.security.NoSuchAlgorithmException;
 import java.security.PublicKey;
+import java.security.spec.PKCS8EncodedKeySpec;
+import java.security.spec.X509EncodedKeySpec;
 import java.util.Arrays;
 import java.util.Enumeration;
 import java.util.Hashtable;
@@ -18,7 +20,7 @@ import javax.crypto.NoSuchPaddingException;
 public class Server {
 	public static final short PORT = 1337+42;
 	private static final boolean DEBUG = true;
-	private static final short KEY_LEN = 1024;
+	private static final short KEY_LEN = 512;
 	private static String HELLO_MSG = "Welcome to MindTris Server\n";
 	private Hashtable<Channel, PeerInfo> _clients;
 	private PublicKey _publicKey;
@@ -95,7 +97,6 @@ public class Server {
 			if( Arrays.equals(data, Channel.protocolVersion) ) {
 				debug("Send hello message");
 				ch.write(new Msg(Msg.S_HELLO, new byte[]{0x00}, Channel.short2bytes(KEY_LEN), _publicKey.getEncoded(), HELLO_MSG.getBytes()));
-				
 			} else {
 				debug("Wrong protocol version");
 				ch.write(new Msg(Msg.S_HELLO, new byte[]{0x01, 0x00}, HELLO_MSG.getBytes()));

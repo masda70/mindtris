@@ -1,0 +1,311 @@
+\documentclass[12pt,a4paper]{article}
+\usepackage[latin1]{inputenc}
+\usepackage{amsmath}
+\usepackage{amsfonts}
+\usepackage{amsthm}
+\usepackage{amssymb}
+\usepackage{fullpage}
+\usepackage{listings}
+ \usepackage{array}
+\newcommand{\mc}{\mathcal}
+
+\author{David Montoya, Raphaël Bonaque, Charles-Pierre Astolfi,\\ Émile Contal, Martin Gleize}
+\title{DGMT Protocol Specification \\ First draft}
+\begin{document}
+\maketitle
+\lstset{language=C++,basicstyle=\footnotesize}
+
+
+\section{Naming conventions}
+
+In this paper, packet structures for the DGMT protocol will be described in detail. We will employ the following types of terms:
+
+\begin{itemize}
+
+\item $data\_type$: the following data types will be employed:
+\begin{itemize}
+\item $byte$: an ordered collection of 8 bits. 
+\item $int$: an integer of unspecified precision. We will employ both the decimal \verb [0-9]+  and hexadecimal \verb 0x[0-9A-F]+  notations in this paper. \\ \textbf{Implentors's note}: implementors are free to choose how they store integer data, as long as the precision employed is enough to represent the whole set of expectable values.
+\item $bool$: a boolean, whose value can be either $1$ or $0$.
+\item $ustring$: a finite sequence of characters from the Unicode character set.
+\end{itemize}  
+\item DATA\_ENCODING: a byte encoding of a given $data\_type$.
+\item \verb CONSTANT_VALUE : a constant byte value, used to distinguish different message types or answers.
+\item \verb variable : a variable used to store sensitive protocol data.
+\end{itemize}  
+
+We will refer to the value \verb NULL  to refer to either the 0x00 $byte$ or the empty $ustring$.
+
+\subsection{Encodings}
+We define the following data encodings:
+
+\begin{itemize}
+\item BYTE: data is taken as "is", a $byte$ array is formed.
+\item INTEGER: a big-endian integer encoding of an $int$. The actual interpretation depends on the number of bytes employed.
+\item BOOLEAN: an encoding for a $bool$. Any non zero value represents $1$, while a zero value stands for $0$. If more than 1 byte is used, a $bool$ array is formed.
+\item STRING: a ASCII encoding for $ustring$, using an arbitrary number of bytes.
+\item USTRING: a UTF-8 encoding for $ustring$, using an arbitrary number of bytes.
+\item ARRAY: an encoding for an array of arbitrary data. Individual data has particular encoding, and this data is concatenated at the byte level to form an array.
+\end{itemize}
+\textbf{Implementor's note}: STRING can actually be interpreted as a USTRING without any loss of data. The reason we define the former is so that we can specify the kind of information we expect to have, although this should be done at a higher level of abstraction.
+
+\section{Overview}
+
+The DGMT protocol defines how a MindTris client can communicate with a MindTris server. Clients must maintain the following state information for each server it connects to:
+
+\begin{itemize}
+\item \verb server_pub_key : The server's public RSA key. Used by the client in communications where secret transmission of data is necessary. The default value is \verb NULL .
+\end{itemize}
+The client keeps track of the current status of the client/server connection. This could be whether the client has logged in, is in a game, etc. It should include information such as following:
+\begin{itemize}
+\item \verb connected : Whether or not the client has received a positive handshake answer from the server. Defaults as 0.
+\item \verb logged_on : Whether or not the client has successfully authenticated itself as a certain user existing in the server's database. Defaults as 0.
+\item \verb user : The user the client has authenticated as. Defaults as \verb NULL .
+\item \verb lobby : The id of the lobby the user has joined. Defaults as \verb NULL .
+\item \verb am_playing : Whether or not the user is in a game. Defaults as 0.
+\end{itemize}
+
+Conversely, server must maintain state information from each client it's connected to. This should include, \textbf{connected}, \textbf{logged\_on}, \textbf{user}, \textbf{lobby} and \textbf{am\_playing}. Additionally, it will include the client's public key (\textbf{client\_pub\_key}), which will be used for communications between peers to authenticate their messages. This key defaults as \verb NULL .\\
+
+All messages sent between the server and the client must be structured as follows:
+
+\begin{center}
+  \begin{tabular}{|p{2cm}|c|c|c|p{8cm}|}
+    \hline
+    Name & Encoding & Size (B) & Default & Comment \\  \hline \hline
+    Protocol & STRING & 4 & "DGMT" & Default protocol identifier. \\ \hline
+    Size & INTEGER & 2 & & The size of the message in bytes, including the header. \\ \hline
+    Payload & BYTE & varies & & The content of this field will vary depending on the type of message.\\ \hline
+  \end{tabular}
+\end{center}
+
+\section{Message Types}
+
+\subsection{Hello}
+
+This message is the first message in the handshake between the server and the client. The client will first send a \verb HELLO_FROM_CLIENT  message to the server, who in turn should answer with a \verb HELLO_FROM_SERVER  message.\\
+
+\noindent \textbf{Request:}
+
+\begin{center}
+  \begin{tabular}{|p{2cm}|c|c|c|p{8cm}|}
+    \hline
+    Name & Encoding & Size (B) & Default & Comment \\  \hline \hline
+    Type & INTEGER & 1 & 0x00 & This identifies the message as \verb HELLO_FROM_CLIENT . \\ \hline
+    Protocol Version & INTEGER & 4 & N/A & Protocol/Client version; the format is xx.xx.xx.xx. \\ \hline
+  \end{tabular}
+\end{center}
+
+\noindent \textbf{Response:}
+
+\begin{center}
+  \begin{tabular}{|p{2cm}|c|c|c|p{8cm}|}
+    \hline
+    Name & Encoding & Size (B) & Default& Comment \\  \hline \hline
+    Type & INTEGER & 1 & 0x80 & This identifies the message as \verb HELLO_FROM_SERVER . \\ \hline
+    Server Answer & INTEGER & 1 & N/A & Server's response. Must be one of the following:
+    0x00 (\verb SUCCESS ), 0x01 (\verb WRONG_PROTOCOL_VERSION ), 0x02 (\verb UNKNOWN_ERROR ). \\ \hline
+    Server Public Key Size & INTEGER & 2 & N/A & The size of the Server Public Key field. Should be 0 if the Server Answer is not \verb SUCCESS .  \\ \hline
+    Server Public Key & BYTE & varies & N/A & The server's public key, used for transmission of secret data from the client to the server. \\ \hline
+	Message & USTRING & varies & N/A & A human readable message from the server to the client. This could be a welcome message, if the Server Answer was \verb SUCCESS , or a few details about the error that occurred.\\ \hline
+  \end{tabular}
+\end{center}
+
+If the server answers \verb SUCCESS , the client will store the server's public key in its \verb server_pub_key  variable. Additionally the state variable \verb connected  is set to 1. Any other messages exchanged between the server and the client assume that \verb connected  is 1.
+
+\subsection{Keep alive}
+
+Clients regularly send a message with an empty Payload to the server from the moment they received a \verb HELLO_FROM_SERVER  . They are expected to do so every 60 seconds, otherwise the server will drop the connection, and terminate any ongoing transactions with the client.
+
+\subsection{User creation}
+
+By this process, a client can create a user to be stored in the server's database. The client will first send a \verb CREATE_USER  message to the server, who in turn should answer with a \verb USER_CREATION  message.\\
+
+\noindent \textbf{Request:}
+
+\begin{center}
+  \begin{tabular}{|p{2cm}|c|c|c|p{8cm}|}
+    \hline
+    Name & Encoding & Size (B) & Default & Comment \\  \hline \hline
+    Type & INTEGER & 1 & 0x01 & This identifies the message as \verb CREATE_USER . \\ \hline
+    Encrypted User Info & BYTE & varies & N/A & We will describe this content below. \\ \hline
+  \end{tabular}
+\end{center}
+
+The Encrypted User Info field should contain the following data, encrypted with the RSA-OAEP (SHA-1) scheme, using \verb server_pub_key .
+
+\begin{center}
+  \begin{tabular}{|p{2cm}|c|c|c|p{8cm}|}
+    \hline
+    Name & Encoding & Size (B) & Default & Comment \\  \hline \hline
+    Username Size & INTEGER & 1 & 15 & The size of the Username field.\\ \hline
+    Username & USTRING & varies & N/A & A name used to login.\\ \hline
+    Display Name Size & INTEGER & 1 & 255 & The size of the Display Name field.\\ \hline
+    Display Name & USTRING & varies & N/A & A name that will be displayed to other users.\\ \hline
+    Email Size & INTEGER & 2 & 320 & The size of the Email field. This value cannot be greater than 320.\\ \hline
+    Email & STRING & varies & N/A & An email address, used to recover a lost password.\\ \hline
+    Password Size & INTEGER & 1 & N/A & The size of the Password field.\\ \hline
+    Password & STRING & varies & N/A & The password that will be used to login. \\ \hline
+  \end{tabular}
+\end{center}
+
+Valid usernames must match \verb [A-Za-z][A-Za-z0-9_.\-]* , and valid password must match \begin{center} \verb ^{}.*(?=.\{6,\})(?=.*\d)(?=.*[a-z])(?=.*[A-Z])(?=.*[@#$%^&+=]).*$ \end{center}
+
+\noindent \textbf{Response:}
+
+\begin{center}
+  \begin{tabular}{|p{2cm}|c|c|c|p{8cm}|}
+    \hline
+    Name & Encoding & Size (B) & Default & Comment \\  \hline \hline
+    Type & INTEGER & 1 & 0x81 & This identifies the message as \verb USER_CREATION . \\ \hline
+    Answer & BYTE & 1 & N/A &    \begin{itemize}    	\item 0x00: the user has been created with success.
+    	\item 0x01: this username already exists.
+		\item 0x02: invalid username.
+	    \item 0x03: invalid password.
+	    \item 0x04: invalid email.
+	\end{itemize}
+    \\ \hline
+    
+  \end{tabular}
+\end{center}
+
+
+\subsection{Login}
+
+By this process, a client can login as a user present in the server's database. The client will first send a \verb LOGIN  message to the server, who in turn should answer with a \verb LOGIN_REPLY  message.\\
+
+\noindent \textbf{Request:}
+
+\begin{center}
+  \begin{tabular}{|p{2cm}|c|c|c|p{8cm}|}
+    \hline
+    Name & Encoding & Size (B) & Default & Comment \\  \hline \hline
+    Type & INTEGER & 1 & 0x02 & This identifies the message as \verb LOGIN . \\ \hline
+    Encrypted User Login Info & BYTE & varies & N/A & We will describe this content below. \\ \hline
+  \end{tabular}
+\end{center}
+
+The Encrypted User Login Info field should contain the following data, encrypted with the RSA-OAEP (SHA-1) scheme, using \verb server_pub_key .
+
+\begin{center}
+  \begin{tabular}{|p{2cm}|c|c|c|p{8cm}|}
+    \hline
+    Name & Encoding & Size (B) & Default & Comment \\  \hline \hline
+    Username Size & INTEGER & 1 & 15 & The size of the Username field.\\ \hline
+    Username & USTRING & varies & N/A & A name used to login.\\ \hline
+    Password Size & INTEGER & 1 & N/A & The size of the Password field.\\ \hline
+    Password & STRING & varies & N/A & The password that will be used to login. \\ \hline
+  \end{tabular}
+\end{center}
+
+\noindent \textbf{Response:}
+
+\begin{center}
+  \begin{tabular}{|p{2cm}|c|c|c|p{8cm}|}
+    \hline
+    Name & Encoding & Size (B) & Default & Comment \\  \hline \hline
+    Type & INTEGER & 1 & 0x82 & This identifies the message as \verb LOGIN_REPLY . \\ \hline
+    Answer & BYTE & 1 & N/A &    \begin{itemize}    	\item 0x00: login success.
+        \item 0x01: username does not exist.
+    	\item 0x02: bad username/password.
+		\item 0x03: too many tries, try again later.
+	    \item 0x04: login success, but another instance was disconnected elsewhere.
+	\end{itemize} \\ \hline
+    Display Name Size & INTEGER & 1 & 255 & The size of the Display Name field.\\ \hline
+    Display Name & USTRING & varies & N/A & The user's name that is displayed to others.\\ \hline
+  \end{tabular}
+\end{center}
+
+Normally, the server will only give a success response if the username and password provided by the client match in the server's database.  The variable \verb logged_on  is set to 1 and \verb user  is set to the provided username on both the server and the client.
+
+
+\subsection{Lobby Creation}
+
+By this process, a user can create a lobby. This is only possible if \verb logged_on  is set to 1. \\
+
+\noindent \textbf{Request:}
+
+\begin{center}
+  \begin{tabular}{|p{2cm}|c|c|c|p{8cm}|}
+    \hline
+    Name & Encoding & Size (B) & Default & Comment \\  \hline \hline
+    Type & INTEGER & 1 & 0x03 & This identifies the message as \verb CREATE_LOBBY . \\ \hline
+    Lobby Name Size& INTEGER & 1 & N/A & The size of the Lobby Name field. \\ \hline
+    Lobby Name& USTRING & varies & N/A & The name of the lobby to be created. \\ \hline
+    Has Password& BOOLEAN & 1 & 0 & Whether or not the lobby will require a password. \\ \hline
+    Encrypted Lobby Password & BYTE & varies & N/A & This field is empty if the Has Password field contains 0. \\ \hline
+  \end{tabular}
+\end{center}
+
+The Encrypted Lobby Password field, if provided, should contain the following data, encrypted with the RSA-OAEP (SHA-1) scheme, using \verb server_pub_key .
+
+\begin{center}
+  \begin{tabular}{|p{2cm}|c|c|c|p{8cm}|}
+    \hline
+    Name & Encoding & Size (B) & Default & Comment \\  \hline \hline
+    Password Size & INTEGER & 1 & N/A & The size of the Password field.\\ \hline
+    Password & STRING & varies & N/A & The password that will requested to join the lobby. \\ \hline
+  \end{tabular}
+\end{center}
+
+Note that a valid password must match \begin{center} \verb ^{}.*(?=.\{6,\})(?=.*\d)(?=.*[a-z])(?=.*[A-Z])(?=.*[@#$%^&+=]).*$ \end{center}
+
+\noindent \textbf{Response:}
+
+\begin{center}
+  \begin{tabular}{|p{2cm}|c|c|c|p{8cm}|}
+    \hline
+    Name & Encoding & Size (B) & Default & Comment \\  \hline \hline
+    Type & INTEGER & 1 & 0x83 & This identifies the message as \verb LOBBY_CREATION . \\ \hline
+    Answer & BYTE & 1 & N/A &    \begin{itemize}    	\item 0x00: lobby created with success.
+        \item 0x01: invalid password.
+	    \item 0x02: you do not have enough rights create a lobby.
+	\end{itemize} \\ \hline
+    Lobby ID & INTEGER & 4 & N/A &  An ID generated by the server for the lobby than has been created. If Answer wasn't 0x00, then this value is 0x0 (\verb NULL ). Otherwise, this value should be generated so that all current available lobbies have unique IDs.\\ \hline
+  \end{tabular}
+\end{center}
+
+\subsection{Lobby List Retrieval}
+
+Users might want to know the list of available lobbies. This is only possible if \verb logged_on  is set to 1. \\
+
+\noindent \textbf{Request:}
+
+\begin{center}
+  \begin{tabular}{|p{2cm}|c|c|c|p{8cm}|}
+    \hline
+    Name & Encoding & Size (B) & Default & Comment \\  \hline \hline
+    Type & INTEGER & 1 & 0x04 & This identifies the message as \verb GET_LOBBY_LIST . \\ \hline
+  \end{tabular}
+\end{center}
+
+\noindent \textbf{Response:}
+
+
+\begin{center}
+  \begin{tabular}{|p{2cm}|c|c|c|p{8cm}|}
+    \hline
+    Name & Encoding & Size (B) & Default & Comment \\  \hline \hline
+    Type & INTEGER & 1 & 0x84 & This identifies the message as \verb LOBBY_LIST . \\ \hline
+    Lobby List Size & INTEGER & 1 & N/A & The size of the Lobby List array. \\ \hline
+    Lobby List & ARRAY & varies & N/A & An array of Lobby data, described  below. \\ \hline
+  \end{tabular}
+\end{center}
+
+The Lobby List contains an array of the following data structure:
+
+\begin{center}
+  \begin{tabular}{|p{2cm}|c|c|c|p{8cm}|}
+    \hline
+    Name & Encoding & Size (B) & Default & Comment \\  \hline \hline
+    Lobby ID & INTEGER & 4 & NULL & The lobby ID. \\ \hline
+    Player Count & INTEGER & 1 & N/A & The number of players present in the lobby. \\ \hline
+    Player Allowed Count & INTEGER & 1 & N/A & The maximum number of players allowed. \\ \hline
+    Password Protected & BOOLEAN & 1 & 0 & Whether or not this lobby requires a password to join. \\ \hline   
+    Creator Size & INTEGER & 1 & N/A & The size of the Creator field. \\ \hline   
+    Creator & USTRING & varies & N/A & The display name of the creator of this lobby. \\ \hline   
+  \end{tabular}
+\end{center}
+
+
+\end{document}

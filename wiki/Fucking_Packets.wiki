@@ -1,0 +1,28 @@
+C/S
+_join lobby (id,pass,port,fucking public key)
+_answer : (ok dude : [|pseudo,port,public key|] / fuck off)
+_start game because i'm the boss man !
+_ready (all data fuc'in preloaded, connected with all fucking peers)
+_i can't reach fucking player (d)
+_kick (dude d) because i'm the boss man !
+
+
+S/C
+_update player list : {join,leave,kick} + (pseudo,port,public key)
+_load game (time before start = ?)
+_start game
+
+
+
+
+P2P
+_chat ({dude d,all==(id= 0)}, string)
+_answer message fucking recieved
+_alive-packet every t sec
+
+
+
+
+legend :
+
+[|x|] : this is the frikking lis of the x's

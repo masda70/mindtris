@@ -24,7 +24,8 @@
  * alive-packet every t sec
  * game-roud RSA( ???????? ) 
 
----
-==legend :==
+
+----
+===legend===
 
 [|x|] : this is the frikking list of the x's

@@ -1,6 +1,6 @@
-
+﻿
 #include "mindtris.h"
-
+#include <locale>
 #include <signal.h>
 #include <stdlib.h>
 
@@ -92,6 +92,14 @@ MindTrisClient::MindTrisClient(string address, uint16_t port){
 
 int main(int argc, char ** argv)
 {
+    SetConsoleOutputCP(CP_UTF8);
+
+	/*int bufferSize = WideCharToMultiByte(CP_UTF8, 0, s, -1, NULL, 0, NULL, NULL);
+
+	char* m = new char[bufferSize]; 
+
+	WideCharToMultiByte(CP_UTF8, 0, s, -1, m,bufferSize, NULL, NULL);  */
+
 	#ifdef WIN32
 		// initialize winsock
 

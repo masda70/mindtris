@@ -7,6 +7,7 @@
 \usepackage{fullpage}
 \usepackage{listings}
  \usepackage{array}
+ \usepackage{hyperref}
 \newcommand{\mc}{\mathcal}
 
 \author{David Montoya, Raphaël Bonaque, Charles-Pierre Astolfi,\\ Émile Contal, Martin Gleize}
@@ -45,7 +46,8 @@ We define the following data encodings:
 \item BOOLEAN: an encoding for a $bool$. Any non zero value represents $1$, while a zero value stands for $0$. If more than 1 byte is used, a $bool$ array is formed.
 \item STRING: a ASCII encoding for $ustring$, using an arbitrary number of bytes.
 \item USTRING: a UTF-8 encoding for $ustring$, using an arbitrary number of bytes.
-\item ARRAY: an encoding for an array of arbitrary data. Individual data has particular encoding, and this data is concatenated at the byte level to form an array.
+\item ARRAY: an encoding for an array of arbitrary data. Individual data has particular encoding, and this data is concatenated at the byte level to form an array. The size of an ARRAY usually refers to the number of elements present in it.
+\item ASN.1: Abstract Syntax Notation One (ASN.1) is a standard and flexible notation that describes data structures. ASN.1 is specified in \href{http://www.itu.int/rec/T-REC-X.690/}{ITU X.690}.
 \end{itemize}
 \textbf{Implementor's note}: STRING can actually be interpreted as a USTRING without any loss of data. The reason we define the former is so that we can specify the kind of information we expect to have, although this should be done at a higher level of abstraction.
 
@@ -105,8 +107,7 @@ This message is the first message in the handshake between the server and the cl
     Type & INTEGER & 1 & 0x80 & This identifies the message as \verb HELLO_FROM_SERVER . \\ \hline
     Server Answer & INTEGER & 1 & N/A & Server's response. Must be one of the following:
     0x00 (\verb SUCCESS ), 0x01 (\verb WRONG_PROTOCOL_VERSION ), 0x02 (\verb UNKNOWN_ERROR ). \\ \hline
-    Server Public Key Size & INTEGER & 2 & N/A & The size of the Server Public Key field. Should be 0 if the Server Answer is not \verb SUCCESS .  \\ \hline
-    Server Public Key & BYTE & varies & N/A & The server's public key, used for transmission of secret data from the client to the server. \\ \hline
+    Server Public Key & ASN.1 & varies & N/A & The server's public key, used for transmission of secret data from the client to the server. The expected format is \href{http://www.itu.int/rec/T-REC-X.509/}{X.509: Public-key and attribute certificate frameworks}. \\ \hline
 	Message & USTRING & varies & N/A & A human readable message from the server to the client. This could be a welcome message, if the Server Answer was \verb SUCCESS , or a few details about the error that occurred.\\ \hline
   \end{tabular}
 \end{center}
@@ -287,12 +288,12 @@ Users might want to know the list of available lobbies. This is only possible if
     \hline
     Name & Encoding & Size (B) & Default & Comment \\  \hline \hline
     Type & INTEGER & 1 & 0x84 & This identifies the message as \verb LOBBY_LIST . \\ \hline
-    Lobby List Size & INTEGER & 1 & N/A & The size of the Lobby List array. \\ \hline
+    Lobby List Size & INTEGER & 1 & N/A & The size of the Lobby List array (number of elements). \\ \hline
     Lobby List & ARRAY & varies & N/A & An array of Lobby data, described  below. \\ \hline
   \end{tabular}
 \end{center}
 
-The Lobby List contains an array of the following data structure:
+The Lobby List contains an array with the following data structure:
 
 \begin{center}
   \begin{tabular}{|p{2cm}|c|c|c|p{8cm}|}
@@ -304,6 +305,115 @@ The Lobby List contains an array of the following data structure:
     Password Protected & BOOLEAN & 1 & 0 & Whether or not this lobby requires a password to join. \\ \hline   
     Creator Size & INTEGER & 1 & N/A & The size of the Creator field. \\ \hline   
     Creator & USTRING & varies & N/A & The display name of the creator of this lobby. \\ \hline   
+  \end{tabular}
+\end{center}
+
+
+\subsection{Joining a lobby}
+
+Users can decide to join a particular lobby. This is only possible if \verb logged_on  is set to 1. \\
+
+\noindent \textbf{Request:}
+
+\begin{center}
+  \begin{tabular}{|p{2cm}|c|c|c|p{8cm}|}
+    \hline
+    Name & Encoding & Size (B) & Default & Comment \\  \hline \hline
+    Type & INTEGER & 1 & 0x05 & This identifies the message as \verb JOIN_LOBBY . \\ \hline
+    Lobby ID & INTEGER & 4 & NULL & The lobby ID. \\ \hline
+    Password Size & INTEGER & 1 & N/A & The size of the Password field.\\ \hline
+    Password & STRING & varies & N/A & The lobby's password. \\ \hline
+	Port number & INTEGER & 2 & The client's UDP port number, used for communication between peers.\\ \hline
+    Client's Public Key & ASN.1 & varies & N/A & The client's public key, used to sign peer-to-peer messages. The expected format is \href{http://www.itu.int/rec/T-REC-X.509/}{X.509: Public-key and attribute certificate frameworks}. \\ \hline
+  \end{tabular}
+\end{center}
+
+\noindent \textbf{Response:}
+
+
+\begin{center}
+  \begin{tabular}{|p{2cm}|c|c|c|p{8cm}|}
+    \hline
+    Name & Encoding & Size (B) & Default & Comment \\  \hline \hline
+    Type & INTEGER & 1 & 0x85 & This identifies the message as \verb JOINED_LOBBY . \\ \hline
+    Answer & BYTE & 1 & N/A &    \begin{itemize}    	\item 0x00: joined lobby with success.
+        \item 0x01: wrong password
+	    \item 0x02: unknown error
+	\end{itemize} 
+	The rest of the message is ignored when Answer is not 0x00. \\ \hline
+    Client List Size & INTEGER & 1 & N/A & The size of the Client List array (number of elements). \\ \hline
+    Client List & ARRAY & varies & N/A & An array of clients currently present in the lobby, described below. \\ \hline
+  \end{tabular}
+\end{center}
+
+The Client List array should implement the following data structure:
+
+\begin{center}
+  \begin{tabular}{|p{2cm}|c|c|c|p{8cm}|}
+    \hline
+    Name & Encoding & Size (B) & Default & Comment \\  \hline \hline
+    Display Name Size & INTEGER & 1 & 255 & The size of the Display Name field.\\ \hline
+    Display Name & USTRING & varies & N/A & The name used by the client.\\ \hline
+	Port number & INTEGER & 2 & The client's UDP port number, used for communication between peers.\\ \hline
+    Client's Public Key & ASN.1 & varies & N/A & The client's public key, used to sign peer-to-peer messages. The expected format is \href{http://www.itu.int/rec/T-REC-X.509/}{X.509: Public-key and attribute certificate frameworks}. \\ \hline
+  \end{tabular}
+\end{center}
+
+
+
+\subsection{Starting a game}
+
+User's having created a lobby can choose to start a game. \\
+
+\noindent \textbf{Request:}
+
+\begin{center}
+  \begin{tabular}{|p{2cm}|c|c|c|p{8cm}|}
+    \hline
+    Name & Encoding & Size (B) & Default & Comment \\  \hline \hline
+    Type & INTEGER & 1 & 0x06 & This identifies the message as \verb START_GAME . \\ \hline
+  \end{tabular}
+\end{center}
+
+\noindent \textbf{Response:}
+
+\begin{center}
+  \begin{tabular}{|p{2cm}|c|c|c|p{8cm}|}
+    \hline
+    Name & Encoding & Size (B) & Default & Comment \\  \hline \hline
+    Type & INTEGER & 1 & 0x86 & This identifies the message as \verb GAME_STARTING. \\ \hline
+    Answer & BYTE & 1 & N/A &    \begin{itemize}    	
+    	\item 0x00: engaging with game start procedures.
+	\end{itemize} 
+  \end{tabular}
+\end{center}
+
+The server's answer is only interesting when an unknown error is triggered. Otherwise, a correct game start procedure will force the server into telling every client to start loading a game, a message we will describe in the next section.
+
+\subsection{Loading a game}
+
+The server can request clients having joined a certain lobby to start loading a game. Games can take a certain amount of time to allocate resources in a given client, which is why we expect clients to take some time before they give an answer to the server.
+
+\noindent \textbf{Request:}
+
+\begin{center}
+  \begin{tabular}{|p{2cm}|c|c|c|p{8cm}|}
+    \hline
+    Name & Encoding & Size (B) & Default & Comment \\  \hline \hline
+    Type & INTEGER & 1 & 0x87 & This identifies the message as \verb LOAD_GAME . \\ \hline
+  \end{tabular}
+\end{center}
+
+\noindent \textbf{Response:}
+
+\begin{center}
+  \begin{tabular}{|p{2cm}|c|c|c|p{8cm}|}
+    \hline
+    Name & Encoding & Size (B) & Default & Comment \\  \hline \hline
+    Type & INTEGER & 1 & 0x07 & This identifies the message as \verb READY. \\ \hline
+    Answer & BYTE & 1 & N/A &    \begin{itemize}    	
+\item
+	\end{itemize} 
   \end{tabular}
 \end{center}
 

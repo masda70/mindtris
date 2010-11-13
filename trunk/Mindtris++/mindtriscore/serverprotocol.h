@@ -27,7 +27,11 @@ public:
 		DGMT_GETLOBBYLIST			= 0x04,
 		DGMT_JOINLOBBY				= 0x05,
 
-		DGMT_HELLOFROMSERVER		= 0x80
+		DGMT_HELLOFROMSERVER		= 0x80,
+		DGMT_USERCREATION			= 0x81,
+		DGMT_LOGINREPLY				= 0x82,
+		DGMT_CREATELOBBY			= 0x84,
+		DGMT_LOBBYLIST				= 0x85
 	};
 
 	enum ServerHello {
@@ -39,7 +43,8 @@ public:
 
 
 	//SEND FUNCTIONS
-
+	BYTEARRAY SEND_DGMT_KEEPALIVE();
+	BYTEARRAY SEND_DGMT_CREATEUSER(string username, string display_name, string email, string password);
 	BYTEARRAY SEND_DGMT_HELLOFROMCLIENT();
 	BYTEARRAY SEND_DGMT_HELLOFROMSERVER(ServerHello answer,string Message);
 

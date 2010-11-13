@@ -20,6 +20,23 @@ BYTEARRAY DGMTProtocol::SEND_DGMT_HELLOFROMCLIENT()
 	return packet;
 }
 
+
+BYTEARRAY DGMTProtocol::SEND_DGMT_KEEPALIVE()
+{
+	BYTEARRAY packet;
+	AppendHeader( packet );			        	// DGMT header constant
+	AssignLength( packet );
+	return packet;
+}
+
+BYTEARRAY DGMTProtocol::SEND_DGMT_CREATEUSER(string username, string display_name, string email, string password )
+{
+	BYTEARRAY packet;
+	AppendHeader( packet );			        	// DGMT header constant
+
+	return packet;
+}
+
 BYTEARRAY DGMTProtocol::SEND_DGMT_HELLOFROMSERVER(ServerHello answer,string Message)
 {
 	BYTEARRAY packet;

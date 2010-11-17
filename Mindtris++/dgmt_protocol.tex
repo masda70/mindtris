@@ -9,10 +9,10 @@
  \usepackage{array}
  \usepackage{hyperref}
 \newcommand{\mc}{\mathcal}
-\newcommand{\dgmtversion}{1.1.0.0}
+\newcommand{\dgmtversion}{1.1.0.1}
 
 \author{David Montoya, Raphaël Bonaque, Charles-Pierre Astolfi,\\ Émile Contal, Martin Gleize}
-\title{DGMT Protocol Specification \\ Revision 1.1.0.0}
+\title{DGMT Protocol Specification \\ Revision 1.1.0.1}
 \begin{document}
 \maketitle
 \lstset{language=C++,basicstyle=\footnotesize}
@@ -246,8 +246,9 @@ By this process, a user can create a lobby. This is only possible if \verb logge
     Type & INTEGER & 1 & 0x03 & This identifies the message as \verb CREATE_LOBBY . \\ \hline
     Lobby Name Size& INTEGER & 1 & N/A & The size of the Lobby Name field. \\ \hline
     Lobby Name& USTRING & varies & N/A & The name of the lobby to be created. \\ \hline
+    Player Allowed Count & INTEGER & 1 & N/A & The maximum number of players allowed. \\ \hline
     Has Password& BOOLEAN & 1 & 0 & Whether or not the lobby will require a password. \\ \hline
-    Encrypted Lobby Password & BYTE & varies & N/A & This field is empty if the Has Password field contains 0. \\ \hline
+    Encrypted Lobby Password & BYTE & varies & N/A & This field is empty if the Has Password field is 0. \\ \hline
   \end{tabular}
 \end{center}
 
@@ -314,6 +315,8 @@ The Lobby List contains an array with the following data structure:
     \hline
     Name & Encoding & Size (B) & Default & Comment \\  \hline \hline
     Lobby ID & INTEGER & 4 & NULL & The lobby ID. \\ \hline
+    Lobby Name Size& INTEGER & 1 & N/A & The size of the Lobby Name field. \\ \hline
+    Lobby Name& USTRING & varies & N/A & The name of the lobby to be created. \\ \hline
     Player Count & INTEGER & 1 & N/A & The number of players present in the lobby. \\ \hline
     Player Allowed Count & INTEGER & 1 & N/A & The maximum number of players allowed. \\ \hline
     Password Protected & BOOLEAN & 1 & 0 & Whether or not this lobby requires a password to join. \\ \hline   
@@ -352,7 +355,8 @@ Users can decide to join a particular lobby. This is only possible if \verb logg
     Type & INTEGER & 1 & 0x85 & This identifies the message as \verb JOINED_LOBBY . \\ \hline
     Answer & BYTE & 1 & N/A &    \begin{itemize}    	\item 0x00: joined lobby with success.
         \item 0x01: wrong password
-	    \item 0x02: unknown error
+	    \item 0x02: lobby is full
+	    \item 0x03: unknown error
 	\end{itemize}\\ \hline
 	Answer Payload & BYTE & varies & N/A & The content of this field is determined by the Answer field. \\ \hline
   \end{tabular}

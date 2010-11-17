@@ -492,7 +492,7 @@ The server can request clients having joined a certain lobby to start loading a 
     \hline
     Name & Encoding & Size (B) & Default & Comment \\  \hline \hline
     Type & INTEGER & 1 & 0x91 & This identifies the message as \verb LOAD_GAME . \\ \hline
-    First Pieces Array Size & INTEGER & 1 & 10 & The size of the First Pieces field. \\ \hline
+    First Pieces Array Size & INTEGER & 1 & 10 & The size of the First Pieces array. \\ \hline
     First Pieces & ARRAY & varies & N/A & An array including the IDs of the first pieces being played, each of them is encoded as 1-byte INTEGER. \\ \hline
   \end{tabular}
 \end{center}
@@ -519,8 +519,8 @@ When Answer is equal to 0x01, the Answer Payload field will contain the data str
   \begin{tabular}{|p{2cm}|c|c|c|p{8cm}|}
     \hline
     Name & Encoding & Size (B) & Default & Comment \\  \hline \hline
-	Client ID Array Size & INTEGER & 1 & N/A & The size of the Client ID Array. \\ \hline 
-	Client ID Array & ARRAY & varies & N/A & The Client IDs of each of peer the client couldn't connect to. Each of these is represented as a 1-byte INTEGER. \\ \hline 
+	Client ID Array Size & INTEGER & 1 & N/A & The size of the Client ID array. \\ \hline 
+	Client IDs& ARRAY & varies & N/A & The Client IDs of each of peer the client couldn't connect to. Each of these is represented as a 1-byte INTEGER. \\ \hline 
   \end{tabular}
 \end{center}
 
@@ -547,7 +547,7 @@ The server is responsible for telling each player about the next pieces to be pl
     Name & Encoding & Size (B) & Default & Comment \\  \hline \hline
     Type & INTEGER & 1 & 0x93 & This identifies the message as \verb NEW_PIECES . \\ \hline
     Piece Number Offset & INTEGER & 4 & N/A & The number of the first piece in the Pieces array.\\ \hline
-    Pieces Array Size & INTEGER & 1 & 10 & The size of the Pieces field. \\ \hline
+    Pieces Array Size & INTEGER & 1 & 10 & The size of the Pieces array. \\ \hline
     Pieces & ARRAY & varies & N/A & An array including the IDs of the new pieces, each of them is encoded as 1-byte INTEGER. \\ \hline
   \end{tabular}
 \end{center}
@@ -575,7 +575,7 @@ Clients send the results of a game to the server when it finishes:
     \hline
     Name & Encoding & Size (B) & Default & Comment \\  \hline \hline
     Type & INTEGER & 1 & 0x14 & This identifies the message as \verb GAME_END . \\ \hline
-	Results Array Size & INTEGER & 1 & N/A & The size of the Results field. \\ \hline
+	Results Array Size & INTEGER & 1 & N/A & The size of the Results array. \\ \hline
 	Results & ARRAY & varies & N/A & An array of results for each different client. \\ \hline
   \end{tabular}
 \end{center}
@@ -670,7 +670,7 @@ Round Data include a bunch of gameplay dependent data.
     Name & Encoding & Size (B) & Default & Comment \\  \hline \hline
 	Session ID & INTEGER & 8 & N/A & The lobby's session's ID. This makes reusing of old signed packets harder.\\ \hline
 	Round Number & INTEGER & 4 & N/A & The round number. Games start at round number 0, and this number increases by 1 for each subsequent round.\\ \hline
-	Moves Array Size & INTEGER & 1 & N/A & The round number. Games start at round number 0, and this number increases by 1 for each subsequent round.\\ \hline	
+	Moves Array Size & INTEGER & 1 & N/A & The size of the Moves array.\\ \hline	
 	Moves & ARRAY & varies & N/A & An array of moves the player has made during the round.\\ \hline	
     Round Data Hashes Array Size & INTEGER & 1 & N/A & The size of the Round Data Hashes field. \\ \hline
     Round Data Hashes & ARRAY & varies & N/A & An array of peer hashes, this is described next.\\ \hline

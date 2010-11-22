@@ -10,7 +10,6 @@ import java.net.Socket;
 import java.security.*;
 import java.security.spec.KeySpec;
 import java.security.spec.X509EncodedKeySpec;
-import java.util.*;
 import java.util.Map.Entry;
 import javax.crypto.BadPaddingException;
 import javax.crypto.Cipher;
@@ -197,6 +196,10 @@ public class Client {
 		return null;
 	}
 
+	public void getLobbyList () throws IOException {
+		_srvCh.send(Msg.GET_LOBBY_LIST);
+	}
+	
 	protected void addNewPeer ( P2PCh peerCh, Peer p ) {
 		debug("add peer " + p.getName());
 		

@@ -9,14 +9,11 @@ import java.awt.event.MouseEvent;
 import java.awt.event.MouseListener;
 import java.awt.event.WindowEvent;
 import java.io.IOException;
-import java.io.UnsupportedEncodingException;
 import java.net.UnknownHostException;
 import java.util.List;
-import java.util.Map;
 import java.util.Map.Entry;
 
 import javax.swing.*;
-import javax.swing.text.JTextComponent;
 
 import Server.Server;
 import Util.Channel;
@@ -25,6 +22,7 @@ import Util.Peer;
 
 public class MainWindow extends JFrame {
 	private static final long serialVersionUID = 1L;
+	private static final Color bg = new Color(30, 30, 30); // kikoo style
 	private Client _c;
 
 	private TxtField _error = new TxtField();
@@ -43,7 +41,7 @@ public class MainWindow extends JFrame {
 		    }
 		});
 
-		this.setBackground(new Color(30, 30, 30));
+		this.getContentPane().setBackground(bg);
 		this.setSize(800,600);
 		
 		paintMenu();
@@ -80,22 +78,6 @@ public class MainWindow extends JFrame {
 				
 				final Server srv = new Server();
 				srv.start();
-				
-			/*	SwingUtilities.invokeLater(new Runnable() {
-					public void run () {
-						try {
-							synchronized (srv) {
-								srv.wait();
-							}
-							_c.connectToSrv("localhost");
-							paintLogin();
-						} catch (IOException e) {
-							printError("IO Exception : "+e.getMessage());
-						} catch (InterruptedException e) {
-							e.printStackTrace();
-						}
-					}
-				}); */
 			}
 		};
 		
@@ -109,13 +91,17 @@ public class MainWindow extends JFrame {
 		
 		p.setLayout(new BorderLayout());
 		_top = new JToolBar();
+		_top.setBackground(bg);
 		((JToolBar) _top).setFloatable(false);
 		
-		_top.add(new Lbl("server ip :"));
+		_top.add(new Lbl("server ip : "));
 		_top.add(srvIp);
-		_top.add(new Lbl("peer port :"));
+		((JToolBar) _top).addSeparator();
+		_top.add(new Lbl("peer port : "));
 		_top.add(port);
+		((JToolBar) _top).addSeparator();
 		_top.add(connect);
+		((JToolBar) _top).addSeparator();
 		_top.add(createServer);
 		_top.setBorder(BorderFactory.createCompoundBorder(
 				BorderFactory.createMatteBorder(0, 0, 1, 0, Color.GRAY),
@@ -123,6 +109,7 @@ public class MainWindow extends JFrame {
 		));
 		
 		_center = new JPanel(new GridBagLayout());
+		_center.setBackground(bg);
 		_center.add(_text);
 		
 		_error.setEditable(false);
@@ -169,11 +156,14 @@ public class MainWindow extends JFrame {
 		createUser.addActionListener(createListener);
 		
 		_top.removeAll();
-		_top.add(new Lbl("user :"));
+		_top.add(new Lbl("user : "));
 		_top.add(usr);
-		_top.add(new Lbl("password :"));
+		((JToolBar) _top).addSeparator();
+		_top.add(new Lbl("password : "));
 		_top.add(pwd);
+		((JToolBar) _top).addSeparator();
 		_top.add(login);
+		((JToolBar) _top).addSeparator();
 		_top.add(createUser);
 		
 		repaint();
@@ -206,7 +196,7 @@ public class MainWindow extends JFrame {
 
 		c.gridwidth = GridBagConstraints.REMAINDER;
 		c.anchor = GridBagConstraints.CENTER;
-		c.insets = new Insets(20,0,10,0);
+		c.insets = new Insets(20,0,20,0);
 		_center.add(new Lbl("Please fill the form"), c);
 		
 		c.insets = new Insets(0,10,5,0);
@@ -257,7 +247,7 @@ public class MainWindow extends JFrame {
 
 		c.gridwidth = GridBagConstraints.REMAINDER;
 		c.anchor = GridBagConstraints.CENTER;
-		c.insets = new Insets(20,0,10,0);
+		c.insets = new Insets(20,0,20,0);
 		_center.add(new Lbl("Lobby parameters"), c);
 		
 		c.insets = new Insets(0,10,5,0);
@@ -285,13 +275,25 @@ public class MainWindow extends JFrame {
 				paintCreateLobby();
 			}
 		});
+		Btn refresh = new Btn("refresh");
+		refresh.addActionListener(new ActionListener() {
+			public void actionPerformed(ActionEvent ev) {
+				try {
+					_c.getLobbyList();
+				} catch (IOException e) {
+					printError(e.getMessage());
+				}
+			}
+		});
 		
-		final Lbl pwdLbl = new Lbl("Please enter password :");
+		final Lbl pwdLbl = new Lbl("Please enter password : ");
 		final PwdField pwdField = new PwdField();
 		final Btn pwdBtn = new Btn("join");
 		
 		_top.removeAll();
 		_top.add(new Lbl("Server lobby list"));
+		((JToolBar) _top).addSeparator();
+		_top.add(refresh);
 		_top.repaint();
 		
 		_center.removeAll();
@@ -380,6 +382,7 @@ public class MainWindow extends JFrame {
 		Lbl name = new Lbl(l.getName() + " (created by "+l.getCreator()+")");
 		
 		JPanel connected = new JPanel();
+		connected.setBackground(bg);
 		Lbl connectedLbl = new Lbl("peers :");
 		connected.add(connectedLbl);
 		
@@ -426,12 +429,10 @@ public class MainWindow extends JFrame {
 	
 	public void printChatMsg ( Peer p, String msg ) {
 		String txt = new String( p.getName() + ": " + msg + "\n");
-		_text.setForeground(Color.WHITE);
 		((TxtArea) _text).append(txt);
 	}
 
 	public void printNewPeer ( Peer p ) {
-		_text.setForeground(Color.LIGHT_GRAY);
 		((TxtArea) _text).append(p.getName() + " has join the lobby\n");
 	}
 	

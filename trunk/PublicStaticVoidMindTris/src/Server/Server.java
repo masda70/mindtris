@@ -146,8 +146,8 @@ public class Server extends Thread {
 	}
 	
 	private class HelloHdl implements Handler<CltSrvCh> {
-		public void handle(byte[] data, CltSrvCh ch) throws IOException {
-			if( Arrays.equals(data, Channel.protocolVersion) ) {
+		public void handle(Data d, CltSrvCh ch) throws IOException {
+			if( Arrays.equals(d.getBytes(), Channel.protocolVersion) ) {
 				debug("Send hello message");
 				
 				byte[] encodedKey = _publicKey.getEncoded();
@@ -161,8 +161,8 @@ public class Server extends Thread {
 	}
 	
 	private class UsrCreateHdl implements Handler<CltSrvCh> {
-		public void handle(byte[] data, CltSrvCh ch) throws IOException {
-			User usr = new User (decrypt(data));
+		public void handle(Data d, CltSrvCh ch) throws IOException {
+			User usr = new User (decrypt(d.getBytes()));
 
 			byte ans;
 			
@@ -183,8 +183,8 @@ public class Server extends Thread {
 	}
 	
 	private class LoginHdl implements Handler<CltSrvCh> {
-		public void handle(byte[] data, CltSrvCh ch) throws IOException {
-			byte[] loginInfo = decrypt(data);
+		public void handle(Data d, CltSrvCh ch) throws IOException {
+			byte[] loginInfo = decrypt(d.getBytes());
 				
 			byte usrNameLen = loginInfo[0],
 				 pwdLen = loginInfo[1+usrNameLen];
@@ -220,22 +220,19 @@ public class Server extends Thread {
 	}
 	
 	private class LobbyCreateHdl implements Handler<CltSrvCh> {
-		public void handle(byte[] data, CltSrvCh ch) throws IOException {
-			int offset = 0;
-			byte nameLen = data[offset++];
+		public void handle(Data d, CltSrvCh ch) throws IOException {
+			byte nameLen = d.rdB();
 			byte[] name = new byte[nameLen];
-			System.arraycopy(data, offset, name, 0, nameLen);
-			offset += nameLen;
-			byte maxPlayers = data[offset++];
-			boolean pwdRequired = Channel.byte2bool(data[offset++]);
+			d.rd(name, nameLen);
+			byte maxPlayers = d.rdB();
+			boolean pwdRequired = d.rdBool();
 			byte [] pwd;
 			
 			byte[] creator = ch.getUsr()._displayName;
 			
 			if( pwdRequired ) {
-				int pwdCryptLen = data.length - offset;
-				byte[] pwdCrypt = new byte[pwdCryptLen];
-				System.arraycopy(data, offset, pwdCrypt, 0, pwdCryptLen);
+				byte[] pwdCrypt = new byte[d.getOutLen()];
+				d.rd(pwdCrypt);
 				byte[] pwdBuf = decrypt(pwdCrypt);
 				int pwdLen = pwdBuf[0];
 				pwd = new byte[pwdLen];
@@ -261,26 +258,20 @@ public class Server extends Thread {
 	}
 	
 	private class LobbyListHdl implements Handler<CltSrvCh> {
-		public void handle(byte[] _, CltSrvCh ch) throws IOException {
+		public void handle(Data _, CltSrvCh ch) throws IOException {
 			ch.send(Msg.LOBBY_LIST, Lobby.listToBytes(_lobbies));
 		}
 	}
 	
 	private class LobbyJoinHdl implements Handler<CltSrvCh> {
-		public void handle(byte[] data, CltSrvCh ch) throws IOException {
-			int offset = 0;
-			int id = Channel.bytes2int(data, offset);
-			offset += 4;
-			int port = Channel.bytes2short(data, offset);
-			offset += 2;
-			int keyLen = Channel.bytes2short(data, offset);
-			offset += 2;
+		public void handle(Data d, CltSrvCh ch) throws IOException {
+			int id = d.rdI();
+			int port = d.rdS();
+			int keyLen = d.rdS();
 			byte[] encodedKey = new byte[keyLen];
-			System.arraycopy(data, offset, encodedKey, 0, keyLen);
-			offset += keyLen;
-			int pwdLen = data.length - offset;
-			byte[] encryptedPwd = new byte[pwdLen];
-			System.arraycopy(data, offset, encryptedPwd, 0, pwdLen);
+			d.rd(encodedKey, keyLen);
+			byte[] encryptedPwd = new byte[d.getOutLen()];
+			d.rd(encryptedPwd);
 			
 			Lobby l = _lobbies.get(id);
 			
@@ -291,16 +282,17 @@ public class Server extends Thread {
 					ch.send(Msg.JOINED_LOBBY, 0x00, l.toBytes(peerId));
 					
 					User usr = ch.getUsr();
-					Peer peer = new Peer(usr._displayName, ch.getIp(), port, encodedKey);
+					Peer newPeer = new Peer(peerId, usr._displayName, ch.getIp(), port, encodedKey);
+					newPeer.setCh(ch);
 					
 					for( Entry<Integer, Peer> o : l._peers ) {
 						Peer p = o.getValue();
 						// TODO /!\ peerId <-> status_update
-						p.getCh().send(Msg.UPDATE_CLIENT, 0x00, p.toBytes());
+						p.getCh().send(Msg.UPDATE_CLIENT, 0x00, newPeer.toBytes());
 					}
 					
 					
-					l._peers.add(peer);
+					l._peers.add(newPeer);
 					
 					return;
 				} else {

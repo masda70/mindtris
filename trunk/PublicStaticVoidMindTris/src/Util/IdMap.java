@@ -20,6 +20,10 @@ public class IdMap <O> implements Iterable<Map.Entry<Integer, O>> {
 		return _m.get(id);
 	}
 	
+	public void rm ( int id ) {
+		_m.remove(id);
+	}
+	
 	public int getNextId () {
 		return _m.size() + 1;
 	}

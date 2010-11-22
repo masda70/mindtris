@@ -20,10 +20,10 @@ public class MsgHandler<C extends Channel> extends Thread {
 			try {
 				Msg m = _ch.read();
 				byte type = m.getType();
-				byte [] data = m.getData();
+				Data d = new Data(m.getData());
 				
 				Handler<C> hdl = _handlers.get(type);
-				if( hdl != null ) hdl.handle(data, _ch);
+				if( hdl != null ) hdl.handle(d, _ch);
 				else System.out.println("No handler for type "+type);				
 			} catch (IOException e) {
 				e.printStackTrace();

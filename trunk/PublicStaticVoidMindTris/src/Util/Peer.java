@@ -10,7 +10,8 @@ public class Peer {
 				  _key;
 	private Channel _ch;
 	
-	public Peer ( byte[] displayName, byte[] ip, int port, byte[] key ) {
+	public Peer ( byte id, byte[] displayName, byte[] ip, int port, byte[] key ) {
+		_id = id;
 		_displayName = displayName;
 		_ip = ip;
 		_port = port;
@@ -20,10 +21,13 @@ public class Peer {
 	public Peer ( Data d ) {
 		_id = d.rdB();
 		byte nameLen = d.rdB();
+		_displayName = new byte[nameLen];
 		d.rd(_displayName, nameLen);
+		_ip = new byte[4];
 		d.rd(_ip, 4);
 		_port = d.rdS();
 		int keyLen = d.rdS();
+		_key = new byte[keyLen];
 		d.rd(_key, keyLen);
 	}
 
@@ -63,6 +67,7 @@ public class Peer {
 	}
 	
 	public Channel getCh () {
+		if( _ch == null ) System.out.println("User has no channel !");
 		return _ch;
 	}
 }

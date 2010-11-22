@@ -7,13 +7,11 @@ import java.net.*;
 import java.security.*;
 import java.util.*;
 import java.util.Map.Entry;
-import java.sql.*;
 
 import javax.crypto.BadPaddingException;
 import javax.crypto.Cipher;
 import javax.crypto.IllegalBlockSizeException;
 import javax.crypto.NoSuchPaddingException;
-import javax.crypto.ShortBufferException;
 
 public class Server extends Thread {
 	public static final short PORT = 1337+42;
@@ -21,8 +19,6 @@ public class Server extends Thread {
 	private static final short KEY_LEN = 1024;
 	private static String HELLO_MSG = "Welcome to MindTris Server\n";
 	
-	//private HashMap<Channel, PeerInfo> _clients;
-	//private RSAPublicKeySpec _publicKey;
 	private PublicKey _publicKey;
 	private Cipher _decrypter;
 	private UsrDataBase _db;
@@ -36,11 +32,9 @@ public class Server extends Thread {
 		/* generate rsa keys */
 		try {
 			_rdmGen = SecureRandom.getInstance ("SHA1PRNG");
-	//		KeyFactory fact = KeyFactory.getInstance("RSA");
 			KeyPairGenerator gen = KeyPairGenerator.getInstance("RSA");
 			gen.initialize(KEY_LEN);
 			KeyPair keyPair = gen.generateKeyPair();
-	//		_publicKey = fact.getKeySpec(keyPair.getPublic(), RSAPublicKeySpec.class);
 			_publicKey = keyPair.getPublic();
 						
 			_decrypter = Cipher.getInstance(Channel.CRYPT_SCHEME);
@@ -51,21 +45,7 @@ public class Server extends Thread {
 			e.printStackTrace();
 		} catch (NoSuchPaddingException e) {
 			e.printStackTrace();
-	//	} catch (InvalidKeySpecException e) {
-	//		e.printStackTrace();
 		}
-
-	/*	byte[] n1 = new byte[8];
-		byte[] n2 = new byte[8];
-		_rdmGen.nextBytes(n1);
-		_rdmGen.nextBytes(n2);
-		_lobbies.add(new Lobby(1, "lobby test 1".getBytes(), n1, (byte)0, (byte)10, "pass".getBytes(), "kikoO".getBytes()));
-		Lobby test = new Lobby(2, "lobby test number 2".getBytes(), n2, (byte)2, (byte)5, null, "lolzorz".getBytes());
-		test._peers.add(new Peer("kikoO".getBytes(), new byte[]{1,0,0,1}, 1000, "key1".getBytes()));
-		test._peers.add(new Peer("roXoR".getBytes(), new byte[]{1,0,0,2}, 1001, "key2".getBytes()));
-		_lobbies.add(test);
-	/**/	
-		
 		
 		/* connect to the sql db *
 	    try {
@@ -303,22 +283,4 @@ public class Server extends Thread {
 			}
 		}
 	}
-	
-	
-/*	private class TestChatListHandler implements Handler {
-		public void handle(byte[] data, Channel ch) throws IOException {
-			debug("Sending list of peers");
-			byte [][] list = new byte[_clients.size()][];
-			int i=0;
-			
-			Enumeration<PeerInfo> peers = _clients.elements(); 
-			while( peers.hasMoreElements() ) {
-				list[i++] = peers.nextElement().toBytes();
-			}
-			
-			ch.write(new Msg(Msg.TEST_CHAT_LIST_PEERS, list));
-			PeerInfo peer = PeerInfo.peerFromBytes(data);
-			addPeer(ch, peer);
-		}
-	}*/
 }

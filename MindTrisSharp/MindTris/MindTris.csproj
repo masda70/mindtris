@@ -45,13 +45,40 @@
     <Reference Include="System.Xml" />
   </ItemGroup>
   <ItemGroup>
+    <Compile Include="..\MindTrisCore\BufferWindow.cs">
+      <Link>BufferWindow.cs</Link>
+    </Compile>
+    <Compile Include="..\MindTrisCore\ClientStatus.cs">
+      <Link>ClientStatus.cs</Link>
+    </Compile>
     <Compile Include="..\MindTrisCore\DGMTEncoding.cs">
       <Link>DGMTEncoding.cs</Link>
+    </Compile>
+    <Compile Include="..\MindTrisCore\Lobby.cs">
+      <Link>Lobby.cs</Link>
     </Compile>
     <Compile Include="..\MindTrisCore\NetworkProtocol.cs">
       <Link>NetworkProtocol.cs</Link>
     </Compile>
+    <Compile Include="..\MindTrisCore\Packet.cs">
+      <Link>Packet.cs</Link>
+    </Compile>
+    <Compile Include="..\MindTrisCore\Parser.cs">
+      <Link>Parser.cs</Link>
+    </Compile>
+    <Compile Include="..\MindTrisCore\Peer.cs">
+      <Link>Peer.cs</Link>
+    </Compile>
+    <Compile Include="..\MindTrisCore\ServerResponse.cs">
+      <Link>ServerResponse.cs</Link>
+    </Compile>
+    <Compile Include="..\MindTrisCore\User.cs">
+      <Link>User.cs</Link>
+    </Compile>
     <Compile Include="Client.cs" />
+    <Compile Include="ClientRequest.cs" />
+    <Compile Include="ConsoleMenu.cs" />
+    <Compile Include="PeerPlayer.cs" />
     <Compile Include="Program.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
   </ItemGroup>

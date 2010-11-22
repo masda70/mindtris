@@ -4,14 +4,14 @@ import java.io.IOException;
 import java.util.Hashtable;
 
 
-public class MsgHandler extends Thread {
-	private Channel _ch;
-	private Hashtable<Byte, Handler> _handlers;
+public class MsgHandler<C extends Channel> extends Thread {
+	private C _ch;
+	private Hashtable<Byte, Handler<C>> _handlers;
 	private boolean _stop; 
 	
-	public MsgHandler(Channel ch) {
+	public MsgHandler ( C ch ) {
 		_ch = ch;
-		_handlers = new Hashtable<Byte, Handler> (20);
+		_handlers = new Hashtable<Byte, Handler<C>> (20);
 		_stop = false;
 	}
 
@@ -22,19 +22,16 @@ public class MsgHandler extends Thread {
 				byte type = m.getType();
 				byte [] data = m.getData();
 				
-				try {
-					_handlers.get(type).handle(data, _ch);
-				} catch (NullPointerException e) {
-					System.out.println("No handler for type "+type);
-					throw e;
-				}
+				Handler<C> hdl = _handlers.get(type);
+				if( hdl != null ) hdl.handle(data, _ch);
+				else System.out.println("No handler for type "+type);				
 			} catch (IOException e) {
 				e.printStackTrace();
 			}
 		}
 	}
 	
-	public void addHandler ( byte type, Handler h ) {
+	public void addHdl ( byte type, Handler<C> h ) {
 		_handlers.put(type, h);
 	}
 	

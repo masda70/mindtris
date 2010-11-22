@@ -1,25 +1,26 @@
 package Util;
 
+import java.lang.reflect.Array;
+import java.util.*;
+
 public class Msg {
 	public static final byte
-		C_HELLO = 0x00,			// PROTOCOL VERSION (4 BYTE)
-		CREATE_USER = 0x01,
-		LOGIN = 0x02,
-		CREATE_LOBBY = 0x03,
-		GET_LOBBY_LIST = 0x04,
-		JOIN_LOBBY = 0x05,		
-		SEND_MSG = 0x06,
-
-		// UGLY : pour le test du chat p2p, sert a demander la liste des pairs et a envoyer ses infos...
-		TEST_CHAT_LIST_PEERS = 0x07,
+		C_HELLO =		 	0x00,
+		CREATE_USER =	 	0x01,
+		LOGIN =			 	0x02,
+		CREATE_LOBBY =		0x03,
+		GET_LOBBY_LIST =	0x04,
+		JOIN_LOBBY =		0x05,		
 		
-		S_HELLO = 0x00 - 0x80,	// HELLO ANSWER = 1 BYTE) : 0x00 = SUCCESS, 0x01 = WRONG PROTOCOL VERSION, 0x02 = UNKNOWN ERROR
-		 						// MESSAGE FOR CLIENT = UTF-8 STRING, occupe le reste du message): Un message du serveur qui peut lu par un humain. Si HELLO ANSWER= SUCCESS  = 0x00, alors �a sera un message of the day  = MOTD, dans tous les autres cas, ce n'est pas sp�cifi�.
+		S_HELLO = 			0x00 - 0x80,		
+		USR_CREATION = 		0x01 - 0x80,
+		LOGIN_REPLY = 		0x02 - 0x80,
+		LOBBY_CREATED = 	0x03 - 0x80,
+		LOBBY_LIST = 		0x04 - 0x80,
+		JOINED_LOBBY = 		0x05 - 0x80,
+		UPDATE_CLIENT =		0x08 - 0x80,
 		
-		LOGIN_SUCCESS = 0x01 - 0x80,
-		LOBBY_CREATED = 0x02 - 0x80,
-		
-		UNDEFINED = 0x7F;
+		UNDEFINED = 		0x7F;
 	
 	private byte _type;
 	private byte[] _data;
@@ -33,6 +34,21 @@ public class Msg {
 		_data = new byte[_len];
 		
 		int i=0;
+		for( byte[] d : data ) {
+			System.arraycopy( d, 0, _data, i, d.length);
+			i += d.length;
+		}
+	}
+	
+	public Msg ( byte type, byte ans, byte [] ... data ) {
+		_type = type;
+		_len = 1;
+		
+		for( byte[] d : data ) _len += d.length;
+		_data = new byte[_len];
+		_data[0] = ans;
+		
+		int i=1;
 		for( byte[] d : data ) {
 			System.arraycopy( d, 0, _data, i, d.length);
 			i += d.length;

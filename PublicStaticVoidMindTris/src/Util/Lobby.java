@@ -30,6 +30,7 @@ public class Lobby {
 	public Lobby ( byte[] name, byte[] creator, Data d ) {
 		_name = name;
 		_creator = creator;
+		_sessionId = new byte[8];
 		d.rd(_sessionId, 8);
 		byte nbPeers = d.rdB();
 		
@@ -113,25 +114,22 @@ public class Lobby {
 		return data;
 	}
 
-	public static List<Lobby> bytesToList ( byte [] data ) {
+	public static List<Lobby> bytesToList ( Data d ) {
 		int offset = 0;
-		short nb = data[offset++];
+		short nb = d.rdB();
 		List<Lobby> list = new LinkedList<Lobby>();
 		
 		for( short i=0; i<nb; i++ ) {
-			int id = Channel.bytes2int(data, offset);
-			offset += 4;
-			byte nameLen = data[offset++];
+			int id = d.rdI();
+			byte nameLen = d.rdB();
 			byte [] name = new byte[nameLen];
-			System.arraycopy(data, offset, name, 0, nameLen);
-			offset += nameLen;
-			byte nbPlayers = data[offset++];
-			byte maxPlayers = data[offset++];
-			boolean pwdRequired = Channel.byte2bool(data[offset++]);
-			byte creatorLen = data[offset++];
+			d.rd(name, nameLen);
+			byte nbPlayers = d.rdB();
+			byte maxPlayers = d.rdB();
+			boolean pwdRequired = d.rdBool();
+			byte creatorLen = d.rdB();
 			byte[] creator = new byte[creatorLen];
-			System.arraycopy(data, offset, creator, 0, creatorLen);
-			offset += creatorLen;
+			d.rd(creator, creatorLen);
 			
 			// TODO /!\ ugly
 			byte[] pwd = pwdRequired ? new byte[]{0x01} : null;

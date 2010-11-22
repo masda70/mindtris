@@ -21,7 +21,7 @@ import javax.crypto.NoSuchPaddingException;
 public class Client {
 	private static final boolean DEBUG = true;
 	private static final short KEY_LEN = 1024;
-	public short				_port;
+	public short				_port = 1337+42+1;
 	private MainWindow			_w;
 	private CltSrvCh			_srvCh;
 	private short				_srvPort;
@@ -37,10 +37,14 @@ public class Client {
 	private String				_name;
 	private byte[]				_pwd;
 	private String				_creator;
+	private IdMap<Peer>			_newPeers;
+	private IdMap<P2PCh>		_handshakesCh;
 	
 	public Client ( short srvPort ) {
 		_w = new MainWindow(this);
 		_srvPort = srvPort;
+		_newPeers = new IdMap<Peer>();
+		_handshakesCh = new IdMap<P2PCh>();
 		
 		try {
 			KeyPairGenerator gen = KeyPairGenerator.getInstance("RSA");
@@ -136,6 +140,7 @@ public class Client {
 	}
 
 	public void joinLobby ( int id, String name, String creator, byte [] pwd ) throws IOException {
+		_lobbyId = id;
 		_name = name;
 		_creator = creator;
 		
@@ -181,37 +186,6 @@ public class Client {
 			}
 		}
 	}
-	
-	
-/*	public void listenPeers () {
-		Thread listen = new Thread( new Runnable () {
-			public void run() {
-				try {
-					ServerSocket serv = new ServerSocket(_myInfo._port);
-					
-					while( !_stop ) {
-						Thread.sleep(10);
-
-						Socket skt = serv.accept();
-						Channel ch = new Channel(skt);
-						ClientHandler peerHdl = new ClientHandler(ch);
-						
-						debug("Wait hello message from peer " + skt.getRemoteSocketAddress());
-						
-						peerHdl.start();
-					}
-						
-				} catch (IOException e) {
-					e.printStackTrace();
-				} catch (InterruptedException e) {
-					e.printStackTrace();
-				}
-			}
-		});
-		
-		listen.start();
-	}
-*/	
 
 	private byte[] crypt ( byte[] data, Cipher crypter ) throws IllegalBlockSizeException {
 		try {
@@ -223,6 +197,19 @@ public class Client {
 		return null;
 	}
 
+	protected void addNewPeer ( P2PCh peerCh, Peer p ) {
+		debug("add peer " + p.getName());
+		
+		p.setCh(peerCh);
+		peerCh.setPeer(p);
+		
+		_lobby._peers.add(p);
+		_w.printNewPeer(p);
+		
+		_newPeers.rm(p._id);
+		_handshakesCh.rm(p._id);
+	}
+	
 	@SuppressWarnings("unused")
 	private void debug ( byte[]... raw ) {
 		if( DEBUG )
@@ -244,20 +231,22 @@ public class Client {
 			addHdl(Msg.LOBBY_CREATED, new LobbyCreatedHdl());
 			addHdl(Msg.LOBBY_LIST, new LobbyListHdl());
 			addHdl(Msg.JOINED_LOBBY, new LobbyJoinedHdl());
+			addHdl(Msg.UPDATE_CLIENT, new UpdateClientHdl());
 		}
 	}
 	
 	private class SrvHelloHdl implements Handler<CltSrvCh> {
-		public void handle(byte[] data, CltSrvCh ch) throws IOException {
-			switch( data[0] ) {
+		public void handle(Data d, CltSrvCh ch) throws IOException {
+			switch( d.rdB() ) {
 			case 0x00:
 				debug("receive protocol succes.");
-				int keyLen = Channel.bytes2short(data, 1);
+				int keyLen = d.rdS();
 				
 				try {
 					KeyFactory fact = KeyFactory.getInstance("RSA");
-					byte [] encodedKey = new byte [keyLen];
-					System.arraycopy(data, 3, encodedKey, 0, keyLen);
+					
+					byte[] encodedKey = new byte[keyLen];
+					d.rd(encodedKey, keyLen);
 					
 					KeySpec keySpec = new X509EncodedKeySpec(encodedKey);
 					PublicKey serverKey = fact.generatePublic(keySpec);
@@ -270,17 +259,17 @@ public class Client {
 					e.printStackTrace();
 				}
 				
-				_w.printCenter( new String(data, 3+keyLen, data.length-3-keyLen, Channel.ENCODING) );
+				_w.printCenter(d.rdStr());
 				break;
 			case 0x01:	_w.printError("Wrong protocol");					break;
-			default:	_w.printError(new String(data, Channel.ENCODING));
+			default:	_w.printError(d.rdStr());
 			}
 		}
 	}
 	
 	private class UsrCreateHdl implements Handler<CltSrvCh> {
-		public void handle(byte[] data, CltSrvCh ch) throws IOException {
-			switch( data[0] ) {
+		public void handle(Data d, CltSrvCh ch) throws IOException {
+			switch( d.rdB() ) {
 			case 0x00:
 				_w.print("User created !");
 				login(_name.getBytes(Channel.ENCODING), _pwd);
@@ -295,13 +284,11 @@ public class Client {
 	}
 	
 	private class LoginHdl implements Handler<CltSrvCh> {
-		public void handle(byte[] data, CltSrvCh ch) throws IOException {
-			switch( data[0] ) {
+		public void handle(Data d, CltSrvCh ch) throws IOException {
+			switch( d.rdB() ) {
 			case 0x00:
-				byte nameLen = data[1];
-				byte[] name = new byte[nameLen];
-				System.arraycopy(data, 2, name, 0, nameLen);
-				_displayName = new String(name, Channel.ENCODING);
+				byte nameLen = d.rdB();
+				_displayName = d.rdStr(nameLen);
 
 				_w.print("connected as " + _displayName);
 				
@@ -318,11 +305,11 @@ public class Client {
 	}
 	
 	private class LobbyCreatedHdl implements Handler<CltSrvCh> {
-		public void handle(byte[] data, CltSrvCh ch) throws IOException {
-			switch( data[0] ) {
+		public void handle(Data d, CltSrvCh ch) throws IOException {
+			switch( d.rdB() ) {
 			case 0x00:
-				_lobbyId = Channel.bytes2int(data, 1);
-				_sessionId = Channel.bytes2long(data, 1+4);
+				_lobbyId = d.rdI();
+				_sessionId = d.rdL();
 				_w.print("Lobby "+_lobbyId+" created");
 				joinLobby(_lobbyId, _name, _creator, _pwd);
 				break;
@@ -335,22 +322,20 @@ public class Client {
 	}
 	
 	private class LobbyListHdl implements Handler<CltSrvCh> {
-		public void handle(byte[] data, CltSrvCh ch) throws IOException {
-			_w.paintLobbyList(Lobby.bytesToList(data));
+		public void handle(Data d, CltSrvCh ch) throws IOException {
+			_w.paintLobbyList(Lobby.bytesToList(d));
 		}
 	}
 	
-	/**
-	 * require _name = LobbyName & _creator = LobbyCreator
-	 */
 	private class LobbyJoinedHdl implements Handler<CltSrvCh> {
-		public void handle ( byte[] data, CltSrvCh ch ) throws IOException {
-			switch( data[0] ) {
+		public void handle(Data d, CltSrvCh ch) throws IOException {
+			switch( d.rdB() ) {
 			case 0x00:
-				_myId = data[1];
-				Lobby l = new Lobby(_name.getBytes(Channel.ENCODING), _creator.getBytes(Channel.ENCODING), data, 2);
+				_myId = d.rdB();
+				Lobby l = new Lobby(_name.getBytes(Channel.ENCODING), _creator.getBytes(Channel.ENCODING), d);
+				l._id = _lobbyId;
 				_lobby = l;
-				
+
 				for( Entry<Integer, Peer> o : l._peers ) {
 					Peer p = o.getValue();
 					String ip = InetAddress.getByAddress(p._ip).getCanonicalHostName();
@@ -365,37 +350,59 @@ public class Client {
 					peerCh.send(P2PMsg.HELLO, _myId, Channel.int2bytes(l._id));
 				}
 				
-				_w.printLobby(l);
+				_w.printLobby(l, _displayName);
 				
 				/* start to listen peers */
-				try {
-					ServerSocket srv = new ServerSocket(_port);
-					while( true ) {
-						Thread.sleep(10);
-						
-						Socket skt = srv.accept();
-						P2PCh peerCh = new P2PCh(skt);
-						PeerHandler hdl = new PeerHandler(peerCh);
-						
-						debug("Wait hello message from peer " + skt.getRemoteSocketAddress());
-						
-						hdl.start();
+				Thread listenPeers = new Thread() {
+					public void run() {
+						try {
+							ServerSocket srv = new ServerSocket(_port);
+							while( true ) {
+								Thread.sleep(10);
+								
+								Socket skt = srv.accept();
+								P2PCh peerCh = new P2PCh(skt);
+								PeerHandler hdl = new PeerHandler(peerCh);
+								
+								hdl.start();
+							}
+						} catch ( IOException e ) {
+							e.printStackTrace();
+						} catch (InterruptedException e) {
+							e.printStackTrace();
+						}
 					}
-				} catch ( IOException e ) {
-					e.printStackTrace();
-				} catch (InterruptedException e) {
-					e.printStackTrace();
-				}
+				};
+				listenPeers.start();
 				
-	//			break;
+				break;
 			case 0x01:	_w.printError("Wrong password");	break;
 			case 0x02:	_w.printError("Lobby is full");		break;
 			default:	_w.printError("Unwknown error");
 			}
 		}
-		
 	}
 	
+	private class UpdateClientHdl implements Handler<CltSrvCh> {
+		public void handle(Data d, CltSrvCh ch) throws IOException {
+			switch( d.rdB() ) {
+			case 0x00:
+				Peer p = new Peer(d);
+				P2PCh peerCh = _handshakesCh.get(p._id);
+				if( peerCh != null ) {
+					addNewPeer(peerCh, p);
+				} else {
+					_newPeers.add(p._id, p);
+					debug(p.getName() + " has join, wait handshakes");
+				}
+				break;
+			default:
+				System.out.println("not implemented");
+				
+			}
+		}
+		
+	}
 	
 	////////// P2P HANDLERS ///////////
 	private class PeerHandler extends MsgHandler<P2PCh> {
@@ -408,53 +415,33 @@ public class Client {
 	}
 	
 	private class PeerHelloHdl implements Handler<P2PCh> {
-		public void handle(byte[] data, P2PCh ch) throws IOException {
-			System.out.println("hello");
+		public void handle(Data d, P2PCh ch) throws IOException {
+			byte id = d.rdB();
+			int lobbyId = d.rdI();
+			if( lobbyId == _lobby._id ) {
+				Peer p = _newPeers.get(id);
+				
+				if( p != null ) {
+					addNewPeer(ch, p);
+				} else {
+					_handshakesCh.add(id, ch);
+					debug("receive handshake from " + InetAddress.getByAddress(ch.getIp()).toString());
+				}
+			} else {
+				System.out.println("new peer with another lobby id");
+			}
+			
 		}
 	}
 	
 
 	private class ChatHdl implements Handler<P2PCh> {
-		public void handle(byte[] data, P2PCh ch) throws IOException {
-			byte len = data[0];
-			byte[] msg = new byte[len];
-			System.arraycopy(data, 1, msg, 0, len);
-			
+		public void handle(Data d, P2PCh ch) throws IOException {
+			byte len = d.rdB();
+			String msg = d.rdStr(len);
 			Peer sender = ch.getPeer();
 			_w.printChatMsg(sender, msg);
 		}
 		
 	}
-	
-/*	private class TestChatListHandler implements Handler {
-		public void handle(byte[] data, Channel ch) throws IOException {
-			Vector<PeerInfo> peers = PeerInfo.peersFromBytes(data);
-			
-			_w.print(peers.size() + " peers connected : ");
-			debug("receive list of " + peers.size() + " peers. Start listening peers.");
-			
-			listenPeers();
-			
-			for( PeerInfo peer : peers ) {
-				try {
-					debug("going to add peer " + peer);
-					Channel peerCh = new Channel(peer);
-					addNewPeer(peerCh, peer);
-					
-					ClientHandler peerHdl = new ClientHandler(peerCh);	// TODO make a special handler for peer
-					peerHdl.start();
-					
-					_w.print(peer._pseudo + ", ");
-					debug("send infos to peer "+peer);
-					peerCh.write(new Msg(Msg.C_HELLO, _myInfo.toBytes()));
-				} catch ( Exception e ) {
-					e.printStackTrace();
-					_w.printError("Connexion refused "+peer+"\n" + e.getMessage());
-				}
-			}
-			
-			_w.print("\n");
-		}
-	}
-*/	
 }

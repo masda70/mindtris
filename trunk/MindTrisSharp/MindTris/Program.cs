@@ -44,7 +44,7 @@ namespace MindTris
 				_ip_server = args[0];
 			}
 			else _ip_server = "127.0.0.1";
-            _ip_server = "138.231.141.213";
+            //_ip_server = "138.231.141.213";
             /*
             IPAddress address = Dns.GetHostAddresses("pcm70.crans.org")[0];
             _ip_server = address.ToString();

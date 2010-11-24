@@ -8,7 +8,7 @@ using namespace std;
 
 int main(int argc, char ** argv)
 {
-	BYTEARRAY Message;
+	/*BYTEARRAY Message;
 	ofstream myfile;
     myfile.open ("hellofromclient.txt");
 
@@ -30,7 +30,7 @@ int main(int argc, char ** argv)
 	myfile.open ("hellofromserver_unknownerror.txt");
 	Message = protocol.SEND_DGMT_HELLOFROMSERVER(DGMTProtocol ::SHELLO_REFUSEDUNKNOWNERROR,"you suck");
     myfile << string(Message.begin(),Message.end());
-	myfile.close();
+	myfile.close();*/
 	return 0;
 }
 

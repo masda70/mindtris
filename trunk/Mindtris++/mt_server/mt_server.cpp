@@ -1,41 +1,80 @@
 #include <mindtriscore\mindtriscore.h>
 
-#include <signal.h>
-#include <stdlib.h>
-
-#ifdef WIN32
- #include <ws2tcpip.h>		// for WSAIoctl
-#endif
-
-#ifdef WIN32
- #include <windows.h>
- #include <winsock.h>
-#endif
-
-#include <time.h>
-
-#ifndef WIN32
- #include <sys/time.h>
-#endif
-
-#ifdef __APPLE__
- #include <mach/mach_time.h>
-#endif
-
-#define SERVERMOTD "Let's play some SC2"
+#define SERVERMOTD "Welcome to MasdaSeventy's MindTris++ Server."
 
 
 #include "mt_server.h"
 
 
+void CONSOLE_Print( string message )
+{
+	cout << message << endl;
+}
+
+void DEBUG_Print( string message )
+{
+	cout << message << endl;
+}
+
+void DEBUG_Print( BYTEARRAY b )
+{
+	cout << "{ ";
+
+	for( unsigned int i = 0; i < b.size( ); i++ )
+		cout << hex << (int)b[i] << " ";
+
+	cout << "}" << endl;
+}
+
+void MindTrisServer :: DestroyLobby(Lobby * l)
+{
+	m_Lobbies->remove(l->GetLobbyID());
+	delete l;
+}
+
+Lobby * MindTrisServer :: CreateLobby(User * creator, string lobbyname, int maxplayers, bool haspassword, string password)
+{
+	Lobby * l = new Lobby(creator, lobbyname, maxplayers, haspassword, password);
+	l->SetLobbyID(m_Lobbies->add(l));
+	l->SetSessionID( ((uint64_t) m_randPool.GenerateByte()) << 56 |((uint64_t) m_randPool.GenerateByte()) << 48 | ((uint64_t) m_randPool.GenerateByte()) << 40 | ((uint64_t) m_randPool.GenerateByte()) <<  32 | ((uint64_t) m_randPool.GenerateByte()) << 24 | ((uint64_t) m_randPool.GenerateByte()) << 16 | ((uint64_t) m_randPool.GenerateByte()) << 8| ((uint64_t) m_randPool.GenerateByte()));
+	return l;
+}
+
 MindTrisServer :: MindTrisServer(string address, uint16_t port, string nMOTD)
 {
-	m_Socket = new CTCPServer(true);
+
+	m_Users= new vector<User *>;
+	m_Lobbies = new OrderedAllocationVector<Lobby>();
+
+	m_Socket = new CTCPServer(&CONSOLE_Print,true);
 	m_Protocol = new DGMTProtocol(true);
 	m_BindAddress = address;
 	m_ListenPort = port;
 	m_Exiting = false;
 	m_MOTD = nMOTD;
+
+	m_database = new ServerDatabase();
+
+	CryptoPP::InvertibleRSAFunction params;
+	params.GenerateRandomWithKeySize(m_randPool, 3072);
+
+	CryptoPP::Integer modulus = params.GetModulus();
+	CryptoPP::Integer exponent = params.GetPublicExponent();
+
+	m_Decryptor = new CryptoPP::RSAES_OAEP_SHA_Decryptor(params);
+		
+	string modulusstring;
+	CryptoPP::TransparentFilter modulusFilter(new CryptoPP::StringSink(modulusstring));
+	modulus.Encode(modulusFilter,modulus.MinEncodedSize());
+
+	string exponentstring;
+	CryptoPP::TransparentFilter exponentFilter(new CryptoPP::StringSink(exponentstring));
+	exponent.Encode(exponentFilter,exponent.MinEncodedSize());
+
+	m_PublicKey = new RSAPublicKey();
+	m_PublicKey->Exponent = exponentstring;
+	m_PublicKey->Modulus = modulusstring;
+
 
 	if( m_Socket->Listen( m_BindAddress, m_ListenPort ) )
 		CONSOLE_Print( "[MindTris Server] listening on port " + UTIL_ToString( m_ListenPort ) );
@@ -64,7 +103,7 @@ bool MindTrisServer :: Update(long usecBlock){
 
 	// User sockets
 
-	for( vector<User *> :: iterator i = m_Users.begin( ); i != m_Users.end( ); i++ )
+	for( vector<User *> :: iterator i = m_Users->begin( ); i != m_Users->end( ); i++ )
 	{
 		(*i)->GetSocket( )->SetFD( &fd, &send_fd, &nfds );
 		NumFDs++;
@@ -110,7 +149,7 @@ bool MindTrisServer :: Update(long usecBlock){
 
 				NewSocket->SetNoDelay( true );
 
-				m_Users.push_back( new User( this, m_Protocol, NewSocket ) );
+				m_Users->push_back( new User( this, m_Protocol, NewSocket ) );
 
 				CONSOLE_Print( "[MindTris Server] connection attempt from [" + NewSocket->GetIPString( ) + "]" );
 		}
@@ -122,20 +161,20 @@ bool MindTrisServer :: Update(long usecBlock){
 		}
 	}
 
-	for( vector<User *> :: iterator i = m_Users.begin( ); i != m_Users.end( );  )
+	for( vector<User *> :: iterator i = m_Users->begin( ); i != m_Users->end( );  )
 	{
 
 		if( (*i)->Update( &fd ) )
 		{
 			delete *i;
-			i = m_Users.erase( i );
+			i = m_Users->erase( i );
 		}
-		else
-		{
-			if( (*i)->GetSocket( ) )
-				(*i)->GetSocket( )->DoSend( &send_fd );
-			i++;
-		}
+		else i++;
+	}
+
+	for( vector<User *> :: iterator i = m_Users->begin( ); i != m_Users->end( );  i++)
+	{
+		if( (*i)->GetSocket( ) ) (*i)->GetSocket( )->DoSend( &send_fd );
 	}
 
 	return false;

@@ -1,7 +1,7 @@
 
 
-#ifndef SOCKET_H
-#define SOCKET_H
+#ifndef MTC_SOCKET_H
+#define MTC_SOCKET_H
 
 #ifdef WIN32
  #include <winsock2.h>
@@ -48,6 +48,7 @@
 class CSocket
 {
 protected:
+	void (*m_CONSOLEPrint)(string);
 	SOCKET m_Socket;
 	struct sockaddr_in m_SIN;
 	bool m_HasError;
@@ -55,12 +56,13 @@ protected:
 	bool m_IsBlocking;
 
 public:
-	CSocket( );
-	CSocket( SOCKET nSocket, struct sockaddr_in nSIN );
+	CSocket(  void (*consoleprint)(string) );
+	CSocket(  void (*consoleprint)(string), SOCKET nSocket, struct sockaddr_in nSIN );
 	~CSocket( );
 
 	void SetBlocking(bool nIsBlocking);
 	virtual BYTEARRAY GetPort( );
+	virtual uint32_t GetIPInt32();
 	virtual BYTEARRAY GetIP( );
 	virtual string GetIPString( );
 	virtual bool HasError( )						{ return m_HasError; }
@@ -88,19 +90,20 @@ private:
 	uint32_t m_LastSend;
 
 public:
-	CTCPSocket( );
-	CTCPSocket( SOCKET nSocket, struct sockaddr_in nSIN );
+	CTCPSocket( void (*console_print)(string));
+	CTCPSocket( void (*console_print)(string), SOCKET nSocket, struct sockaddr_in nSIN );
 	virtual ~CTCPSocket( );
 
 	virtual void Reset( );
 	virtual bool GetConnected( )				{ return m_Connected; }
 	virtual string *GetBytes( )					{ return &m_RecvBuffer; }
-	virtual void PutBytes( string bytes );
 	virtual void PutBytes( BYTEARRAY bytes );
 	virtual void ClearRecvBuffer( )				{ m_RecvBuffer.clear( ); }
 	virtual void ClearSendBuffer( )				{ m_SendBuffer.clear( ); }
 	virtual uint32_t GetLastRecv( )				{ return m_LastRecv; }
 	virtual uint32_t GetLastSend( )				{ return m_LastSend; }
+	virtual void DoRecv();
+	virtual void DoSend();
 	virtual void DoRecv( fd_set *fd );
 	virtual void DoSend( fd_set *send_fd );
 	virtual void Disconnect( );
@@ -117,12 +120,13 @@ protected:
 	bool m_Connecting;
 
 public:
-	CTCPClient( );
+	CTCPClient(void (*console_print)(string) , bool nIsBlocking  );
 	virtual ~CTCPClient( );
 
 	virtual void Reset( );
 	virtual void Disconnect( );
 	virtual bool GetConnecting( )												{ return m_Connecting; }
+	virtual void CTCPClient :: Connect( string localaddress, uint32_t HostAddress, uint16_t port );
 	virtual void Connect( string localaddress, string address, uint16_t port );
 	virtual bool CheckConnect( );
 };
@@ -134,10 +138,11 @@ public:
 class CTCPServer : public CTCPSocket
 {
 public:
-	CTCPServer(bool nIsBlocking );
+	CTCPServer(void (*console_print)(string), bool nIsBlocking );
 	virtual ~CTCPServer( );
 
 	virtual bool Listen( string address, uint16_t port );
+	virtual CTCPSocket *Accept( );
 	virtual CTCPSocket *Accept( fd_set *fd );
 };
 

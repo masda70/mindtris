@@ -106,14 +106,12 @@
     <ClInclude Include="serverprotocol.h" />
     <ClInclude Include="socket.h" />
     <ClInclude Include="util.h" />
-    <ClInclude Include="mindtriscore.h" />
     <ClInclude Include="resource.h" />
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="includes.cpp" />
     <ClCompile Include="p2pprotocol.cpp" />
     <ClCompile Include="serverprotocol.cpp" />
-    <ClCompile Include="mindtriscore.cpp" />
     <ClCompile Include="socket.cpp" />
     <ClCompile Include="util.cpp" />
   </ItemGroup>

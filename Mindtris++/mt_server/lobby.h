@@ -1,7 +1,6 @@
 #ifndef MT_LOBBY_H
 #define MT_LOBBY_H
 
-#include "mt_server.h"
 class User;
 typedef OrderedAllocationVector<User> UserList;
 

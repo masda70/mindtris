@@ -1,4 +1,6 @@
-#include "mt_server.h"
+
+#include "mindtriscore/includes.h"
+#include "database.h"
 
 bool ServerDatabase::UserExists(string username)
 {

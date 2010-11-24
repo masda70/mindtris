@@ -1,5 +1,17 @@
-#include "user.h"
+
+#include "mindtriscore/includes.h"
+#include "mindtriscore/util.h"
+#include "mindtriscore/socket.h"
+#include "mindtriscore/oalloc.h"
+#include "mindtriscore/serverprotocol.h"
+#include "mindtriscore/p2pprotocol.h"
+#include "database.h"
 #include "mt_server.h"
+#include "lobby.h"
+#include "user.h"
+
+
+uint32_t User :: GetIPInt32(){ return m_Socket->GetIPInt32();}
 
 void User :: SendPeerStatusUpdate(User * u, DGMTProtocol::StatusUpdate status)
 {

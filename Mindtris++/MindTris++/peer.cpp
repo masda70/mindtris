@@ -1,3 +1,9 @@
+#include "mindtriscore/includes.h"
+#include "mindtriscore/util.h"
+#include "mindtriscore/socket.h"
+#include "mindtriscore/serverprotocol.h"
+#include "mindtriscore/p2pprotocol.h"
+#include "mindtris.h"
 #include "peer.h"
 
 Peer :: ~Peer()

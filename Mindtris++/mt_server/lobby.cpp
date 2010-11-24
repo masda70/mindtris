@@ -1,4 +1,8 @@
-#include "mt_server.h"
+#include "mindtriscore/includes.h"
+#include "mindtriscore/oalloc.h"
+#include "mindtriscore/serverprotocol.h"
+#include "user.h"
+#include "lobby.h"
 
 Lobby:: ~Lobby(){
 	for (OrderedAllocationVector<User>::iterator it = GetPeers()->begin(); it != GetPeers()->end(); it++) 

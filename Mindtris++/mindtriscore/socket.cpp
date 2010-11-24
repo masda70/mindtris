@@ -1,4 +1,5 @@
-#include "mindtriscore.h"
+
+#include "includes.h"
 #include "util.h"
 #include "socket.h"
 

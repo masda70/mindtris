@@ -15,10 +15,10 @@
     </Filter>
   </ItemGroup>
   <ItemGroup>
-    <ClCompile Include="MindTris++.cpp">
+    <ClCompile Include="peer.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="peer.cpp">
+    <ClCompile Include="mindtris.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
   </ItemGroup>

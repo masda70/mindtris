@@ -1,9 +1,18 @@
-#include <mindtriscore\mindtriscore.h>
+#include "mindtriscore/includes.h"
+#include "mindtriscore/util.h"
+#include "mindtriscore/socket.h"
+#include "mindtriscore/oalloc.h"
+#include "mindtriscore/serverprotocol.h"
+#include "mindtriscore/p2pprotocol.h"
+#include "lobby.h"
+#include "user.h"
+#include "database.h"
+#include "mt_server.h"
+
 
 #define SERVERMOTD "Welcome to MasdaSeventy's MindTris++ Server."
 
 
-#include "mt_server.h"
 
 
 void CONSOLE_Print( string message )

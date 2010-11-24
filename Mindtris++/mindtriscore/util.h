@@ -2,8 +2,6 @@
 #ifndef MTC_UTIL_H
 #define MTC_UTIL_H
 
-
-
 // byte arrays
 BYTEARRAY UTIL_CreateByteArray( string s );
 BYTEARRAY UTIL_CreateByteArray( unsigned char *a, int size );

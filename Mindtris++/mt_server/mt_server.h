@@ -1,10 +1,15 @@
 #ifndef MT_SERVER_H
 #define MT_SERVER_H
 
-#include <mindtriscore\mindtriscore.h>
-#include "lobby.h"
-#include "user.h"
-#include "database.h"
+#include "mindtriscore/includes.h"
+
+class Lobby;
+class User;
+class CTCPServer;
+class DGMTProtocol;
+template <typename T> class OrderedAllocationVector;
+
+class ServerDatabase;
 
 typedef OrderedAllocationVector<Lobby> LobbyList;
 

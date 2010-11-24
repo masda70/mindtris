@@ -3,7 +3,13 @@
 #ifndef MT_PEER_H
 #define MT_PEER_H
 
-#include "mindtris.h"
+
+
+class CTCPClient;
+class CTCPServer;
+class DGMTPacket;
+class DGMTProtocol;
+class DGMTP2PProtocol;
 
 class MindTrisClient;
 

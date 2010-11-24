@@ -1,5 +1,6 @@
-#include "mindtriscore.h"
 
+#include "includes.h"
+#include "util.h"
 #include <sys/stat.h>
 
 

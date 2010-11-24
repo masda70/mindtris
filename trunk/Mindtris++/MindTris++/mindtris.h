@@ -1,13 +1,15 @@
 #ifndef MT_MINDTRIS_H
 #define MT_MINDTRIS_H
 
-#include <mindtriscore\mindtriscore.h>
-#include "peer.h"
-
 #define MINDTRISCLIENT_VERSION "1.0"
 
 class PeerInfo;
 class Peer;
+class CTCPClient;
+class CTCPServer;
+class DGMTPacket;
+class DGMTProtocol;
+class DGMTP2PProtocol;
 
 class MindTrisClient
 {

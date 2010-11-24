@@ -1,8 +1,6 @@
 #ifndef DGMTP2PPROTOCOL_H
 #define DGMTP2PPROTOCOL_H
 
-#include "includes.h"
-
 #define DGMTP2P_HEADER_CONSTANT1 'D'
 #define DGMTP2P_HEADER_CONSTANT2 'G'
 #define DGMTP2P_HEADER_CONSTANT3 'M'

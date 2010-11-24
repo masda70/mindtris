@@ -1,8 +1,11 @@
 #ifndef MT_USER_H
 #define MT_USER_H
 
-#include "mt_server.h"
-
+class Lobby;
+class CTCPServer;
+class CTCPSocket;
+class DGMTPacket;
+class DGMTProtocol;
 class MindTrisServer;
 
 class User
@@ -42,8 +45,7 @@ public:
 	RSAPublicKey * GetPublicKey(){ return m_publickey;}
 	void SetP2PPortNumber(uint16_t p){ m_p2pportnumber= p;}
 	uint16_t GetP2PPortNumber() { return m_p2pportnumber;}
-	uint32_t GetIPInt32(){return m_Socket->GetIPInt32();}
-	
+	uint32_t GetIPInt32();	
 	void SetLobby(Lobby * l){ m_lobby = l; }
 	Lobby * GetLobby(){ return m_lobby; }
 	uint8_t GetPeerID(){ return m_peerid; }

@@ -78,7 +78,7 @@
     </Link>
   </ItemDefinitionGroup>
   <ItemGroup>
-    <ClCompile Include="MindTris++.cpp" />
+    <ClCompile Include="mindtris.cpp" />
     <ClCompile Include="peer.cpp" />
   </ItemGroup>
   <ItemGroup>

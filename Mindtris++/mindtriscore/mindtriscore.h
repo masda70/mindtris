@@ -1,5 +1,5 @@
-#ifndef MINDTRISCORE_H
-#define MINDTRISCORE_H
+#ifndef MTC_MINDTRISCORE_H
+#define MTC_MINDTRISCORE_H
 
 
 #include "includes.h"
@@ -7,10 +7,8 @@
 #include "util.h"
 #include "socket.h"
 #include "serverprotocol.h"
+#include "p2pprotocol.h"
+#include "oalloc.h"
 
-
-void CONSOLE_Print( string message );
-void DEBUG_Print( string message );
-void DEBUG_Print( BYTEARRAY b );
 
 #endif // MINDTRISCORE_H

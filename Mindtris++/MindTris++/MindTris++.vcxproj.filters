@@ -18,9 +18,15 @@
     <ClCompile Include="MindTris++.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="peer.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="mindtris.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="peer.h">
       <Filter>Header Files</Filter>
     </ClInclude>
   </ItemGroup>

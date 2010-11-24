@@ -1,6 +1,6 @@
 
-#ifndef UTIL_H
-#define UTIL_H
+#ifndef MTC_UTIL_H
+#define MTC_UTIL_H
 
 
 
@@ -10,24 +10,29 @@ BYTEARRAY UTIL_CreateByteArray( unsigned char *a, int size );
 BYTEARRAY UTIL_CreateByteArray( unsigned char c );
 BYTEARRAY UTIL_CreateByteArray( uint16_t i, bool reverse );
 BYTEARRAY UTIL_CreateByteArray( uint32_t i, bool reverse );
+uint8_t UTIL_ByteArrayToUInt8( BYTEARRAY b, bool reverse, unsigned int start = 0 );
 uint16_t UTIL_ByteArrayToUInt16( BYTEARRAY b, bool reverse, unsigned int start = 0 );
 uint32_t UTIL_ByteArrayToUInt32( BYTEARRAY b, bool reverse, unsigned int start = 0 );
+uint64_t UTIL_ByteArrayToUInt64( BYTEARRAY b, bool reverse, unsigned int start = 0 );
 string UTIL_ByteArrayToDecString( BYTEARRAY b );
 string UTIL_ByteArrayToHexString( BYTEARRAY b );
 void UTIL_AppendByteArray( BYTEARRAY &b, BYTEARRAY append );
 void UTIL_AppendByteArrayFast( BYTEARRAY &b, BYTEARRAY &append );
 void UTIL_AppendByteArray( BYTEARRAY &b, unsigned char *a, int size );
 void UTIL_AppendByteArray( BYTEARRAY &b, string append, bool terminator = true );
+void UTIL_AppendByteArray( BYTEARRAY &b, string append, int size, bool terminator = true);
 void UTIL_AppendByteArrayFast( BYTEARRAY &b, string &append, bool terminator = true );
+void UTIL_AppendByteArray( BYTEARRAY &b, uint8_t i, bool reverse );
 void UTIL_AppendByteArray( BYTEARRAY &b, uint16_t i, bool reverse );
 void UTIL_AppendByteArray( BYTEARRAY &b, uint32_t i, bool reverse );
+void UTIL_AppendByteArray( BYTEARRAY &b, uint64_t i, bool reverse );
 BYTEARRAY UTIL_ExtractCString( BYTEARRAY &b, unsigned int start );
 unsigned char UTIL_ExtractHex( BYTEARRAY &b, unsigned int start, bool reverse );
 BYTEARRAY UTIL_ExtractNumbers( string s, unsigned int count );
 BYTEARRAY UTIL_ExtractHexNumbers( string s );
 
 // conversions
-
+string UTIL_ToString( uint64_t i);
 string UTIL_ToString( unsigned long i );
 string UTIL_ToString( unsigned short i );
 string UTIL_ToString( unsigned int i );
@@ -71,5 +76,6 @@ uint32_t UTIL_Factorial( uint32_t x );
 
 #define nCr(n, r) (UTIL_Factorial(n) / UTIL_Factorial((n)-(r)) / UTIL_Factorial(r))
 #define nPr(n, r) (UTIL_Factorial(n) / UTIL_Factorial((n)-(r)))
+
 
 #endif

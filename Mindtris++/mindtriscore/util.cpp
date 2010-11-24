@@ -49,6 +49,35 @@ BYTEARRAY UTIL_CreateByteArray( uint32_t i, bool reverse )
 		return result;
 }
 
+BYTEARRAY UTIL_CreateByteArray( uint64_t i, bool reverse )
+{
+	BYTEARRAY result;
+	result.push_back( (unsigned char)i );
+	result.push_back( (unsigned char)( i >> 8 ) );
+	result.push_back( (unsigned char)( i >> 16 ) );
+	result.push_back( (unsigned char)( i >> 24 ) );
+	result.push_back( (unsigned char)( i >> 32 ) );
+	result.push_back( (unsigned char)( i >> 40 ) );
+	result.push_back( (unsigned char)( i >> 48 ) );
+	result.push_back( (unsigned char)( i >> 56 ) );
+
+	if( reverse )
+		return BYTEARRAY( result.rbegin( ), result.rend( ) );
+	else
+		return result;
+}
+
+
+uint8_t UTIL_ByteArrayToUInt8( BYTEARRAY b, bool reverse, unsigned int start )
+{
+	if( b.size( ) < start + 1 )
+		return 0;
+
+	BYTEARRAY temp = BYTEARRAY( b.begin( ) + start, b.begin( ) + start + 1 );
+
+	return (uint8_t)( temp[0] );
+}
+
 uint16_t UTIL_ByteArrayToUInt16( BYTEARRAY b, bool reverse, unsigned int start )
 {
 	if( b.size( ) < start + 2 )
@@ -73,6 +102,19 @@ uint32_t UTIL_ByteArrayToUInt32( BYTEARRAY b, bool reverse, unsigned int start )
 		return (uint32_t)( temp[0] << 24 | temp[1] << 16 | temp[2] << 8 | temp[3] );
 	else
 		return (uint32_t)( temp[3] << 24 | temp[2] << 16 | temp[1] << 8 | temp[0] );
+}
+
+uint64_t UTIL_ByteArrayToUInt64( BYTEARRAY b, bool reverse, unsigned int start )
+{
+	if( b.size( ) < start + 8 )
+		return 0;
+
+	BYTEARRAY temp = BYTEARRAY( b.begin( ) + start, b.begin( ) + start + 8 );
+
+	if( reverse )
+		return (uint64_t)( ((uint64_t) temp[0]) << 56 | ((uint64_t) temp[1]) << 48 | ((uint64_t) temp[2]) << 40 | ((uint64_t) temp[3]) << 32 | ((uint64_t) temp[4]) << 24 | ((uint64_t) temp[5]) << 16 | ((uint64_t) temp[6]) << 8 | ((uint64_t) temp[7]) );
+	else
+		return (uint64_t)( ((uint64_t) temp[7]) << 56 | ((uint64_t) temp[6]) << 48 | ((uint64_t) temp[5]) << 40 | ((uint64_t) temp[4]) << 32 | ((uint64_t) temp[3]) << 24 | ((uint64_t) temp[2]) << 16 | ((uint64_t) temp[1]) << 8 | ((uint64_t) temp[0]) );
 }
 
 string UTIL_ByteArrayToDecString( BYTEARRAY b )
@@ -121,6 +163,16 @@ void UTIL_AppendByteArray( BYTEARRAY &b, unsigned char *a, int size )
 	UTIL_AppendByteArray( b, UTIL_CreateByteArray( a, size ) );
 }
 
+void UTIL_AppendByteArray( BYTEARRAY &b, string append, int size, bool terminator )
+{
+	// append the first size characters from append
+
+	b.insert( b.end( ), append.begin( ), append.begin() + size );
+
+	if( terminator )
+		b.push_back( 0 );
+}
+
 void UTIL_AppendByteArray( BYTEARRAY &b, string append, bool terminator )
 {
 	// append the string plus a null terminator
@@ -141,12 +193,22 @@ void UTIL_AppendByteArrayFast( BYTEARRAY &b, string &append, bool terminator )
 		b.push_back( 0 );
 }
 
+void UTIL_AppendByteArray( BYTEARRAY &b, uint8_t i, bool reverse )
+{
+	b.push_back( i );
+}
+
 void UTIL_AppendByteArray( BYTEARRAY &b, uint16_t i, bool reverse )
 {
 	UTIL_AppendByteArray( b, UTIL_CreateByteArray( i, reverse ) );
 }
 
 void UTIL_AppendByteArray( BYTEARRAY &b, uint32_t i, bool reverse )
+{
+	UTIL_AppendByteArray( b, UTIL_CreateByteArray( i, reverse ) );
+}
+
+void UTIL_AppendByteArray( BYTEARRAY &b, uint64_t i, bool reverse )
 {
 	UTIL_AppendByteArray( b, UTIL_CreateByteArray( i, reverse ) );
 }
@@ -293,6 +355,15 @@ string UTIL_ToString( int i )
 	return result;
 }
 
+string UTIL_ToString( uint64_t i)
+{
+	string result;
+	stringstream SS;
+	SS << i;
+	SS >> result;
+	return result;
+}
+
 string UTIL_ToString( float f, int digits )
 {
 	string result;
@@ -381,111 +452,6 @@ string UTIL_MSToString( uint32_t ms )
 	return MinString + "m" + SecString + "s";
 }
 
-bool UTIL_FileExists( string file )
-{
-	struct stat fileinfo;
-
-	if( stat( file.c_str( ), &fileinfo ) == 0 )
-		return true;
-
-	return false;
-}
-
-string UTIL_FileRead( string file, uint32_t start, uint32_t length )
-{
-	ifstream IS;
-	IS.open( file.c_str( ), ios :: binary );
-
-	if( IS.fail( ) )
-	{
-		CONSOLE_Print( "[UTIL] warning - unable to read file part [" + file + "]" );
-		return string( );
-	}
-
-	// get length of file
-
-	IS.seekg( 0, ios :: end );
-	uint32_t FileLength = IS.tellg( );
-
-	if( start > FileLength )
-	{
-		IS.close( );
-		return string( );
-	}
-
-	IS.seekg( start, ios :: beg );
-
-	// read data
-
-	char *Buffer = new char[length];
-	IS.read( Buffer, length );
-	string BufferString = string( Buffer, IS.gcount( ) );
-	IS.close( );
-	delete [] Buffer;
-	return BufferString;
-}
-
-string UTIL_FileRead( string file )
-{
-	ifstream IS;
-	IS.open( file.c_str( ), ios :: binary );
-
-	if( IS.fail( ) )
-	{
-		CONSOLE_Print( "[UTIL] warning - unable to read file [" + file + "]" );
-		return string( );
-	}
-
-	// get length of file
-
-	IS.seekg( 0, ios :: end );
-	uint32_t FileLength = IS.tellg( );
-	IS.seekg( 0, ios :: beg );
-
-	// read data
-
-	char *Buffer = new char[FileLength];
-	IS.read( Buffer, FileLength );
-	string BufferString = string( Buffer, IS.gcount( ) );
-	IS.close( );
-	delete [] Buffer;
-
-	if( BufferString.size( ) == FileLength )
-		return BufferString;
-	else
-		return string( );
-}
-
-bool UTIL_FileWrite( string file, unsigned char *data, uint32_t length )
-{
-	ofstream OS;
-	OS.open( file.c_str( ), ios :: binary );
-
-	if( OS.fail( ) )
-	{
-		CONSOLE_Print( "[UTIL] warning - unable to write file [" + file + "]" );
-		return false;
-	}
-
-	// write data
-
-	OS.write( (const char *)data, length );
-	OS.close( );
-	return true;
-}
-
-string UTIL_FileSafeName( string fileName )
-{
-	string :: size_type BadStart = fileName.find_first_of( "\\/:*?<>|" );
-
-	while( BadStart != string :: npos )
-	{
-		fileName.replace( BadStart, 1, 1, '_' );
-		BadStart = fileName.find_first_of( "\\/:*?<>|" );
-	}
-
-	return fileName;
-}
 
 string UTIL_AddPathSeperator( string path )
 {

@@ -248,7 +248,7 @@ bool MindTrisClient :: ServerStatusUpdate(fd_set * fd){
 							m_sessionid = info->GetSessionID();
 							m_peerid = info->GetPeerID();
 							GetPeerInfoVector()->resize(255,NULL);
-							CONSOLE_ChangeLobby(UTIL_ToString(m_lobbyid));
+							CONSOLE_ChangeLobby("Lobby "+UTIL_ToString(m_lobbyid));
 							CONSOLE_AddLobbyPeer(GetDisplayName());
 							for (vector<DGMTClientLobbyInfo>::iterator it = info->GetClientLobbyList()->begin(); it != info->GetClientLobbyList()->end(); it++) 
 							{
@@ -863,7 +863,7 @@ void MindTrisClient::UpdateLeaveLobby()
 		delete (*it);
 	}
 	GetPeers()->clear();
-
+	CONSOLE_ChangeLobby("");
 	CONSOLE_RemoveLobbyPeer(GetDisplayName());
 	StopP2PSocket();
 	SetInALobby(false);

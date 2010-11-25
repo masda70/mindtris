@@ -44,7 +44,7 @@ public:
 		m_haspassword = haspassword;
 		m_password = password;
 	}
-	Lobby::~Lobby();
+	~Lobby();
 };
 
 #endif //MT_LOBBY_H

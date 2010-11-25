@@ -74,11 +74,11 @@ MindTrisServer :: MindTrisServer(string address, uint16_t port, string nMOTD)
 		
 	string modulusstring;
 	CryptoPP::TransparentFilter modulusFilter(new CryptoPP::StringSink(modulusstring));
-	modulus.Encode(modulusFilter,modulus.MinEncodedSize());
+	modulus.Encode(modulusFilter,modulus.MinEncodedSize(),CryptoPP::Integer::UNSIGNED);
 
 	string exponentstring;
 	CryptoPP::TransparentFilter exponentFilter(new CryptoPP::StringSink(exponentstring));
-	exponent.Encode(exponentFilter,exponent.MinEncodedSize());
+	exponent.Encode(exponentFilter,exponent.MinEncodedSize(),CryptoPP::Integer::UNSIGNED);
 
 	m_PublicKey = new RSAPublicKey();
 	m_PublicKey->Exponent = exponentstring;

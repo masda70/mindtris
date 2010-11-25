@@ -808,8 +808,8 @@ MindTrisClient::MindTrisClient(string address, uint16_t port, uint16_t clientpor
 								CryptoPP::Integer modulus;
 								CryptoPP::Integer exponent;
 
-								modulus.Decode(CryptoPP::StringSource(modulusstring,true), modulusstring.size());
-								exponent.Decode(CryptoPP::StringSource(exponentstring,true), exponentstring.size());
+								modulus.Decode(CryptoPP::StringSource(modulusstring,true), modulusstring.size(),CryptoPP::Integer::UNSIGNED);
+								exponent.Decode(CryptoPP::StringSource(exponentstring,true), exponentstring.size(),CryptoPP::Integer::UNSIGNED);
 								CryptoPP::RSAFunction f;
 								f.Initialize(modulus,exponent);
 								m_Encryptor = new CryptoPP::RSAES_OAEP_SHA_Encryptor(f);

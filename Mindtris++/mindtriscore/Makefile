@@ -4,7 +4,7 @@ C++ = g++
 CC = gcc
 DFLAGS =
 OFLAGS = -O3
-CFLAGS =
+CFLAGS = $(OFLAGS) $(DFLAGS) -I. .. ../Crypto++
 
 ifeq ($(SYSTEM),Darwin)
 DFLAGS += -D__APPLE__
@@ -22,7 +22,6 @@ DFLAGS += -D__SOLARIS__
 LFLAGS += -lresolv -lsocket -lnsl
 endif
 
-CFLAGS += $(OFLAGS) $(DFLAGS) -I ../Crypto++/
 
 OBJS = includes.o p2pprotocol.o serverprotocol.o socket.o util.o
 COBJS =

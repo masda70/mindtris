@@ -5,7 +5,7 @@ CC = gcc
 DFLAGS =
 OFLAGS = -O3
 LFLAGS = -L. -L./Crypto++ -lcurses
-CFLAGS =
+
 
 CLIENTDIR = MindTris++
 SERVERDIR = mt_server
@@ -28,7 +28,7 @@ DFLAGS += -D__SOLARIS__
 LFLAGS += -lresolv -lsocket -lnsl
 endif
 
-CFLAGS += $(OFLAGS) $(DFLAGS) -I.
+
 
 CLIENTOJBS = $(CLIENTDIR)/peer.o $(CLIENTDIR)/mindtris.o
 CLIENTLFLAGS = $(LFLAGS) -lcurses

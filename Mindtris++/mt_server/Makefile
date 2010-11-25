@@ -4,7 +4,7 @@ C++ = g++
 CC = gcc
 DFLAGS =
 OFLAGS = -O3
-CFLAGS =
+CFLAGS = $(OFLAGS) $(DFLAGS) -I. ..
 
 CLIENTDIR = MindTris++
 SERVERDIR = mt_server
@@ -27,11 +27,8 @@ DFLAGS += -D__SOLARIS__
 LFLAGS += -lresolv -lsocket -lnsl
 endif
 
-CFLAGS += $(OFLAGS) $(DFLAGS) -I.
-
 COREDIR=../mindtriscore
 
-CFLAGS = $(OFLAGS) $(DFLAGS) -I.
 
 OBJS = database.o lobby.o mt_server.o user.o
 COBJS =

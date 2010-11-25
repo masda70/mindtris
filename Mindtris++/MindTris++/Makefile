@@ -4,7 +4,7 @@ C++ = g++
 CC = gcc
 DFLAGS =
 OFLAGS = -O3
-CFLAGS =
+CFLAGS = $(OFLAGS) $(DFLAGS) -I. ../ ../Crypto++
 
 CLIENTDIR = MindTris++
 SERVERDIR = mt_server
@@ -27,7 +27,6 @@ DFLAGS += -D__SOLARIS__
 LFLAGS += -lresolv -lsocket -lnsl
 endif
 
-CFLAGS = $(OFLAGS) $(DFLAGS) -I.
 
 OBJS = mindtris.o peer.o
 COBJS =

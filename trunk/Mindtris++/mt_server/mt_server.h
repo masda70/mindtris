@@ -43,7 +43,7 @@ public:
 	~MindTrisServer();
 	MindTrisServer(){}
 	
-	void MindTrisServer :: DestroyLobby(Lobby * l);
+	void DestroyLobby(Lobby * l);
 	Lobby * CreateLobby(User * creator, string lobbyname, int maxplayercount, bool haspassword, string password);
 	bool Update(long usecBlock);
 };

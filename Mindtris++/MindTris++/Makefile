@@ -4,7 +4,7 @@ C++ = g++
 CC = gcc
 DFLAGS =
 OFLAGS = -O3
-CFLAGS = $(OFLAGS) $(DFLAGS) -I. ../ ../Crypto++
+CFLAGS = $(OFLAGS) $(DFLAGS) -I ../ -I ../Crypto++
 
 CLIENTDIR = MindTris++
 SERVERDIR = mt_server

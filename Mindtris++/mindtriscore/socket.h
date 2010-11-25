@@ -68,7 +68,7 @@ public:
 	virtual bool HasError( )						{ return m_HasError; }
 	virtual int GetError( )							{ return m_Error; }
 	virtual string GetErrorString( );
-	virtual void CSocket :: SetFD( fd_set *fd );
+	virtual void SetFD( fd_set *fd );
 	virtual void SetFD( fd_set *fd, fd_set *send_fd, int *nfds );
 	virtual void Allocate( int type );
 	virtual void Reset( );
@@ -126,7 +126,7 @@ public:
 	virtual void Reset( );
 	virtual void Disconnect( );
 	virtual bool GetConnecting( )												{ return m_Connecting; }
-	virtual void CTCPClient :: Connect( string localaddress, uint32_t HostAddress, uint16_t port );
+	virtual void Connect( string localaddress, uint32_t HostAddress, uint16_t port );
 	virtual void Connect( string localaddress, string address, uint16_t port );
 	virtual bool CheckConnect( );
 };

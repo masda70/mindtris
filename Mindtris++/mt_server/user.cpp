@@ -201,7 +201,7 @@ bool User :: Update(fd_set * fd){
 						}else{
 							Send(m_Protocol->SEND_DGMT_JOINEDLOBBY(info->GetLobbyID(),*answer));
 						}
-					}catch (out_of_range e)
+					}catch (out_of_range&)
 					{
 						*answer = DGMTProtocol::JOINEDLOBBY_UNKNOWNERROR;
 						Send(m_Protocol->SEND_DGMT_JOINEDLOBBY(info->GetLobbyID(),*answer));

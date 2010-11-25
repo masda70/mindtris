@@ -142,7 +142,7 @@ bool Peer::Update(fd_set *fd)
 					if(m_trusted){
 						DGMTP2PProtocol::ChatSend * info = m_Protocol-> RECEIVE_CHATSEND(packet->GetData());
 						if(info == NULL) {PrintMalformedPacket(); break;}
-						CONSOLE_Print("[P2P Chat] "+GetDisplayName()+": "+info->GetMessageW());					
+						CONSOLE_Print("[P2P Chat] "+GetDisplayName()+": "+info->GetMessage());					
 						delete info;
 						break;
 					}

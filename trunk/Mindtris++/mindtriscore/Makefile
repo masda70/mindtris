@@ -4,7 +4,6 @@ C++ = g++
 CC = gcc
 DFLAGS =
 OFLAGS = -O3
-LFLAGS = -L. -L../Crypto++/ -lcurses
 CFLAGS =
 
 ifeq ($(SYSTEM),Darwin)

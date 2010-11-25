@@ -4,7 +4,7 @@ C++ = g++
 CC = gcc
 DFLAGS =
 OFLAGS = -O3
-LFLAGS = -L. -L./Crypto++ 
+LFLAGS = -L. -L./Crypto++ -lcurses
 CFLAGS =
 
 CLIENTDIR = MindTris++

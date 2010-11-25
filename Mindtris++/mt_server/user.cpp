@@ -93,7 +93,7 @@ bool User :: Update(fd_set * fd){
 
 		switch( packet->GetID( ) )
 		{
-			case m_Protocol-> DGMT_HELLOFROMCLIENT:
+		case  DGMTProtocol::DGMT_HELLOFROMCLIENT:
 				 {
 					uint32_t ProtocolVersion = 0;
 					ProtocolVersion = m_Protocol-> RECEIVE_DGMT_HELLOFROMCLIENT( packet->GetData( ) );
@@ -108,7 +108,7 @@ bool User :: Update(fd_set * fd){
 					}
 					break;
 				 }
-			case m_Protocol->DGMT_CREATEUSER:
+			case DGMTProtocol::DGMT_CREATEUSER:
 				{
 
 					DGMTCreateUserInfo * info = m_Protocol-> RECEIVE_DGMT_CREATEUSER( packet->GetData( ), m_Server-> GetDecryptor());
@@ -124,7 +124,7 @@ bool User :: Update(fd_set * fd){
 					delete info;
 					break;
 				}
-			case m_Protocol->DGMT_LOGIN:
+			case DGMTProtocol::DGMT_LOGIN:
 				{
 
 					DGMTLoginInfo * info = m_Protocol-> RECEIVE_DGMT_LOGIN(packet->GetData( ), m_Server-> GetDecryptor());
@@ -149,7 +149,7 @@ bool User :: Update(fd_set * fd){
 					delete info;
 					break;
 				}
-			case m_Protocol->DGMT_CREATELOBBY:
+			case DGMTProtocol::DGMT_CREATELOBBY:
 				{
 
 					DGMTCreateLobby * info = m_Protocol-> RECEIVE_DGMT_CREATELOBBY(packet->GetData( ), m_Server-> GetDecryptor());
@@ -160,7 +160,7 @@ bool User :: Update(fd_set * fd){
 					delete info;
 					break;
 				}
-			case m_Protocol->DGMT_GETLOBBYLIST:
+			case DGMTProtocol::DGMT_GETLOBBYLIST:
 				{
 					m_Protocol-> RECEIVE_DGMT_GETLOBBYLIST(packet->GetData( ));
 					CONSOLE_Print("[MindTris Server] Player ["+GetDisplayName()+"] trying to retrieve lobby list.");
@@ -174,7 +174,7 @@ bool User :: Update(fd_set * fd){
 					delete lobbiesinfo;
 					break;
 				}
-			case m_Protocol-> DGMT_JOINLOBBY:
+			case DGMTProtocol::DGMT_JOINLOBBY:
 				{
 					DGMTJoinLobby * info = m_Protocol->RECEIVE_DGMT_JOINLOBBY(packet->GetData());
 					if(info == NULL) {PrintMalformedPacket(); break;}
@@ -209,7 +209,7 @@ bool User :: Update(fd_set * fd){
 					delete answer;
 					break;
 				}
-			case m_Protocol-> DGMT_LEAVELOBBY: 
+			case DGMTProtocol::DGMT_LEAVELOBBY: 
 				{
 					m_Protocol->RECEIVE_DGMT_LEAVELOBBY(packet->GetData());
 					if(LeaveLobby())

@@ -137,7 +137,7 @@ bool Peer::Update(fd_set *fd)
 					} 
 					break;
 				 }
-			case m_Protocol->DGMTP2P_CHATSEND:
+			case DGMTP2PProtocol::DGMTP2P_CHATSEND:
 				{
 					if(m_trusted){
 						DGMTP2PProtocol::ChatSend * info = m_Protocol-> RECEIVE_CHATSEND(packet->GetData());

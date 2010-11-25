@@ -206,7 +206,7 @@ bool MindTrisClient :: ServerStatusUpdate(fd_set * fd){
 
 		switch( packet->GetID( ) )
 		{
-			case m_Protocol->DGMT_LOBBYCREATION:
+		case DGMTProtocol::DGMT_LOBBYCREATION:
 				{
 
 					DGMTLobbyCreation * info = m_Protocol-> RECEIVE_DGMT_LOBBYCREATION(packet->GetData());
@@ -226,7 +226,7 @@ bool MindTrisClient :: ServerStatusUpdate(fd_set * fd){
 					delete info;
 					break;
 				}
-			case m_Protocol->DGMT_LOBBYLIST:
+			case DGMTProtocol::DGMT_LOBBYLIST:
 				{
 					vector<DGMTLobbyInfo> * v= m_Protocol-> RECEIVE_DGMT_LOBBYLIST(packet->GetData( ));
 					if(v == NULL) {PrintMalformedPacket(); break;}
@@ -241,7 +241,7 @@ bool MindTrisClient :: ServerStatusUpdate(fd_set * fd){
 					delete v;
 					break;
 				}
-			case m_Protocol-> DGMT_JOINEDLOBBY:
+			case DGMTProtocol::DGMT_JOINEDLOBBY:
 				{
 					DGMTJoinedLobby * info = m_Protocol->RECEIVE_DGMT_JOINEDLOBBY(packet->GetData());
 					if(info == NULL) {PrintMalformedPacket(); break;}
@@ -285,7 +285,7 @@ bool MindTrisClient :: ServerStatusUpdate(fd_set * fd){
 					break;
 					delete info;
 				}
-			case m_Protocol->DGMT_UPDATECLIENTSTATUS:
+			case DGMTProtocol::DGMT_UPDATECLIENTSTATUS:
 				{
 					DGMTUpdateClientStatus * info= m_Protocol-> RECEIVE_DGMT_UPDATECLIENTSTATUS(packet->GetData( ));
 					if(info == NULL) {PrintMalformedPacket(); break;}

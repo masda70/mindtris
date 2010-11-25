@@ -4,7 +4,7 @@ C++ = g++
 CC = gcc
 DFLAGS =
 OFLAGS = -O3
-LFLAGS = -L. -L./Crypto++ -lcurses
+LFLAGS = -L. -L./Crypto++/ -lcryptopp -L./mindtriscore/ -lmindtriscore
 
 
 CLIENTDIR = MindTris++
@@ -28,9 +28,10 @@ DFLAGS += -D__SOLARIS__
 LFLAGS += -lresolv -lsocket -lnsl
 endif
 
+CLIENTEXEC = mindtris++
+SERVEREXEC = mindtris_server
 
-
-CLIENTOJBS = $(CLIENTDIR)/peer.o $(CLIENTDIR)/mindtris.o
+CLIENTOBJS = $(CLIENTDIR)/peer.o $(CLIENTDIR)/mindtris.o
 CLIENTLFLAGS = $(LFLAGS) -lcurses
 
 SERVEROBJS = $(SERVERDIR)/database.o $(SERVERDIR)/lobby.o $(SERVERDIR)/$(SERVERDIR).o $(SERVERDIR)/user.o
@@ -38,7 +39,7 @@ SERVERLFLAGS = $(LFLAGS)
 
 PROGS = $(CLIENTEXEC) $(SERVEREXEC)
 
-all: $(OBJS) $(COBJS) $(PROGS)
+all: $(PROGS)
 	@echo
 	@echo "#######################################"
 	@echo "### BUILDING ALL TARGETS ###"
@@ -50,6 +51,7 @@ all: $(OBJS) $(COBJS) $(PROGS)
 
 $(CLIENTEXEC): $(CLIENTOBJS) $(COBJS)
 	$(C++) -o $(CLIENTEXEC) $(CLIENTOBJS) $(CLIENTLFLAGS)
+
 $(SERVEREXEC): $(SERVEROBJS) $(COBJS)
 	$(C++) -o $(SERVEREXEC) $(SERVEROBJS) $(SERVERLFLAGS) 
 
@@ -62,9 +64,7 @@ $(OBJS): %.o: %.cpp
 $(COBJS): %.o: %.c
 	$(CC) -o $@ $(CFLAGS) -c $<
 
-$( $(OBJS) $(COBJS)
+
 
 all: $(PROGS)
 
-peer.o: peer.h ../mindtriscore/includes.h ../mindtriscore/util.h ../mindtriscore/socket.h ../mindtriscore/serverprotocol.h ../mindtriscore/p2pprotocol.h mindtris.h
-mindtris.o: peer.h mindtris.h ../mindtriscore/includes.h ../mindtriscore/util.h ../mindtriscore/socket.h ../mindtriscore/serverprotocol.h ../mindtriscore/p2pprotocol.h

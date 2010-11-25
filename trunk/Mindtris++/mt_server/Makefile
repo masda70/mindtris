@@ -4,7 +4,7 @@ C++ = g++
 CC = gcc
 DFLAGS =
 OFLAGS = -O3
-CFLAGS = $(OFLAGS) $(DFLAGS) -I. ..
+CFLAGS = $(OFLAGS) $(DFLAGS) -I. -I ../ -I ../Crypto++
 
 CLIENTDIR = MindTris++
 SERVERDIR = mt_server
@@ -49,6 +49,6 @@ $(COBJS): %.o: %.c
 
 
 database.o: $(COREDIR)/includes.h database.h
-lobby.o: $(COREDIR)/includes.h $(COREDIR)/oalloc.h $(COREDIR)/serverprotocol.h user.h lobby.
-mt_server.o: $(COREDIR)/includes.h $(COREDIR)/socket.h $(COREDIR)/oalloc.h $(COREDIR)/serverprotocol.h $(COREDIR)/p2pprotocol.h $(COREDIR)/lobby.h $(COREDIR)/user.h $(COREDIR)/database.h $(COREDIR)/mt_server.h
-user.o: $(COREDIR)/includes.h $(COREDIR)/util.h $(COREDIR)/socket.h $(COREDIR)/oalloc.h $(COREDIR)/serverprotocol.h $(COREDIR)/p2pprotocol.h databae.h mt_server.h lobby. user.h
+lobby.o: $(COREDIR)/includes.h $(COREDIR)/oalloc.h $(COREDIR)/serverprotocol.h user.h lobby.h
+mt_server.o: $(COREDIR)/includes.h $(COREDIR)/socket.h $(COREDIR)/oalloc.h $(COREDIR)/serverprotocol.h $(COREDIR)/p2pprotocol.h lobby.h user.h database.h mt_server.h
+user.o: $(COREDIR)/includes.h $(COREDIR)/util.h $(COREDIR)/socket.h $(COREDIR)/oalloc.h $(COREDIR)/serverprotocol.h $(COREDIR)/p2pprotocol.h database.h mt_server.h lobby.h user.h

@@ -1,37 +1,28 @@
 SHELL = /bin/sh
 SYSTEM = $(shell uname)
 C++ = g++
-CC = gcc
-DFLAGS =
-OFLAGS = -O3
-CFLAGS = $(OFLAGS) $(DFLAGS) -I. .. ../Crypto++
+DFLAGS = -Wno-multichar -fPIC
+OFLAGS = -Wall -O3
+CFLAGS = $(OFLAGS) $(DFLAGS) -I. -I .. -I ../Crypto++
+LFLAGS = -L../Crypto++/ -lcryptopp
+
+LIBNAME = libmindtriscore
 
 ifeq ($(SYSTEM),Darwin)
-DFLAGS += -D__APPLE__
-OFLAGS += -flat_namespace
+LDFLAGS = -dynamiclib -lgmp -L/opt/local/lib
+TARGET = $(LIBNAME).dylib
 else
-LFLAGS += -lrt
+LDFLAGS = -shared -lgmp
+TARGET = $(LIBNAME).so
 endif
-
-ifeq ($(SYSTEM),FreeBSD)
-DFLAGS += -D__FREEBSD__
-endif
-
-ifeq ($(SYSTEM),SunOS)
-DFLAGS += -D__SOLARIS__
-LFLAGS += -lresolv -lsocket -lnsl
-endif
-
 
 OBJS = includes.o p2pprotocol.o serverprotocol.o socket.o util.o
-COBJS =
-PROGS =
 
-all: $(OBJS) $(COBJS) $(PROGS)
+all: $(OBJS) $(COBJS) $(TARGET)
 
 
 clean:
-	rm -f $(OBJS) $(COBJS) $(PROGS)
+	rm -f $(OBJS) $(COBJS) $(TARGET)
 
 $(OBJS): %.o: %.cpp
 	$(C++) -o $@ $(CFLAGS) -c $<
@@ -40,7 +31,8 @@ $(COBJS): %.o: %.c
 	$(CC) -o $@ $(CFLAGS) -c $<
 
 
-all: $(PROGS)
+$(TARGET): $(OBJS)
+	$(C++) -o $(TARGET) $(OBJS) $(LFLAGS) $(LDFLAGS)
 
 includes.o: includes.h
 p2pprotocol.o: includes.h util.h p2pprotocol.h

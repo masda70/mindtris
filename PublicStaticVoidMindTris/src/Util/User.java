@@ -1,79 +1,69 @@
 package Util;
 
+import Encodings.*;
+
+import java.io.DataInput;
+import java.io.IOException;
 import java.io.Serializable;
-import java.io.UnsupportedEncodingException;
+
+import javax.crypto.Cipher;
+
+import IO.*;
 
 
-public class User implements Serializable {
+public class User implements Serializable, Encodable {
+	////// STATIC //////
 	private static final long serialVersionUID = 1L;
-	public byte[] _displayName,
-				  _email,
-				  _pwd;
-	public String _name;
 	
-	public User ( String name, byte[] displayName, byte[] email, byte[] pwd ) {
+	////// FIELDS //////
+	public UString _name,
+				   _displayName;
+	public AString _email;
+	public AString _pwd;
+	private transient Crypted _crypyedPwd;
+	
+	////// CONSTRUCTORS //////
+	public User ( UString name, UString displayName, AString email, AString pwd, Cipher crypter ) throws IOException {
 		_name = name;
 		_displayName = displayName;
 		_email = email;
 		_pwd = pwd;
+		
+		if( pwd != null ) _crypyedPwd = new Crypted(pwd, crypter);
 	}
 	
-	public User ( byte[] encoded ) throws UnsupportedEncodingException {
-		int offset=0;
+	public User ( InData in, Cipher decrypter ) throws IOException {
+		int nameLen = in.readUnsignedByte();
+		_name = new UString(in, nameLen);
+		
+		int displayNameLen = in.readUnsignedByte();
+		_displayName = new UString(in, displayNameLen);
+		
+		int emailLen = in.readUnsignedShort();
+		_email = new AString(in, emailLen);
+		
+		int pwdLen = in.readUnsignedShort();
+		_crypyedPwd = new Crypted(in, pwdLen);
+		_pwd = _crypyedPwd.decrypt(decrypter);
+	}
+	
+	////// ENCODINGS //////
+	public void toBytes ( OutData out ) throws IOException {
+		out.writeByte(_name.len());
+		out.write(_name);
+		out.writeByte(_displayName.len());
+		out.write(_displayName);
+		out.writeShort(_email.len());
+		out.write(_email);
+		out.writeShort(_crypyedPwd.len());
+		out.write(_crypyedPwd);
+	}
 
-		byte nameLen = encoded[offset++];
-		byte [] name = new byte[nameLen];
-		System.arraycopy(encoded, offset, name, 0, nameLen);
-		offset += nameLen;
-		_name = new String(name, Channel.ENCODING);
-		
-		byte displayNameLen = encoded[offset++];
-		_displayName = new byte[displayNameLen];
-		System.arraycopy(encoded, offset, _displayName, 0, displayNameLen);
-		offset += displayNameLen;
-		
-		int emailLen = Channel.bytes2short(encoded, offset);
-		_email = new byte[emailLen];
-		offset += 2;
-		System.arraycopy(encoded, offset, _email, 0, emailLen);
-		offset += emailLen;
-		
-		byte pwdLen = encoded[offset++];
-		_pwd = new byte[pwdLen];
-		System.arraycopy(encoded, offset, _pwd, 0, pwdLen);
+	public int len () {
+		return 1 + _name.len() + 1 + _displayName.len() + 2 + _email.len() + 2 + _crypyedPwd.len();
 	}
 	
-	public byte[] toBytes () throws UnsupportedEncodingException {
-		byte [] name = _name.getBytes(Channel.ENCODING);
-		byte nameLen = (byte) name.length,
-			 displayNameLen = (byte) _displayName.length,
-			 pwdLen = (byte) _pwd.length;
-		short emailLen = (short) _email.length;
-		byte [] emailLenBuf = Channel.short2bytes(emailLen);
-		
-		byte [] encoding = new byte [1+nameLen+1+displayNameLen+2+emailLen+1+pwdLen];
-		
-		int offset = 0;
-		
-		encoding[offset++] = nameLen;
-		System.arraycopy(name, 0, encoding, offset, nameLen);
-		offset += nameLen;
-		
-		encoding[offset++] = displayNameLen;
-		System.arraycopy(_displayName, 0, encoding, offset, displayNameLen);
-		offset += displayNameLen;
-		
-		System.arraycopy(emailLenBuf, 0, encoding, offset, 2);
-		offset += 2;
-		System.arraycopy(_email, 0, encoding, offset, emailLen);
-		offset += emailLen;
-		
-		encoding[offset++] = pwdLen; 
-		System.arraycopy(_pwd, 0, encoding, offset, pwdLen);
-		
-		return encoding;
-	}
-	
+	////// PUBLIC METHODS //////
 	// TODO check validity
 	public boolean isNameValid () {
 		return _name != null;

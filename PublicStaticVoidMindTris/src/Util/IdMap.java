@@ -4,16 +4,31 @@ import java.util.*;
 import java.util.Map.Entry;
 
 public class IdMap <O> implements Iterable<Map.Entry<Integer, O>> {
-	private HashMap<Integer, O> _m = new HashMap<Integer, O>();
+	////// FIELDS //////
+	private HashMap<Integer, O> _m;
+	private int _size;
 	
+	////// CONSTRUCTORS //////
+	public IdMap () {
+		_m = new HashMap<Integer, O>();
+		_size = 0;
+	}
+	
+	////// PUBLIC METHODS //////
 	public int add ( O o ) {
 		int id = getNextId();
 		_m.put(id, o);
+		_size++;
 		return id;
 	}
 
-	public void add(int id, O o) {
-		_m.put(id, o);
+	public void add ( int id, O o ) {
+		if( ! _m.containsKey(id) ) {
+			_m.put(id, o);
+			_size++;
+		} else {
+			throw new IllegalArgumentException("key already binded");
+		}
 	}
 	
 	public O get ( int id ) {
@@ -22,14 +37,15 @@ public class IdMap <O> implements Iterable<Map.Entry<Integer, O>> {
 	
 	public void rm ( int id ) {
 		_m.remove(id);
+		_size--;
 	}
 	
 	public int getNextId () {
-		return _m.size() + 1;
+		return _size + 1;
 	}
 	
 	public int size () {
-		return _m.size();
+		return _size;
 	}
 	
 	public Iterator<Entry<Integer, O>> iterator() {

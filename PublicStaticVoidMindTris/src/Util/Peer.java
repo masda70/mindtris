@@ -1,67 +1,53 @@
 package Util;
 
-import java.io.UnsupportedEncodingException;
+import java.io.IOException;
 
-public class Peer {
-	public int _port;
-	public byte _id;
-	public byte[] _displayName,
-				  _ip,
-				  _key;
+import Encodings.*;
+import IO.*;
+
+public class Peer implements Encodable {
+	////// FIELDS //////
+	public int _port,
+			   _id;
+	public UString _displayName;
+	public Ip _ip;
+	public RSAKey _key;
+	
 	private Channel _ch;
 	
-	public Peer ( byte id, byte[] displayName, byte[] ip, int port, byte[] key ) {
-		_id = id;
+	////// CONSTRUCTORS //////
+	public Peer ( int peerId, UString displayName, Ip ip, int port, RSAKey key ) {
+		_id = peerId;
 		_displayName = displayName;
 		_ip = ip;
 		_port = port;
 		_key = key;
 	}
 	
-	public Peer ( Data d ) {
-		_id = d.rdB();
-		byte nameLen = d.rdB();
-		_displayName = new byte[nameLen];
-		d.rd(_displayName, nameLen);
-		_ip = new byte[4];
-		d.rd(_ip, 4);
-		_port = d.rdS();
-		int keyLen = d.rdS();
-		_key = new byte[keyLen];
-		d.rd(_key, keyLen);
+	public Peer ( InData in ) throws IOException {
+		_id = in.readUnsignedByte();
+		int nameLen = in.readUnsignedByte();
+		_displayName = new UString(in, nameLen);
+		_ip = new Ip(in);
+		_port = in.readUnsignedShort();
+		_key = new RSAKey(in);
 	}
 
-	public byte[] toBytes () {
-
-		byte nameLen = (byte) _displayName.length;
-		short keyLen = (short) _key.length;
-		byte[] data = new byte[1+1+nameLen+4+2+2+keyLen];
-		
-		int offset = 0;
-		data[offset++] = _id;
-		data[offset++] = nameLen;
-		System.arraycopy(_displayName, 0, data, offset, nameLen);
-		offset += nameLen;
-		System.arraycopy(_ip, 0, data, offset, 4);
-		offset += 4;
-		System.arraycopy(Channel.short2bytes((short)_port), 0, data, offset, 2);
-		offset += 2;
-		System.arraycopy(Channel.short2bytes(keyLen), 0, data, offset, 2);
-		offset += 2;
-		System.arraycopy(_key, 0, data, offset, keyLen);
-		
-		return data;
+	////// ENCODING //////
+	public void toBytes ( OutData out ) throws IOException {
+		out.writeByte(_id);
+		out.writeByte(_displayName.len());
+		out.write(_displayName);
+		out.write(_ip);
+		out.writeShort(_port);
+		out.write(_key);
 	}
 	
-	public String getName () {
-		try {
-			return new String(_displayName, Channel.ENCODING);
-		} catch (UnsupportedEncodingException e) {
-			e.printStackTrace();
-			return "ERROR";
-		}
+	public int len () {
+		return 1+1+_displayName.len()+4+2+_key.len();
 	}
 	
+	////// PUBLIC METHODS //////
 	public void setCh ( Channel ch ) {
 		_ch = ch;
 	}

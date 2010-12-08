@@ -1,17 +1,19 @@
 package Util;
 
+import IO.*;
+
 import java.io.IOException;
 import java.util.Hashtable;
 
 
 public class MsgHandler<C extends Channel> extends Thread {
 	private C _ch;
-	private Hashtable<Byte, Handler<C>> _handlers;
+	private Hashtable<Integer, Handler<C>> _handlers;
 	private boolean _stop; 
 	
 	public MsgHandler ( C ch ) {
 		_ch = ch;
-		_handlers = new Hashtable<Byte, Handler<C>> (20);
+		_handlers = new Hashtable<Integer, Handler<C>> (20);
 		_stop = false;
 	}
 
@@ -19,11 +21,11 @@ public class MsgHandler<C extends Channel> extends Thread {
 		while( ! _stop ) {
 			try {
 				Msg m = _ch.read();
-				byte type = m.getType();
-				Data d = new Data(m.getData());
+				int type = m._type;
+				InData in = m._in;
 				
 				Handler<C> hdl = _handlers.get(type);
-				if( hdl != null ) hdl.handle(d, _ch);
+				if( hdl != null ) hdl.handle(in, _ch);
 				else System.out.println("No handler for type "+type);				
 			} catch (IOException e) {
 				e.printStackTrace();
@@ -31,7 +33,7 @@ public class MsgHandler<C extends Channel> extends Thread {
 		}
 	}
 	
-	public void addHdl ( byte type, Handler<C> h ) {
+	public void addHdl ( int type, Handler<C> h ) {
 		_handlers.put(type, h);
 	}
 	

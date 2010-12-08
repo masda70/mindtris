@@ -16,9 +16,8 @@ import java.util.Map.Entry;
 import javax.swing.*;
 
 import Server.Server;
-import Util.Channel;
-import Util.Lobby;
-import Util.Peer;
+import Util.*;
+import Encodings.*;
 
 public class MainWindow extends JFrame {
 	private static final long serialVersionUID = 1L;
@@ -56,7 +55,7 @@ public class MainWindow extends JFrame {
 		Container p = this.getContentPane();
 		
 		final TxtField srvIp = new TxtField("localhost"),
-					   port = new TxtField((new Short(_c._port)).toString());
+					   port = new TxtField((new Integer(_c._port)).toString());
 
 		ActionListener connectListener = new ActionListener() {
 			public void actionPerformed(ActionEvent ev) {
@@ -130,9 +129,7 @@ public class MainWindow extends JFrame {
 		ActionListener loginListener = new ActionListener () {
 			public void actionPerformed(ActionEvent ev) {
 				try {
-					byte [] usrBuf = usr.getText().getBytes(Channel.ENCODING);
-					byte [] pwdBuf = ( new String(pwd.getPassword()) ).getBytes(Channel.ENCODING);
-					_c.login(usrBuf, pwdBuf);
+					_c.login(usr.getUTxt(), pwd.getPwd());
 				} catch (IOException e) {
 					printError("IO Exception : "+e.getMessage());
 				}
@@ -179,7 +176,7 @@ public class MainWindow extends JFrame {
 		ActionListener listener = new ActionListener() {
 			public void actionPerformed(ActionEvent arg0) {
 				try {
-					_c.createUser(usr.getText(), displayName.getText(), email.getText(), pwd.getPassword());
+					_c.createUser(usr.getUTxt(), displayName.getUTxt(), email.getATxt(), pwd.getPwd());
 				} catch (Exception e) {
 					e.printStackTrace();
 				}
@@ -228,7 +225,7 @@ public class MainWindow extends JFrame {
 		ActionListener listener = new ActionListener() {
 			public void actionPerformed(ActionEvent arg0) {
 				try {
-					_c.createLobby(name.getText(), pwd.getPassword(), maxPlayers.getNb());
+					_c.createLobby(name.getUTxt(), pwd.getPwd(), maxPlayers.getNb());
 				} catch (Exception e) {
 					e.printStackTrace();
 				}
@@ -313,9 +310,9 @@ public class MainWindow extends JFrame {
 			c.anchor = GridBagConstraints.WEST;
 			c.insets = new Insets(0,15,5,15);
 			for( final Lobby l : list ) {
-				Lbl name = new Lbl(new String(l._name));
-				Lbl creator = new Lbl(new String(l._creator));
-				Lbl players = new Lbl( Integer.toString((int)l._nbPlayers)
+				Lbl name = new Lbl(l._name);
+				Lbl creator = new Lbl(l._creator);
+				Lbl players = new Lbl( Integer.toString(l._nbPlayers)
 									+ "/" + Integer.toString((int)l._maxPlayers));
 				Lbl pwd = new Lbl(l.pwdRequired() ? "yes" : "");
 					
@@ -325,10 +322,8 @@ public class MainWindow extends JFrame {
 							ActionListener join = new ActionListener() {
 								public void actionPerformed(ActionEvent arg0) {
 									try {
-										byte[] pwd = (new String( pwdField.getPassword())).getBytes(Channel.ENCODING);
-										_c.joinLobby(l._id, l.getName(), l.getCreator(), pwd);
+										_c.joinLobby(l._id, pwdField.getPwd());
 									} catch ( IOException e ) {
-										// TODO Auto-generated catch block
 										e.printStackTrace();
 									}
 								}
@@ -343,9 +338,8 @@ public class MainWindow extends JFrame {
 							_top.repaint();
 						} else {
 							try {
-								_c.joinLobby(l._id, l.getName(), l.getCreator(), new byte[]{0x00});
+								_c.joinLobby(l._id, null);
 							} catch (IOException e) {
-								// TODO Auto-generated catch block
 								e.printStackTrace();
 							}
 						}
@@ -379,7 +373,7 @@ public class MainWindow extends JFrame {
 	}
 
 	public void printLobby ( Lobby l, final String displayName ) {
-		Lbl name = new Lbl(l.getName() + " (created by "+l.getCreator()+")");
+		Lbl name = new Lbl(l._name.v() + " (created by "+l._creator.v()+")");
 		
 		JPanel connected = new JPanel();
 		connected.setBackground(bg);
@@ -390,7 +384,7 @@ public class MainWindow extends JFrame {
 		
 		for( Entry<Integer, Peer> o : l._peers ) {
 			Peer p = o.getValue();
-			connected.add(new Lbl(p.getName()+", "));
+			connected.add(new Lbl(p._displayName.v() + ", "));
 		}
 		
 		_text = new TxtArea();
@@ -428,12 +422,12 @@ public class MainWindow extends JFrame {
 	}
 	
 	public void printChatMsg ( Peer p, String msg ) {
-		String txt = new String( p.getName() + ": " + msg + "\n");
+		String txt = new String( p._displayName.v() + ": " + msg + "\n");
 		((TxtArea) _text).append(txt);
 	}
 
 	public void printNewPeer ( Peer p ) {
-		((TxtArea) _text).append(p.getName() + " has join the lobby\n");
+		((TxtArea) _text).append(p._displayName.v() + " has join the lobby\n");
 	}
 	
 	public void printError (String txt) {

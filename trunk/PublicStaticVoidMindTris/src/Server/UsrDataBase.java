@@ -2,11 +2,13 @@ package Server;
 
 import java.io.*;
 import java.util.HashMap;
+import java.util.Map;
 
-import Util.User;
+import Encodings.*;
+import Util.*;
 
 public class UsrDataBase {
-	private HashMap<String, User> _db;
+	private HashMap<UString, User> _db;
     
 	public UsrDataBase () {
 		try {
@@ -14,17 +16,17 @@ public class UsrDataBase {
 					new BufferedInputStream(
 					new FileInputStream(
 					new File("user_db"))));
-			_db = (HashMap<String, User>) ois.readObject();
+			_db = (HashMap<UString, User>) ois.readObject();
 			ois.close();
 		} catch (IOException e) {
-			_db = new HashMap<String, User>(5);
+			_db = new HashMap<UString, User>(5);
 			store();
 		} catch (ClassNotFoundException e) {
 			e.printStackTrace();
 		}
 	}
 	
-	public User getInfos ( String usr ) throws UserDoesntExists {
+	public User getInfos ( UString usr ) throws UserDoesntExists {
 		User i = _db.get(usr);
 		if( i == null ) throw new UserDoesntExists(usr);
 		return i;

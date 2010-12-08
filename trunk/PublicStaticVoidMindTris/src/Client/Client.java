@@ -1,12 +1,15 @@
 package Client;
 
 import Gui.MainWindow;
+import Encodings.*;
+import IO.*;
 import Util.*;
 
 import java.io.*;
 import java.net.InetAddress;
 import java.net.ServerSocket;
 import java.net.Socket;
+import java.net.UnknownHostException;
 import java.security.*;
 import java.security.spec.KeySpec;
 import java.security.spec.X509EncodedKeySpec;
@@ -19,38 +22,34 @@ import javax.crypto.NoSuchPaddingException;
 
 public class Client {
 	private static final boolean DEBUG = true;
-	private static final short KEY_LEN = 1024;
-	public short				_port = 1337+42+1;
+	public int					_port = 1337+42+1;
 	private MainWindow			_w;
-	private CltSrvCh			_srvCh;
-	private short				_srvPort;
+	private ChCltSrv			_srvCh;
+	private int					_srvPort;
 	private Cipher				_srvCrypter;
 	private Cipher				_decrypter;
-	private PublicKey			_publicKey;
+	private RSAKey				_publicKey;
 	private Lobby				_lobby;
-	/* some fields to save data during msg exchange */
-	private byte				_myId;
-	private String				_displayName;
 	private int					_lobbyId;
 	private long				_sessionId;
-	private String				_name;
-	private byte[]				_pwd;
-	private String				_creator;
+	private UString				_name,	
+								_displayName;
+	private AString				_pwd;
 	private IdMap<Peer>			_newPeers;
-	private IdMap<P2PCh>		_handshakesCh;
+	private IdMap<ChP2P>		_handshakesCh;
 	
 	public Client ( short srvPort ) {
 		_w = new MainWindow(this);
 		_srvPort = srvPort;
 		_newPeers = new IdMap<Peer>();
-		_handshakesCh = new IdMap<P2PCh>();
+		_handshakesCh = new IdMap<ChP2P>();
 		
 		try {
 			KeyPairGenerator gen = KeyPairGenerator.getInstance("RSA");
-			gen.initialize(KEY_LEN);
+			gen.initialize(Crypted.KEY_LEN);
 			KeyPair keyPair = gen.generateKeyPair();
-			_publicKey = keyPair.getPublic();
-			_decrypter = Cipher.getInstance(Channel.CRYPT_SCHEME);
+			_publicKey = new RSAKey(keyPair.getPublic());
+			_decrypter = Cipher.getInstance(Crypted.CRYPT_SCHEME);
 			_decrypter.init(Cipher.DECRYPT_MODE, keyPair.getPrivate());
 		} catch (NoSuchAlgorithmException e) {
 			e.printStackTrace();
@@ -62,112 +61,88 @@ public class Client {
 	}
 
 	public void connectToSrv ( String serverIp ) throws IOException {
-		_srvCh = new CltSrvCh(serverIp, _srvPort);
+		_srvCh = new ChCltSrv(serverIp, _srvPort);
 		
 		SrvHandler srvHdl = new SrvHandler(_srvCh);
 		srvHdl.start();
 		
 		debug("say hello and prtclVersion to the server");
-		_srvCh.send(Msg.C_HELLO, Channel.protocolVersion);
+		_srvCh.send(MsgCltSrv.C_HELLO, Msg.protocolVersion);
 	}
 
-	public void createUser ( String name, String displayName, String email, char[] pwd) throws IOException, IllegalBlockSizeException {
-		User usr = new User(name,
-							displayName.getBytes(Channel.ENCODING),
-							email.getBytes(Channel.ENCODING),
-							( new String(pwd) ).getBytes(Channel.ENCODING));
-		
+	public void createUser ( UString name, UString displayName, AString email, AString pwd )
+	throws IOException, IllegalBlockSizeException {
 		_name = name;
-		_pwd = usr._pwd;
-		_srvCh.send(Msg.CREATE_USER, crypt(usr.toBytes(), _srvCrypter));
+		_pwd = pwd;
+		
+		User usr = new User(_name, displayName, email, _pwd, _srvCrypter);
+		
+		_srvCh.createMsg(MsgCltSrv.CREATE_USER, usr.len());
+		_srvCh.msg().write(usr);
+		_srvCh.sendMsg();
 	}
 	
-	public void login ( byte[] _usr, byte[] _pwd ) throws IOException {
-		byte usrLen = (byte) _usr.length,
-			 pwdLen = (byte) _pwd.length;
-		byte[] loginInfo = new byte[1+usrLen+1+pwdLen];
+	public void login ( UString name, AString pwd ) throws IOException {
+		Crypted cryptedPwd = new Crypted(pwd, _srvCrypter);
 		
-		loginInfo[0] = usrLen;
-		System.arraycopy(_usr, 0, loginInfo, 1, usrLen);
-		loginInfo[1+usrLen] = pwdLen;
-		System.arraycopy(_pwd, 0, loginInfo, 1+usrLen+1, pwdLen);
-		
-		try {
-			_srvCh.send(Msg.LOGIN, crypt(loginInfo, _srvCrypter));
-		} catch (IllegalBlockSizeException e) {
-			// TODO Auto-generated catch block
-			e.printStackTrace();
-		}
+		_srvCh.createMsg(MsgCltSrv.LOGIN, 1 + name.len() + 2 + cryptedPwd.len());
+		_srvCh.msg().writeByte(name.len());
+		_srvCh.msg().write(name);
+		_srvCh.msg().writeShort(cryptedPwd.len());
+		_srvCh.msg().write(cryptedPwd);
+		_srvCh.sendMsg();
 	}
 
-	public void createLobby ( String name, char[] pwd, int maxPlayers ) throws IOException, IllegalBlockSizeException {
-		_name = name;
-		_creator = _displayName;
+	public void createLobby ( UString name, AString pwd, int maxPlayers )
+	throws IOException, IllegalBlockSizeException {
+		_pwd = pwd;
 		
-		byte[] nameBuf = name.getBytes(Channel.ENCODING);
-		byte nameLen = (byte) nameBuf.length;
-		boolean pwdRequired;
-		byte[] pwdCrypt;
+		int len = 1+name.len()+1+1+2;
+		boolean hasPwd = pwd != null;
+		Crypted cryptedPwd = null;
 		
-		if( pwd.length > 0 ) {
-			pwdRequired = true;
-			byte[] pwdBuf = ( new String(pwd) ).getBytes(Channel.ENCODING);
-			byte pwdLen = (byte) pwdBuf.length;
-			byte [] encoded = new byte[1+pwdLen];
-			encoded[0] = pwdLen;
-			System.arraycopy(pwdBuf, 0, encoded, 1, pwdLen);
-			
-			_pwd = pwdBuf;
-			pwdCrypt = crypt(encoded, _srvCrypter);
+		if( hasPwd ) {
+			cryptedPwd = new Crypted(pwd, _srvCrypter);
+			len += cryptedPwd.len();
 		} else {
-			pwdRequired = false;
-			_pwd = pwdCrypt = new byte[]{0x00};
+			len ++;
 		}
-
-		int pwdLen = pwdCrypt.length;
 		
-		int offset = 0;
-		byte[] data = new byte[1+nameLen+1+1+pwdLen];
-		data[offset++] = nameLen;
-		System.arraycopy(nameBuf, 0, data, offset, nameLen);
-		offset += nameLen;
-		data[offset++] = (byte) maxPlayers;
-		data[offset++] = Channel.bool2byte(pwdRequired);
-		System.arraycopy(pwdCrypt, 0, data, offset, pwdLen);
-		
-		_srvCh.send(Msg.CREATE_LOBBY, data);
+		_srvCh.createMsg(MsgCltSrv.CREATE_LOBBY, len);
+		_srvCh.msg().writeByte(name.len());
+		_srvCh.msg().write(name);
+		_srvCh.msg().writeByte(maxPlayers);
+		_srvCh.msg().writeBoolean( hasPwd );
+		if( hasPwd ) {
+			_srvCh.msg().writeShort(cryptedPwd.len());
+			_srvCh.msg().write(cryptedPwd);
+		} else {
+			_srvCh.msg().writeShort(0);
+			_srvCh.msg().writeByte(0);
+		}
+		_srvCh.sendMsg();
 	}
 
-	public void joinLobby ( int id, String name, String creator, byte [] pwd ) throws IOException {
-		_lobbyId = id;
-		_name = name;
-		_creator = creator;
+	public void getLobbyList () throws IOException {
+		_srvCh.send(MsgCltSrv.GET_LOBBY_LIST);
+	}
+	
+	public void joinLobby ( int id, AString pwd ) throws IOException {
+		int len = 4+1+2+_publicKey.len();
 		
-		byte pwdLen = (byte) pwd.length;
-		byte[] pwdCrypt;
+		if( pwd != null ) len += pwd.len();
 		
-		if( pwdLen == 1 && pwd[0] == 0x00 ) {
-			pwdCrypt = pwd;
+		_srvCh.createMsg(MsgCltSrv.JOIN_LOBBY, len);
+		_srvCh.msg().writeInt(id);
+		if( pwd != null ) {
+			_srvCh.msg().writeByte(pwd.len());
+			_srvCh.msg().write(pwd);
 		} else {
-			try {
-				pwdCrypt = crypt(pwd, _srvCrypter);
-			} catch (IllegalBlockSizeException e) {
-				// TODO Auto-generated catch block
-				e.printStackTrace();
-				return;
-			}
+			_srvCh.msg().writeByte(0x00);
 		}
-		
-		byte[] encodedKey = _publicKey.getEncoded();
-		short keyLen = (short) encodedKey.length;
-		
-		_srvCh.send(Msg.JOIN_LOBBY,
-				Channel.int2bytes(id),
-				Channel.short2bytes(_port),
-				Channel.short2bytes(keyLen),
-				encodedKey,
-				pwdCrypt
-		);
+		_srvCh.msg().writeShort(_port);
+		_srvCh.msg().write(_publicKey);
+		_srvCh.sendMsg();
 	}
 
 	public void sendChatMsg ( String msg ) {
@@ -186,96 +161,70 @@ public class Client {
 		}
 	}
 
-	private byte[] crypt ( byte[] data, Cipher crypter ) throws IllegalBlockSizeException {
-		try {
-			return crypter.doFinal(data);
-		} catch (BadPaddingException e) {
-			e.printStackTrace();
-		}
-		
-		return null;
-	}
-
-	public void getLobbyList () throws IOException {
-		_srvCh.send(Msg.GET_LOBBY_LIST);
-	}
-	
-	protected void addNewPeer ( P2PCh peerCh, Peer p ) {
-		debug("add peer " + p.getName());
+	protected void addNewPeer ( ChP2P peerCh, Peer p ) {
+		debug("add peer " + p._displayName.v());
 		
 		p.setCh(peerCh);
 		peerCh.setPeer(p);
 		
-		_lobby._peers.add(p);
+		_lobby.add(p._id, p);
 		_w.printNewPeer(p);
 		
 		_newPeers.rm(p._id);
 		_handshakesCh.rm(p._id);
 	}
 	
-	@SuppressWarnings("unused")
-	private void debug ( byte[]... raw ) {
-		if( DEBUG )
-			for( byte[] b : raw )
-				System.out.println(Channel.bytes2string(b));
-	}
 	private void debug ( String m ) {
 		if( DEBUG ) System.out.println(m);
 	}
 	
 	////////// SRV HANDLERS ///////////
-	private class SrvHandler extends MsgHandler<CltSrvCh> {
-		public SrvHandler(CltSrvCh ch) {
+	private class SrvHandler extends MsgHandler<ChCltSrv> {
+		public SrvHandler(ChCltSrv ch) {
 			super(ch);
 			
-			addHdl(Msg.S_HELLO, new SrvHelloHdl());
-			addHdl(Msg.USR_CREATION, new UsrCreateHdl());
-			addHdl(Msg.LOGIN_REPLY, new LoginHdl());
-			addHdl(Msg.LOBBY_CREATED, new LobbyCreatedHdl());
-			addHdl(Msg.LOBBY_LIST, new LobbyListHdl());
-			addHdl(Msg.JOINED_LOBBY, new LobbyJoinedHdl());
-			addHdl(Msg.UPDATE_CLIENT, new UpdateClientHdl());
+			addHdl(MsgCltSrv.S_HELLO, new SrvHelloHdl());
+			addHdl(MsgCltSrv.USR_CREATION, new UsrCreateHdl());
+			addHdl(MsgCltSrv.LOGIN_REPLY, new LoginHdl());
+			addHdl(MsgCltSrv.LOBBY_CREATED, new LobbyCreatedHdl());
+			addHdl(MsgCltSrv.LOBBY_LIST, new LobbyListHdl());
+			addHdl(MsgCltSrv.JOINED_LOBBY, new LobbyJoinedHdl());
+			addHdl(MsgCltSrv.UPDATE_CLIENT, new UpdateClientHdl());
 		}
 	}
 	
-	private class SrvHelloHdl implements Handler<CltSrvCh> {
-		public void handle(Data d, CltSrvCh ch) throws IOException {
-			switch( d.rdB() ) {
+	private class SrvHelloHdl implements Handler<ChCltSrv> {
+		public void handle(InData in, ChCltSrv ch) throws IOException {
+			switch( in.readUnsignedByte() ) {
 			case 0x00:
 				debug("receive protocol succes.");
-				int keyLen = d.rdS();
 				
 				try {
-					KeyFactory fact = KeyFactory.getInstance("RSA");
-					
-					byte[] encodedKey = new byte[keyLen];
-					d.rd(encodedKey, keyLen);
-					
-					KeySpec keySpec = new X509EncodedKeySpec(encodedKey);
-					PublicKey serverKey = fact.generatePublic(keySpec);
-					
-					_srvCrypter = Cipher.getInstance(Channel.CRYPT_SCHEME);
-					_srvCrypter.init(Cipher.ENCRYPT_MODE, serverKey);
+					RSAKey encodedKey = new RSAKey(in);
+					_srvCrypter = Cipher.getInstance(Crypted.CRYPT_SCHEME);
+					_srvCrypter.init(Cipher.ENCRYPT_MODE, encodedKey.getKey());
 					
 					debug("receive server public key");
 				} catch (Exception e) {
 					e.printStackTrace();
 				}
 				
-				_w.printCenter(d.rdStr());
+				int motdLen = in.readUnsignedShort();
+				UString motd = new UString(in, motdLen);
+				_w.printCenter(motd.v());
 				break;
-			case 0x01:	_w.printError("Wrong protocol");					break;
-			default:	_w.printError(d.rdStr());
+			case 0x01:	_w.printError("Wrong protocol");	break;
+			default:	_w.printError("Unkown error");
 			}
 		}
 	}
 	
-	private class UsrCreateHdl implements Handler<CltSrvCh> {
-		public void handle(Data d, CltSrvCh ch) throws IOException {
-			switch( d.rdB() ) {
+	private class UsrCreateHdl implements Handler<ChCltSrv> {
+		public void handle(InData in, ChCltSrv ch) throws IOException {
+			switch( in.readUnsignedByte() ) {
 			case 0x00:
 				_w.print("User created !");
-				login(_name.getBytes(Channel.ENCODING), _pwd);
+				login(_name, _pwd);
 				break;
 			case 0x01:	_w.printError("This user already exists");	break;
 			case 0x02:	_w.printError("Invalid username");			break;
@@ -286,16 +235,16 @@ public class Client {
 		}
 	}
 	
-	private class LoginHdl implements Handler<CltSrvCh> {
-		public void handle(Data d, CltSrvCh ch) throws IOException {
-			switch( d.rdB() ) {
+	private class LoginHdl implements Handler<ChCltSrv> {
+		public void handle(InData in, ChCltSrv ch) throws IOException {
+			switch( in.readUnsignedByte() ) {
 			case 0x00:
-				byte nameLen = d.rdB();
-				_displayName = d.rdStr(nameLen);
+				int nameLen = in.readUnsignedByte();
+				_displayName = new UString(in, nameLen);
 
-				_w.print("connected as " + _displayName);
+				_w.print("connected as " + _displayName.v());
 				
-				_srvCh.send(Msg.GET_LOBBY_LIST);
+				_srvCh.send(MsgCltSrv.GET_LOBBY_LIST);
 				break;
 			case 0x01:	_w.printError("Username doesn't exist");						break;
 			case 0x02:	_w.printError("Wrong password");								break;
@@ -307,14 +256,13 @@ public class Client {
 		
 	}
 	
-	private class LobbyCreatedHdl implements Handler<CltSrvCh> {
-		public void handle(Data d, CltSrvCh ch) throws IOException {
-			switch( d.rdB() ) {
+	private class LobbyCreatedHdl implements Handler<ChCltSrv> {
+		public void handle(InData in, ChCltSrv ch) throws IOException {
+			switch( in.readUnsignedByte() ) {
 			case 0x00:
-				_lobbyId = d.rdI();
-				_sessionId = d.rdL();
-				_w.print("Lobby "+_lobbyId+" created");
-				joinLobby(_lobbyId, _name, _creator, _pwd);
+				_lobbyId = in.readInt();
+				_sessionId = in.readLong();
+				joinLobby(_lobbyId, _pwd);
 				break;
 			case 0x01:	_w.printError("invalid password");	break;
 			case 0x02:	_w.printError("not enough rights");	break;
@@ -324,33 +272,40 @@ public class Client {
 		}
 	}
 	
-	private class LobbyListHdl implements Handler<CltSrvCh> {
-		public void handle(Data d, CltSrvCh ch) throws IOException {
-			_w.paintLobbyList(Lobby.bytesToList(d));
+	private class LobbyListHdl implements Handler<ChCltSrv> {
+		public void handle(InData in, ChCltSrv ch) throws IOException {
+			_w.paintLobbyList(Lobby.bytesToList(in));
 		}
 	}
 	
-	private class LobbyJoinedHdl implements Handler<CltSrvCh> {
-		public void handle(Data d, CltSrvCh ch) throws IOException {
-			switch( d.rdB() ) {
+	private class LobbyJoinedHdl implements Handler<ChCltSrv> {
+		public void handle(InData in, ChCltSrv ch) throws IOException {
+			int lobbyId = in.readInt();
+			
+			switch( in.readUnsignedByte() ) {
 			case 0x00:
-				_myId = d.rdB();
-				Lobby l = new Lobby(_name.getBytes(Channel.ENCODING), _creator.getBytes(Channel.ENCODING), d);
-				l._id = _lobbyId;
-				_lobby = l;
+				_lobby = new Lobby(lobbyId, in);
 
-				for( Entry<Integer, Peer> o : l._peers ) {
+				for( Entry<Integer, Peer> o : _lobby._peers ) {
 					Peer p = o.getValue();
-					String ip = InetAddress.getByAddress(p._ip).getCanonicalHostName();
-					P2PCh peerCh = new P2PCh(ip, (short) p._port);
-					p.setCh(peerCh);
-					peerCh.setPeer(p);
+					String ip = p._ip.toString();
 					
-					PeerHandler peerHdl = new PeerHandler(peerCh);
-					peerHdl.start();
-					
-					debug("say hello to peer "+ip);
-					peerCh.send(P2PMsg.HELLO, _myId, Channel.int2bytes(l._id));
+					try {
+						ChP2P peerCh = new ChP2P(ip, (short) p._port);
+						
+						p.setCh(peerCh);
+						peerCh.setPeer(p);
+						
+						PeerHandler peerHdl = new PeerHandler(peerCh);
+						peerHdl.start();
+						
+						debug("say hello to peer "+ip);
+						peerCh.send(P2PMsg.HELLO, _myId, Channel.int2bytes(l._id));
+					} catch ( UnknownHostException e ) {
+						_w.printError("Unkown host "+ip+"/"+(short)p._port);
+					} catch ( IOException e ) {
+						_w.printError("IOException for "+ip+"/"+(short)p._port+" :\n"+e.getMessage());
+					}
 				}
 				
 				_w.printLobby(l, _displayName);
@@ -386,17 +341,17 @@ public class Client {
 		}
 	}
 	
-	private class UpdateClientHdl implements Handler<CltSrvCh> {
-		public void handle(Data d, CltSrvCh ch) throws IOException {
-			switch( d.rdB() ) {
+	private class UpdateClientHdl implements Handler<ChCltSrv> {
+		public void handle(InData in, ChCltSrv ch) throws IOException {
+			switch( in.readUnsignedByte() ) {
 			case 0x00:
-				Peer p = new Peer(d);
-				P2PCh peerCh = _handshakesCh.get(p._id);
+				Peer p = new Peer(in);
+				ChP2P peerCh = _handshakesCh.get(p._id);
 				if( peerCh != null ) {
 					addNewPeer(peerCh, p);
 				} else {
 					_newPeers.add(p._id, p);
-					debug(p.getName() + " has join, wait handshakes");
+					debug(p._displayName.v() + " has join, wait handshakes");
 				}
 				break;
 			default:

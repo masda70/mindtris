@@ -1,22 +1,29 @@
 package Util;
 
-import java.io.UnsupportedEncodingException;
+import java.io.IOException;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
 
+import Encodings.*;
+import IO.*;
 
-public class Lobby {
-	public int _id;
-	public byte _nbPlayers,
-				_maxPlayers;
-	public byte[] _name,
-				  _sessionId,
-				  _creator,
-				  _pwd;
+
+public class Lobby implements Encodable {
+	////// FIELDS //////
+	public int _id,
+			   _nbPlayers,
+			   _maxPlayers,
+			   _creatorPeerId,
+			   _myPeerId;
+	public UString _name,
+				  _creator;
+	public byte[] _sessionId;
+	public AString _pwd;
 	public IdMap<Peer> _peers;
 	
-	public Lobby ( int id, byte[] name, byte[] sessionId, byte nbPlayers, byte maxPlayers, byte[] pwd, byte[] creator) {
+	////// CONSTRUCTORS //////
+	public Lobby ( int id, UString name, byte[] sessionId, int nbPlayers, int maxPlayers, AString pwd, UString creator) {
 		_id = id;
 		_name = name;
 		_sessionId = sessionId;
@@ -27,112 +34,102 @@ public class Lobby {
 		_peers = new IdMap<Peer>();
 	}
 
-	public Lobby ( byte[] name, byte[] creator, Data d ) {
-		_name = name;
-		_creator = creator;
+	public Lobby ( int id, InData in ) throws IOException {
+		_id = id;
+		int nameLen = in.readUnsignedByte();
+		_name = new UString(in, nameLen);
+		_nbPlayers = in.readUnsignedByte();
+		_creatorPeerId = in.readUnsignedByte();
+		_myPeerId = in.readUnsignedByte();
 		_sessionId = new byte[8];
-		d.rd(_sessionId, 8);
-		byte nbPeers = d.rdB();
-		
+		in.readFully(_sessionId);
+		int nbPeers = in.readUnsignedByte();
 		_peers = new IdMap<Peer>();
+		
 		for( int i=0; i<nbPeers; i++ ) {
-			Peer p = new Peer(d);
-			_peers.add(p._id, p);
+			Peer p = new Peer(in);
+			add(p._id, p);
 		}
 	}
 	
-	public byte[][] toBytes ( byte peerId ) {
-		int i=0;
-		byte len = (byte) _peers.size();
-		byte[][] data = new byte[1+1+len][];
-				
-		data[i] = new byte[1+8];
-		data[i][0] = peerId;
-		System.arraycopy(_sessionId, 0, data[i], 1, 8);
-		i++;
-		data[i++] = new byte[]{len};
+	////// ENCODING //////
+	public void toBytes ( OutData out ) throws IOException {
+		out.writeByte(_name.len());
+		out.write(_name);
+		out.writeByte(_maxPlayers);
+		out.writeByte(_creatorPeerId);
+		out.writeByte(_myPeerId);
+		out.write(_sessionId);
+		out.writeByte(_peers.size());
 		
 		for( Map.Entry<Integer, Peer> o : _peers ) {
-			Peer p = o.getValue();
-			data[i] = p.toBytes();
-			i++;
+			out.write(o.getValue());
 		}
+	}
+	
+	public int len () {
+		int len = 1+_name.len()+1+1+1+8+1;
 		
-		return data;
+		for( Map.Entry<Integer, Peer> o : _peers ) len += o.getValue().len();
+		
+		return len;
 	}
 
-	public String getName() {
-		try {
-			return new String(_name, Channel.ENCODING);
-		} catch ( UnsupportedEncodingException e ) {
-			e.printStackTrace();
-			return null;
-		}
-	}
-
-	public String getCreator () {
-		try {
-			return new String(_creator, Channel.ENCODING);
-		} catch ( UnsupportedEncodingException e ) {
-			e.printStackTrace();
-			return null;
-		}
+	////// PUBLIC METHODS //////
+	public void add ( int id, Peer p ) {
+		System.out.println("add " + (p._displayName.v()) + " ("+id+")");
+		_peers.add(id, p);
+		_nbPlayers++;
 	}
 	
 	public boolean pwdRequired () {
 		return _pwd != null;
 	}
 	
-	public static byte[][] listToBytes ( IdMap<Lobby> list ) {
-		byte nb = (byte) list.size();
-		byte[][] data = new byte[1+nb][];
-		int i = 0;
-		
-		data[i++] = new byte[]{nb};
+	////// LIST ENCODING //////
+	public static void listToBytes ( IdMap<Lobby> list, OutData out ) throws IOException {
+		out.writeByte(list.size());
+
+		for( Map.Entry<Integer, Lobby> o : list ) {
+			Lobby l = o.getValue();
+			
+			out.writeInt(o.getKey());
+			out.writeByte(l._name.len());
+			out.write(l._name);
+			out.writeByte(l._nbPlayers);
+			out.writeByte(l._maxPlayers);
+			out.writeBoolean(l.pwdRequired());
+			out.writeByte(l._creator.len());
+			out.write(l._creator);
+		}
+	}
+
+	public static int listEncodingLen(IdMap<Lobby> list) {
+		int len = 1;
 		
 		for( Map.Entry<Integer, Lobby> o : list ) {
 			Lobby l = o.getValue();
-			byte nameLen = (byte) l._name.length;
-			byte creatorLen = (byte) l._creator.length;
-			data[i] = new byte[4+1+nameLen+1+1+1+1+creatorLen];
-			
-			int offset = 0;
-			System.arraycopy(Channel.int2bytes(l._id), 0, data[i], offset, 4);
-			offset += 4;
-			data[i][offset++] = nameLen;
-			System.arraycopy(l._name, 0, data[i], offset, nameLen);
-			offset += nameLen;
-			data[i][offset++] = l._nbPlayers;
-			data[i][offset++] = l._maxPlayers;
-			data[i][offset++] = Channel.bool2byte(l.pwdRequired());
-			data[i][offset++] = creatorLen;
-			System.arraycopy(l._creator, 0, data[i], offset, creatorLen);
-			
-			i++;
+			len += 4+1+l._name.len()+1+1+1+1+l._creator.len();
 		}
 		
-		return data;
+		return len;
 	}
-
-	public static List<Lobby> bytesToList ( Data d ) {
-		int offset = 0;
-		short nb = d.rdB();
+	
+	public static List<Lobby> bytesToList ( InData in ) throws IOException {
+		int size = in.readUnsignedByte();
 		List<Lobby> list = new LinkedList<Lobby>();
 		
-		for( short i=0; i<nb; i++ ) {
-			int id = d.rdI();
-			byte nameLen = d.rdB();
-			byte [] name = new byte[nameLen];
-			d.rd(name, nameLen);
-			byte nbPlayers = d.rdB();
-			byte maxPlayers = d.rdB();
-			boolean pwdRequired = d.rdBool();
-			byte creatorLen = d.rdB();
-			byte[] creator = new byte[creatorLen];
-			d.rd(creator, creatorLen);
+		for( short i=0; i<size; i++ ) {
+			int id = in.readInt();
+			int nameLen = in.readUnsignedByte();
+			UString name = new UString(in, nameLen);
+			int nbPlayers = in.readUnsignedByte();
+			int maxPlayers = in.readUnsignedByte();
+			boolean hasPwd = in.readBoolean();
+			int creatorLen = in.readUnsignedByte();
+			UString creator = new UString(in, creatorLen);
 			
-			// TODO /!\ ugly
-			byte[] pwd = pwdRequired ? new byte[]{0x01} : null;
+			AString pwd = hasPwd ? new AString("0") : null;
 			
 			list.add(new Lobby(id, name, null, nbPlayers, maxPlayers, pwd, creator));
 		}

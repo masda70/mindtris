@@ -1,14 +1,16 @@
 package IO;
 
 import java.io.*;
+import java.security.SignatureException;
 import java.util.Arrays;
 
 public abstract class Msg {
 	////// STATIC //////
-	public static final byte[] protocolVersion = {1,2,0,0};
+	public static final byte[] protocolVersion = {1,2,0,1};
 	
 	////// FIELDS //////
 	public int _type;
+	public int _length;
 	public InData _in;
 	public OutData _out;
 
@@ -16,13 +18,13 @@ public abstract class Msg {
 	public Msg ( int type, int len ) {
 		_out = new OutData(len);
 		_type = type;
-		wrHeader(type, len);
+		_length = len;
 	}
 
 	public Msg ( OutData out, int type, int len ) {
 		_out = out;
 		_type = type;
-		wrHeader(type, len);
+		_length = len;
 	}
 	
 	public Msg ( InData in ) throws IOException {
@@ -40,18 +42,23 @@ public abstract class Msg {
 
 		_in = new InData(new ByteArrayInputStream(data));
 	}
+	
+	protected Msg () {}
 
 	////// OVERRIDE //////
 	abstract protected byte[] getProtocolId();
 	
-	////// PROTECTED //////
-	protected void wrHeader ( int type, int len ) {
+	////// PUBLIC METHODS //////
+	public void wrHeader ( OutData out ) {
 		try {
-			_out.write(getProtocolId());
-			_out.writeShort(getProtocolId().length + 2 + 1 + len);
-			_out.writeByte(type);
+			out.write(getProtocolId());
+			out.writeShort(getProtocolId().length + 2 + 1 + _length);
+			out.writeByte(_type);
 		} catch ( IOException e ) {
 			e.printStackTrace();
 		}
+	}
+	
+	public void end() throws IOException {
 	}
 }

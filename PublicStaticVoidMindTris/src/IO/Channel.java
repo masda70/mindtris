@@ -49,6 +49,7 @@ public abstract class Channel {
 	public void createMsg ( int type, int l ) throws IOException {
 		if( DEBUG_OUT ) System.out.print("createMsg ");
 		_msg = newMsg(_out, type, l);
+		_msg.wrHeader(_out);
 	}
 	
 	public OutData msg () {
@@ -57,21 +58,21 @@ public abstract class Channel {
 	
 	public void sendMsg () throws IOException {
 		if( DEBUG_OUT ) System.out.println("end sendMsg\n");
-		//_out.flush();
+		_msg.end();
 		_msg = null;
 	}
 	
 	public void send ( Msg m ) throws IOException {
 		if( DEBUG_OUT ) System.out.print("send(M) ");
+		m.end();
+		m.wrHeader(_out);
 		_out.write(m._out.getData());
-		//_out.flush();
 		if( DEBUG_OUT ) System.out.println("end send(M)\n");
 	}
 	
 	public void send ( int type, byte... data ) throws IOException {
 		createMsg(type, data.length);
 		_out.write(data);
-		//_out.flush();
 		if( DEBUG_OUT ) System.out.println("end send(...)\n");
 	}
 

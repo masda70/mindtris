@@ -25,7 +25,7 @@ namespace MindTrisCore
 
         public Socket Socket { get { return _socket; } }
         public BufferWindow Buffer { get { return _buffer; } }
-        public LinkedList<ServerResponse> ResponsesPending { get { return _responses_to_send; } }
+        public LinkedList<ServerResponse> SendingPending { get { return _responses_to_send; } }
         public ClientStatus UserStatus { get { return _status; } }
         public DateTime LastTimeSeen { get; set; }
 

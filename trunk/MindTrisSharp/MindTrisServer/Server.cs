@@ -189,8 +189,8 @@ namespace MindTrisServer
         {
             foreach (User user in _users.Values)
             {
-                if (user.ResponsesPending.Count == 0) continue;
-                ServerResponse response = user.ResponsesPending.First.Value;
+                if (user.SendingPending.Count == 0) continue;
+                ServerResponse response = user.SendingPending.First.Value;
                 SocketError err;
                 int qte = response.Socket.Send(response.Packet, response.Offset, response.Length - response.Offset, SocketFlags.None, out err);
                 switch (err)
@@ -201,7 +201,7 @@ namespace MindTrisServer
                 response.Offset += qte;
                 //If completed, remove the packet from pending responses
                 if (response.Offset >= response.Length)
-                    user.ResponsesPending.RemoveFirst();
+                    user.SendingPending.RemoveFirst();
             }
         }
 
@@ -572,7 +572,7 @@ namespace MindTrisServer
         void QueueResponse(ServerResponse response)
         {
             User user = _users[response.Socket];
-            user.ResponsesPending.AddLast(response);
+            user.SendingPending.AddLast(response);
         }
 
         void Response_HelloFromServer(User user, byte response)
@@ -704,8 +704,9 @@ namespace MindTrisServer
             byte[] packet = Dgmt.ForgeNewPacket();
             int i = Dgmt.HEADER_LENGTH;
             BigE.WritePacketID(packet, ref i, Dgmt.PacketID.UpdateClientStatus);
-            BigE.WriteByte(packet, ref i, statusUpdate);
+            BigE.WriteInt32(packet, ref i, user.UserStatus.Lobby);
             BigE.WriteByte(packet, ref i, clientID);
+            BigE.WriteByte(packet, ref i, statusUpdate);
             if (statusUpdate == 0x00)
             {
                 BigE.WriteSizePrefixedUTF8(packet, ref i, 1, peer.DisplayName);

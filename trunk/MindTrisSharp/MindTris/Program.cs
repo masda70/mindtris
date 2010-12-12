@@ -63,6 +63,8 @@ namespace MindTris
 
         static void client_Connected(string motd)
         {
+                        Thread t = new Thread(() =>
+                {
             Console.WriteLine("MOTD: {0}", motd);
             Console.WriteLine("Login?");
             _login = Console.ReadLine();
@@ -72,62 +74,74 @@ namespace MindTris
             while (!UInt16.TryParse(Console.ReadLine(), out _port)) ;
             _client.UserCreated += new Client.ConfirmationFunction(_client_UserCreated);
             _client.CreateUser(_login, _pass, _email);
+                    });
+            t.Start();
         }
 
         static void _client_UserCreated(byte response)
         {
-            switch (response)
-            {
-                case 0x00:
-                    break;
-                case 0x01:
-                    Console.WriteLine("[Server]: This username already exists.");
-                    return;
-                case 0x02:
-                    Console.WriteLine("[Server]: Invalid username.");
-                    return;
-                case 0x03:
-                    Console.WriteLine("[Server]: Invalid password.");
-                    return;
-                case 0x04:
-                    Console.WriteLine("[Server]: Invalid email.");
-                    return;
-                default:
-                    throw new Exception("Ne devrait pas arriver, ;D");
-            }
-            Console.WriteLine("[Server]: User successfully created.");
-            _client.LoggedOn += new Client.LoggedOnFunction(_client_LoggedOn);
-            _client.Login(_login, _pass);
+                Thread t = new Thread(() =>
+                {
+                    switch (response)
+                    {
+                        case 0x00:
+                            break;
+                        case 0x01:
+                            Console.WriteLine("[Server]: This username already exists.");
+                            return;
+                        case 0x02:
+                            Console.WriteLine("[Server]: Invalid username.");
+                            return;
+                        case 0x03:
+                            Console.WriteLine("[Server]: Invalid password.");
+                            return;
+                        case 0x04:
+                            Console.WriteLine("[Server]: Invalid email.");
+                            return;
+                        default:
+                            throw new Exception("Ne devrait pas arriver, ;D");
+                    }
+                    Console.WriteLine("[Server]: User successfully created.");
+                    _client.LoggedOn += new Client.LoggedOnFunction(_client_LoggedOn);
+                    _client.Login(_login, _pass);
+                });
+            t.Start();
         }
 
         static void _client_LoggedOn(byte response, string displayed_username)
         {
-            switch (response)
-            {
-                case 0x00:
-                    break;
-                case 0x01:
-                    Console.WriteLine("[Server]: Username does not exist.");
-                    return;
-                case 0x02:
-                    Console.WriteLine("[Server]: Bad username/password.");
-                    return;
-                case 0x03:
-                    Console.WriteLine("[Server]: Too many tries, try again later.");
-                    return;
-                case 0x04:
-                    Console.WriteLine("[Server]: Login success, but disconnected elsewhere.");
-                    return;
-                default:
-                    throw new Exception("Ne devrait pas arriver, ;D");
-            }
-            Console.WriteLine("[Server]: Your username is {0}.", displayed_username);
-            _client.LobbiesRetrieved += new Client.RetrieveLobbiesFunction(_client_LobbiesRetrieved);
-            _client.LobbyListRetrieval();
+            Thread t = new Thread(() =>
+                {
+                    switch (response)
+                    {
+                        case 0x00:
+                            break;
+                        case 0x01:
+                            Console.WriteLine("[Server]: Username does not exist.");
+                            return;
+                        case 0x02:
+                            Console.WriteLine("[Server]: Bad username/password.");
+                            return;
+                        case 0x03:
+                            Console.WriteLine("[Server]: Too many tries, try again later.");
+                            return;
+                        case 0x04:
+                            Console.WriteLine("[Server]: Login success, but disconnected elsewhere.");
+                            return;
+                        default:
+                            throw new Exception("Ne devrait pas arriver, ;D");
+                    }
+                    Console.WriteLine("[Server]: Your username is {0}.", displayed_username);
+                    _client.LobbiesRetrieved += new Client.RetrieveLobbiesFunction(_client_LobbiesRetrieved);
+                    _client.LobbyListRetrieval();
+                });
+            t.Start();
         }
 
         static void _client_LobbiesRetrieved(Lobby[] lobbies)
         {
+            Thread t = new Thread(() =>
+                {
             _client.LobbyJoined += new Client.JoinedLobbyFunction(_client_LobbyJoined);
 
             const string lobby_format = "{0} | ID:{1} | {2}/{3}";
@@ -157,6 +171,8 @@ namespace MindTris
                 _client.LobbyCreated += new Client.LobbyCreatedFunction(_client_LobbyCreated);
                 _client.CreateLobby(name, (byte)count, false, "");
             }
+                    });
+            t.Start();
         }
 
         static void _client_LobbyCreated(byte response, uint lobbyID, ulong sessionID)
@@ -167,6 +183,8 @@ namespace MindTris
 
         static void _client_LobbyJoined(byte response, byte clientID, ulong sessionID, Peer[] peers)
         {
+                        Thread t = new Thread(() =>
+                {
             switch (response)
             {
                 case 0x00:
@@ -192,6 +210,8 @@ namespace MindTris
             }
             Console.WriteLine("Starting chat...");
             StartChat();
+                    });
+            t.Start();
         }
 
         private static void StartChat()
@@ -222,15 +242,22 @@ namespace MindTris
 
         static void _client_MessageReceived(Peer peer, string message)
         {
+                        Thread t = new Thread(() =>
+                {
             Console.WriteLine("{0} says: {1}", peer.DisplayName, message);
+                });
+                        t.Start();
         }
 
         static void _client_StatusUpdated(byte update, Peer peer)
         {
+                        Thread t = new Thread(() =>
+                {
             switch (update)
             {
                 case 0x00:
                     Console.WriteLine("[Server]: {0} has joined the lobby.", peer.DisplayName);
+                    _client.ConnectPeer(peer);
                     break;
                 case 0x01:
                     Console.WriteLine("[Server]: {0} has left the lobby.", peer.DisplayName);
@@ -243,8 +270,9 @@ namespace MindTris
                 default:
                     throw new Exception("Ne devrait pas arriver, ;D");
             }
-
             _peers[peer.ID] = peer;
+                    });
+            t.Start();
         }
     }
 }

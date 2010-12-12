@@ -6,63 +6,74 @@ import IO.*;
 import Util.*;
 
 import java.io.*;
-import java.net.InetAddress;
 import java.net.ServerSocket;
 import java.net.Socket;
 import java.net.UnknownHostException;
 import java.security.*;
-import java.security.spec.KeySpec;
-import java.security.spec.X509EncodedKeySpec;
+import java.util.Arrays;
 import java.util.Map.Entry;
-import javax.crypto.BadPaddingException;
 import javax.crypto.Cipher;
 import javax.crypto.IllegalBlockSizeException;
-import javax.crypto.NoSuchPaddingException;
-
 
 public class Client {
+	////// STATIC //////
 	private static final boolean DEBUG = true;
+	
+	////// FIELDS //////
 	public int					_port = 1337+42+1;
 	private MainWindow			_w;
 	private ChCltSrv			_srvCh;
 	private int					_srvPort;
 	private Cipher				_srvCrypter;
-	private Cipher				_decrypter;
-	private RSAKey				_publicKey;
+	private Signature			_signer;
+	private DSAKey				_publicKey;
+	private SecureRandom		_rdmGen;
 	private Lobby				_lobby;
-	private int					_lobbyId;
-	private long				_sessionId;
-	private UString				_name,	
-								_displayName;
+	private Peer				_me;
+	private UString				_name;
 	private AString				_pwd;
-	private IdMap<Peer>			_newPeers;
-	private IdMap<ChP2P>		_handshakesCh;
+	private IdMap<byte[][]>		_challengeCodes;	// [ initCode, lstnCode ]
+	private IdMap<ChP2P>		_waitingPeerCh;
+	private IdMap<InData>		_waitingAck;
+
 	
+	////// CONSTRUCTORS //////
 	public Client ( short srvPort ) {
 		_w = new MainWindow(this);
 		_srvPort = srvPort;
-		_newPeers = new IdMap<Peer>();
-		_handshakesCh = new IdMap<ChP2P>();
+		_challengeCodes = new IdMap<byte[][]>();
+		_waitingPeerCh = new IdMap<ChP2P>();
+		_waitingAck = new IdMap<InData>();
 		
 		try {
-			KeyPairGenerator gen = KeyPairGenerator.getInstance("RSA");
-			gen.initialize(Crypted.KEY_LEN);
+			_rdmGen = SecureRandom.getInstance ("SHA1PRNG");
+			KeyPairGenerator gen = KeyPairGenerator.getInstance("DSA");
+			gen.initialize(SignedMsg.KEY_LEN);
 			KeyPair keyPair = gen.generateKeyPair();
-			_publicKey = new RSAKey(keyPair.getPublic());
-			_decrypter = Cipher.getInstance(Crypted.CRYPT_SCHEME);
-			_decrypter.init(Cipher.DECRYPT_MODE, keyPair.getPrivate());
+			_publicKey = new DSAKey(keyPair.getPublic());
+			_signer = Signature.getInstance(SignedMsg.SIGN_SCHEME);
+			_signer.initSign(keyPair.getPrivate(), _rdmGen);
+		//	_signer.setParameter(SignedMsg.SIGN_SPEC);
+			
+	//		_decrypter = Cipher.getInstance(Crypted.CRYPT_SCHEME);
+	//		_decrypter.init(Cipher.DECRYPT_MODE, keyPair.getPrivate());
+			
+
+			_me = new Peer(0, null, null, _port, _publicKey);
 		} catch (NoSuchAlgorithmException e) {
 			e.printStackTrace();
+	//	} catch (InvalidAlgorithmParameterException e) {
+	//		e.printStackTrace();
 		} catch (InvalidKeyException e) {
 			e.printStackTrace();
-		} catch (NoSuchPaddingException e) {
-			e.printStackTrace();
+	//	} catch (NoSuchPaddingException e) {
+	//		e.printStackTrace();
 		}
 	}
 
+	////// PUBLIC METHODS //////
 	public void connectToSrv ( String serverIp ) throws IOException {
 		_srvCh = new ChCltSrv(serverIp, _srvPort);
-		
 		SrvHandler srvHdl = new SrvHandler(_srvCh);
 		srvHdl.start();
 		
@@ -95,17 +106,15 @@ public class Client {
 
 	public void createLobby ( UString name, AString pwd, int maxPlayers )
 	throws IOException, IllegalBlockSizeException {
-		_pwd = pwd;
+		_lobby = new Lobby(0, name, null, 1, maxPlayers, pwd, _me);
 		
-		int len = 1+name.len()+1+1+2;
+		int len = 1+name.len()+1+1+0+2+_publicKey.len();
 		boolean hasPwd = pwd != null;
 		Crypted cryptedPwd = null;
 		
 		if( hasPwd ) {
 			cryptedPwd = new Crypted(pwd, _srvCrypter);
-			len += cryptedPwd.len();
-		} else {
-			len ++;
+			len += 2+cryptedPwd.len();
 		}
 		
 		_srvCh.createMsg(MsgCltSrv.CREATE_LOBBY, len);
@@ -116,10 +125,10 @@ public class Client {
 		if( hasPwd ) {
 			_srvCh.msg().writeShort(cryptedPwd.len());
 			_srvCh.msg().write(cryptedPwd);
-		} else {
-			_srvCh.msg().writeShort(0);
-			_srvCh.msg().writeByte(0);
 		}
+		_srvCh.msg().writeShort(_port);
+		_srvCh.msg().write(_publicKey);
+		
 		_srvCh.sendMsg();
 	}
 
@@ -145,40 +154,88 @@ public class Client {
 		_srvCh.sendMsg();
 	}
 
-	public void sendChatMsg ( String msg ) {
+	public void sendChatMsg ( UString s ) throws IOException {
+		Msg m = new SignedMsg(MsgP2P.CHAT_SEND, 8+2+s.len(), _signer);
+		m._out.write(_lobby._sessionId);
+		m._out.writeShort(s.len());
+		m._out.write(s);
+		
 		for( Entry<Integer, Peer> o : _lobby._peers ) {
 			Peer p = o.getValue();
-			
-			byte[] msgBuf;
-			try {
-				msgBuf = msg.getBytes(Channel.ENCODING);
-				p.getCh().send(P2PMsg.CHAT_SEND, msgBuf.length, msgBuf);
-			} catch (UnsupportedEncodingException e) {
-				e.printStackTrace();
-			} catch (IOException e) {
-				e.printStackTrace();
+			if( p._id != _me._id ) {
+				p.getCh().send(m);
 			}
 		}
 	}
 
-	protected void addNewPeer ( ChP2P peerCh, Peer p ) {
-		debug("add peer " + p._displayName.v());
+	////// PRIVATE METHODS //////
+	private void lobbyJoined () {
+		_w.printLobby(_lobby, _me._displayName);
 		
-		p.setCh(peerCh);
-		peerCh.setPeer(p);
+		/* start to listen peers */
+		Thread listenPeers = new Thread() {
+			public void run() {
+				try {
+					ServerSocket srv = new ServerSocket(_port);
+					while( true ) {
+						Thread.sleep(10);
+						
+						Socket skt = srv.accept();
+						ChP2P peerCh = new ChP2P(skt);
+						PeerHandler hdl = new PeerHandler(peerCh);
+						
+						hdl.start();
+					}
+				} catch ( IOException e ) {
+					e.printStackTrace();
+				} catch (InterruptedException e) {
+					e.printStackTrace();
+				}
+			}
+		};
+		listenPeers.start();
+	}
+	
+	private void sendConnexionRequest ( Peer p, ChP2P ch ) throws IOException {
+		debug("send connexion request to "+p._ip);
+		byte[] challengeCode = new byte[8];
+		_rdmGen.nextBytes(challengeCode);
+		_challengeCodes.add(p._id, new byte[][]{challengeCode, {}});
 		
-		_lobby.add(p._id, p);
+		ch.createMsg(MsgP2P.CONNEXION_REQUEST, 4+1+1+8);
+		ch.msg().writeInt(_lobby._id);
+		ch.msg().writeByte(_lobby._myPeerId);
+		ch.msg().writeByte(p._id);
+		ch.msg().write(challengeCode);
+		ch.sendMsg();
+	}
+	
+	private void sendConnexionAck ( Peer p, ChP2P ch, InData in ) throws IOException {
+		SignedMsg.verify(in, p._verifier);
+		ch.setPeer(p);
+		
+		Msg ans = new SignedMsg(MsgP2P.CONNEXION_ACK, 4+1+1+8+8, _signer);
+		ans._out.writeInt(_lobby._id);
+		ans._out.writeByte(_lobby._myPeerId);
+		ans._out.writeByte(p._id);
+		ans._out.write(_challengeCodes.get(p._id)[0]);
+		ans._out.write(_challengeCodes.get(p._id)[1]);
+		ch.send(ans);
+	}
+	
+	private void verifyConnexionAck ( Peer p, ChP2P ch, InData in ) throws IOException {
+		SignedMsg.verify(in, p._verifier);
+		ch.setPeer(p);
+		p.setCh(ch);
+
 		_w.printNewPeer(p);
-		
-		_newPeers.rm(p._id);
-		_handshakesCh.rm(p._id);
 	}
 	
 	private void debug ( String m ) {
 		if( DEBUG ) System.out.println(m);
 	}
 	
-	////////// SRV HANDLERS ///////////
+	////// SRV HANDLERS //////
 	private class SrvHandler extends MsgHandler<ChCltSrv> {
 		public SrvHandler(ChCltSrv ch) {
 			super(ch);
@@ -240,9 +297,8 @@ public class Client {
 			switch( in.readUnsignedByte() ) {
 			case 0x00:
 				int nameLen = in.readUnsignedByte();
-				_displayName = new UString(in, nameLen);
-
-				_w.print("connected as " + _displayName.v());
+				_me._displayName = new UString(in, nameLen);
+				_w.print("connected as " + _me._displayName.v());
 				
 				_srvCh.send(MsgCltSrv.GET_LOBBY_LIST);
 				break;
@@ -260,9 +316,16 @@ public class Client {
 		public void handle(InData in, ChCltSrv ch) throws IOException {
 			switch( in.readUnsignedByte() ) {
 			case 0x00:
-				_lobbyId = in.readInt();
-				_sessionId = in.readLong();
-				joinLobby(_lobbyId, _pwd);
+				int lobbyId = in.readInt();
+				_lobby._myPeerId = in.readUnsignedByte();
+				byte[] sessionId = new byte[8];
+				in.readFully(sessionId);
+				
+				_lobby._id = lobbyId;
+				_lobby._sessionId = sessionId;
+				_lobby._creator._id = _lobby._myPeerId;
+				
+				lobbyJoined();
 				break;
 			case 0x01:	_w.printError("invalid password");	break;
 			case 0x02:	_w.printError("not enough rights");	break;
@@ -291,7 +354,7 @@ public class Client {
 					String ip = p._ip.toString();
 					
 					try {
-						ChP2P peerCh = new ChP2P(ip, (short) p._port);
+						ChP2P peerCh = new ChP2P(ip, p._port);
 						
 						p.setCh(peerCh);
 						peerCh.setPeer(p);
@@ -299,8 +362,7 @@ public class Client {
 						PeerHandler peerHdl = new PeerHandler(peerCh);
 						peerHdl.start();
 						
-						debug("say hello to peer "+ip);
-						peerCh.send(P2PMsg.HELLO, _myId, Channel.int2bytes(l._id));
+						sendConnexionRequest(p, peerCh);
 					} catch ( UnknownHostException e ) {
 						_w.printError("Unkown host "+ip+"/"+(short)p._port);
 					} catch ( IOException e ) {
@@ -308,31 +370,7 @@ public class Client {
 					}
 				}
 				
-				_w.printLobby(l, _displayName);
-				
-				/* start to listen peers */
-				Thread listenPeers = new Thread() {
-					public void run() {
-						try {
-							ServerSocket srv = new ServerSocket(_port);
-							while( true ) {
-								Thread.sleep(10);
-								
-								Socket skt = srv.accept();
-								P2PCh peerCh = new P2PCh(skt);
-								PeerHandler hdl = new PeerHandler(peerCh);
-								
-								hdl.start();
-							}
-						} catch ( IOException e ) {
-							e.printStackTrace();
-						} catch (InterruptedException e) {
-							e.printStackTrace();
-						}
-					}
-				};
-				listenPeers.start();
-				
+				lobbyJoined();
 				break;
 			case 0x01:	_w.printError("Wrong password");	break;
 			case 0x02:	_w.printError("Lobby is full");		break;
@@ -343,16 +381,23 @@ public class Client {
 	
 	private class UpdateClientHdl implements Handler<ChCltSrv> {
 		public void handle(InData in, ChCltSrv ch) throws IOException {
+			int lobbyId = in.readInt();
+			
 			switch( in.readUnsignedByte() ) {
 			case 0x00:
 				Peer p = new Peer(in);
-				ChP2P peerCh = _handshakesCh.get(p._id);
-				if( peerCh != null ) {
-					addNewPeer(peerCh, p);
-				} else {
-					_newPeers.add(p._id, p);
+				ChP2P waitingPeerCh = _waitingPeerCh.get(p._id);
+				
+				if( waitingPeerCh == null ) {
 					debug(p._displayName.v() + " has join, wait handshakes");
+					_lobby._peers.add(p._id, p);
+				} else {
+					InData ack = _waitingAck.get(p._id);
+					verifyConnexionAck(p, waitingPeerCh, ack);
+					_waitingPeerCh.rm(p._id);
+					_waitingAck.rm(p._id);
 				}
+				
 				break;
 			default:
 				System.out.println("not implemented");
@@ -362,43 +407,117 @@ public class Client {
 		
 	}
 	
-	////////// P2P HANDLERS ///////////
-	private class PeerHandler extends MsgHandler<P2PCh> {
-		public PeerHandler(P2PCh ch) {
+	////// P2P HANDLERS //////
+	private class PeerHandler extends MsgHandler<ChP2P> {
+		public PeerHandler(ChP2P ch) {
 			super(ch);
 			
-			addHdl(P2PMsg.HELLO, new PeerHelloHdl());
-			addHdl(P2PMsg.CHAT_SEND, new ChatHdl());
+			addHdl(MsgP2P.CONNEXION_REQUEST, new ConnexionRequestHdl());
+			addHdl(MsgP2P.CONNEXION_ACCEPTED, new ConnexionAcceptedHdl());
+			addHdl(MsgP2P.CONNEXION_ACK, new ConnexionAck());
+			addHdl(MsgP2P.CHAT_SEND, new ChatHdl());
 		}
 	}
 	
-	private class PeerHelloHdl implements Handler<P2PCh> {
-		public void handle(Data d, P2PCh ch) throws IOException {
-			byte id = d.rdB();
-			int lobbyId = d.rdI();
-			if( lobbyId == _lobby._id ) {
-				Peer p = _newPeers.get(id);
+	private class ConnexionRequestHdl implements Handler<ChP2P> {
+		public void handle(InData in, ChP2P ch) throws IOException {
+			int lobbyId = in.readInt();
+			int peerId = in.readUnsignedByte();
+			int myId = in.readUnsignedByte();
+			byte[] initChallengeCode = new byte[8];
+			in.readFully(initChallengeCode);
+			byte[] lsntChallengeCode = new byte[8];
+			_rdmGen.nextBytes(lsntChallengeCode);
+			_challengeCodes.add(peerId, new byte[][]{initChallengeCode, lsntChallengeCode});
+			
+			if( lobbyId == _lobby._id && myId == _lobby._myPeerId ) {
+				debug("Connexion request ok, send connexion accepted");
 				
-				if( p != null ) {
-					addNewPeer(ch, p);
+				Msg ans = new SignedMsg(MsgP2P.CONNEXION_ACCEPTED, 4+1+1+8+8, _signer);
+				ans._out.writeInt(_lobby._id);
+				ans._out.writeByte(peerId);
+				ans._out.writeByte(_lobby._myPeerId);
+				ans._out.write(initChallengeCode);
+				ans._out.write(lsntChallengeCode);
+				ch.send(ans);
+			} else {
+				System.out.println("connexion req with another lobby id or listening peer id");
+				System.out.println("my lobby id : "+_lobby._id+", receive : "+lobbyId);
+				System.out.println("my id : "+_lobby._myPeerId+", receive : "+myId);
+			}
+		}
+	}
+	
+	private class ConnexionAcceptedHdl implements Handler<ChP2P> {
+		public void handle(InData in, ChP2P ch) throws IOException {
+			int lobbyId = in.readInt();
+			int myPeerId = in.readUnsignedByte();
+			int peerId = in.readUnsignedByte();
+			byte[] initChallengeCode = new byte[8];
+			in.readFully(initChallengeCode);
+			byte[] lsntChallengeCode = new byte[8];
+			in.readFully(lsntChallengeCode);
+			
+			if( lobbyId == _lobby._id && myPeerId == _lobby._myPeerId ) {
+				byte[][] codes = _challengeCodes.get(peerId);
+				
+				if( Arrays.equals(initChallengeCode, codes[0]) ) {
+					codes[1] = lsntChallengeCode;
+					
+					Peer p = _lobby._peers.get(peerId);
+					sendConnexionAck(p, ch, in);
 				} else {
-					_handshakesCh.add(id, ch);
-					debug("receive handshake from " + InetAddress.getByAddress(ch.getIp()).toString());
+					System.out.println("connexion acc with wrong init code");
 				}
 			} else {
-				System.out.println("new peer with another lobby id");
+				System.out.println("connexion acc with another lobby id or listening peer id");
 			}
-			
 		}
 	}
 	
+	private class ConnexionAck implements Handler<ChP2P> {
+		public void handle(InData in, ChP2P ch) throws IOException {
+			int lobbyId = in.readInt();
+			int peerId = in.readUnsignedByte();
+			int myPeerId = in.readUnsignedByte();
+			byte[] initChallengeCode = new byte[8];
+			in.readFully(initChallengeCode);
+			byte[] lsntChallengeCode = new byte[8];
+			in.readFully(lsntChallengeCode);
 
-	private class ChatHdl implements Handler<P2PCh> {
-		public void handle(Data d, P2PCh ch) throws IOException {
-			byte len = d.rdB();
-			String msg = d.rdStr(len);
+			if( lobbyId == _lobby._id && myPeerId == _lobby._myPeerId ) {
+				byte[][] codes = _challengeCodes.get(peerId);
+				
+				if( Arrays.equals(initChallengeCode, codes[0]) 
+				 && Arrays.equals(lsntChallengeCode, codes[1]) ) {
+					
+					Peer p = _lobby._peers.get(peerId);
+					if( p != null ) {
+						debug("connexion ack ok, verify signature");
+						verifyConnexionAck(p, ch, in);
+					} else {
+						debug("connexion ack ok, but wait for update status from server");
+						_waitingPeerCh.add(peerId, ch);
+						_waitingAck.add(peerId, in);
+					}
+				} else {
+					System.out.println("connexion ack with wrong codes");
+				}
+			} else {
+				System.out.println("connexion ack with another lobby id or listening peer id");
+			}
+		}
+	}
+
+	private class ChatHdl implements Handler<ChP2P> {
+		public void handle(InData in, ChP2P ch) throws IOException {
+			byte[] sessionId = new byte[8];
+			in.readFully(sessionId);
+			int len = in.readUnsignedShort();
+			UString txt = new UString(in, len);
+			
 			Peer sender = ch.getPeer();
-			_w.printChatMsg(sender, msg);
+			_w.printChatMsg(sender, txt);
 		}
 		
 	}

@@ -23,6 +23,7 @@ public class ChCltSrv extends Channel {
 	public void setUsr ( User usr ) {
 		_usr = usr;
 	}
+	
 	public User getUsr () {
 		return _usr;
 	}

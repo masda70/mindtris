@@ -14,16 +14,19 @@ import javax.crypto.Cipher;
 import javax.crypto.NoSuchPaddingException;
 
 public class Server extends Thread {
+	////// STATIC //////
 	public static final short PORT = 1337+42;
 	private static final boolean DEBUG = true;
 	private static UString HELLO_MSG = new UString("Welcome to MindTris Server\n");
 	
-	private RSAKey _publicKey;
-	private Cipher _decrypter;
-	private UsrDataBase _db;
-	private IdMap<Lobby> _lobbies;
-	private Random _rdmGen;
+	////// FIELDS //////
+	private RSAKey			_publicKey;
+	private Cipher			_decrypter;
+	private UsrDataBase		_db;
+	private IdMap<Lobby>	_lobbies;
+	private Random			_rdmGen;
 	
+	////// CONSTRUCTORS //////
 	public Server () {
 		_db = new UsrDataBase();
 		_lobbies = new IdMap<Lobby>();
@@ -61,6 +64,7 @@ public class Server extends Thread {
 	    /* */
 	}
 	
+	////// PUBLIC METHODS //////
 	public void run () {
 		try {
 			ServerSocket srv = new ServerSocket(PORT);
@@ -86,11 +90,12 @@ public class Server extends Thread {
 		}
 	}
 	
+	////// PRIVATE METHODS //////
 	private void debug ( String m ) {
 		if( DEBUG ) System.out.println(m);
 	}
 	
-	///////// HANDLERS /////////
+	////// HANDLERS //////
 	private class MyHandler extends MsgHandler<ChCltSrv> {
 		public MyHandler(ChCltSrv ch) {
 			super(ch);
@@ -182,7 +187,6 @@ public class Server extends Thread {
 			int maxPlayers = in.readUnsignedByte();
 			boolean hasPwd = in.readBoolean();
 
-			UString creator = ch.getUsr()._displayName;
 			AString pwd = null;
 			
 			if( hasPwd ) {
@@ -192,17 +196,27 @@ public class Server extends Thread {
 				
 				if( !pwd.isValid() ) {
 					ch.send(MsgCltSrv.LOBBY_CREATED, (byte)0x01);
+					return;
 				}
 			}
-
-			int id = _lobbies.getNextId();
+			
+			int creatorPort = in.readUnsignedShort();
+			DSAKey creatorKey = new DSAKey(in);
+			Peer creator = new Peer(0, ch.getUsr()._displayName, ch.getIp(), creatorPort, creatorKey);
+			creator.setCh(ch);
+			
+			int lobbyId = _lobbies.getNextId();
 			byte[] nonce = new byte[8];
 			_rdmGen.nextBytes(nonce);
-			_lobbies.add(new Lobby(id, name, nonce, (byte)0, maxPlayers, pwd, creator));
+			Lobby l = new Lobby(lobbyId, name, nonce, (byte)1, maxPlayers, pwd, creator);
 			
-			ch.createMsg(MsgCltSrv.LOBBY_CREATED, 1+4+8);
+			System.out.println(l.getCreatorName());
+			_lobbies.add(l);
+			
+			ch.createMsg(MsgCltSrv.LOBBY_CREATED, 1+4+1+8);
 			ch.msg().writeByte(0x00);
-			ch.msg().writeInt(id);
+			ch.msg().writeInt(lobbyId);
+			ch.msg().writeByte(l._creator._id);
 			ch.msg().write(nonce);
 			ch.sendMsg();
 		}
@@ -224,11 +238,11 @@ public class Server extends Thread {
 			AString pwd = null;
 			if( pwdLen > 0 ) pwd = new AString(in, pwdLen);
 			int port = in.readUnsignedShort();
-			RSAKey key = new RSAKey(in);
+			DSAKey key = new DSAKey(in);
 			
 			Lobby l = _lobbies.get(lobbyId);
 			
-			if( ! l.pwdRequired() || pwd == l._pwd ) {
+			if( ! l.pwdRequired() || pwd.equals(l._pwd) ) {
 				if( l._nbPlayers < l._maxPlayers ) {
 					int peerId = l._peers.getNextId();
 					l._myPeerId = peerId;
@@ -243,29 +257,35 @@ public class Server extends Thread {
 					Peer newPeer = new Peer(peerId, usr._displayName, ch.getIp(), port, key);
 					newPeer.setCh(ch);
 					
-					int len = 0;
+					int len = 4+1+1+1+newPeer._displayName.len()+4+2+newPeer._key.len();
 					Msg up = new MsgCltSrv(new OutData(len), MsgCltSrv.UPDATE_CLIENT, len);
 					up._out.writeInt(lobbyId);
-					up._out.writeByte(newPeer._id);
 					up._out.writeByte(0x00);
+					up._out.writeByte(newPeer._id);
+					up._out.write(newPeer._displayName.len());
 					up._out.write(newPeer._displayName);
 					up._out.write(newPeer._ip);
 					up._out.writeShort(newPeer._port);
 					up._out.write(newPeer._key);
-
-					l.add(peerId, newPeer);
 					
 					for( Entry<Integer, Peer> o : l._peers ) {
 						Peer p = o.getValue();
 						p.getCh().send(up);
 					}
-					
+
+					l.add(peerId, newPeer);
 					return;
 				} else {
-					ch.send(MsgCltSrv.JOINED_LOBBY, (byte)0x02);
+					ch.createMsg(MsgCltSrv.JOINED_LOBBY, 4+1);
+					ch.msg().writeInt(lobbyId);
+					ch.msg().writeByte(0x02);
+					ch.sendMsg();
 				}
 			} else {
-				ch.send(MsgCltSrv.JOINED_LOBBY, (byte)0x01);
+				ch.createMsg(MsgCltSrv.JOINED_LOBBY, 4+1);
+				ch.msg().writeInt(lobbyId);
+				ch.msg().writeByte(0x01);
+				ch.sendMsg();
 			}
 		}
 	}

@@ -310,10 +310,10 @@ public class MainWindow extends JFrame {
 			c.anchor = GridBagConstraints.WEST;
 			c.insets = new Insets(0,15,5,15);
 			for( final Lobby l : list ) {
-				Lbl name = new Lbl(l._name);
-				Lbl creator = new Lbl(l._creator);
+				Lbl name = new Lbl(l._name.v());
+				Lbl creator = new Lbl(l.getCreatorName());
 				Lbl players = new Lbl( Integer.toString(l._nbPlayers)
-									+ "/" + Integer.toString((int)l._maxPlayers));
+									+ "/" + Integer.toString(l._maxPlayers));
 				Lbl pwd = new Lbl(l.pwdRequired() ? "yes" : "");
 					
 				name.addMouseListener(new MouseListener () {
@@ -372,15 +372,12 @@ public class MainWindow extends JFrame {
 		_center.revalidate();
 	}
 
-	public void printLobby ( Lobby l, final String displayName ) {
-		Lbl name = new Lbl(l._name.v() + " (created by "+l._creator.v()+")");
+	public void printLobby ( Lobby l, final UString displayName ) {
+		Lbl name = new Lbl(l._name.v() + " (created by "+l.getCreatorName()+")");
 		
 		JPanel connected = new JPanel();
 		connected.setBackground(bg);
-		Lbl connectedLbl = new Lbl("peers :");
-		connected.add(connectedLbl);
-		
-		connected.add(new Lbl(displayName + ", "));
+		connected.add(new Lbl("peers :"));
 		
 		for( Entry<Integer, Peer> o : l._peers ) {
 			Peer p = o.getValue();
@@ -392,10 +389,14 @@ public class MainWindow extends JFrame {
 		
 		((TxtArea) _text).setEditable(false);
 		msg.addActionListener(new ActionListener() {
-			public void actionPerformed(ActionEvent e) {
-				_c.sendChatMsg(msg.getText());
-				((TxtArea) _text).append(displayName + ": " + msg.getText() + "\n");
-				msg.setText("");
+			public void actionPerformed(ActionEvent ev) {
+				try {
+					_c.sendChatMsg(msg.getUTxt());
+					((TxtArea) _text).append(displayName.v() + ": " + msg.getText() + "\n");
+					msg.setText("");
+				} catch ( IOException e ) {
+					printError(e.getMessage());
+				}
 			}
 		});
 		
@@ -421,9 +422,9 @@ public class MainWindow extends JFrame {
 		_error.setText(txt);
 	}
 	
-	public void printChatMsg ( Peer p, String msg ) {
-		String txt = new String( p._displayName.v() + ": " + msg + "\n");
-		((TxtArea) _text).append(txt);
+	public void printChatMsg ( Peer p, UString txt ) {
+		String s = new String( p._displayName.v() + ": " + txt.v() + "\n");
+		((TxtArea) _text).append(s);
 	}
 
 	public void printNewPeer ( Peer p ) {

@@ -43,10 +43,11 @@ namespace MindTris
 
         //Incoming connections handling
         Thread _main;
-        LinkedList<ServerResponse> _responses;
+        LinkedList<ClientRequest> _requests_to_grant;
 
         //Users
         Dictionary<Socket, User> _users;
+        User _user_server;
 
         //Lobby
         byte _clientID;
@@ -69,11 +70,11 @@ namespace MindTris
             _server_address = IPAddress.Parse(serverIP);
             _server_port = serverPort;
             _socket_server = new Socket(AddressFamily.InterNetwork, SocketType.Stream, ProtocolType.Tcp);
+            _requests_to_grant = new LinkedList<ClientRequest>();
             _listener = new Socket(AddressFamily.InterNetwork, SocketType.Stream, ProtocolType.Tcp);
             _listener.Blocking = false;
             _users = new Dictionary<Socket, User>(20);
             _players = new Dictionary<User, PeerPlayer>(20);
-            _responses = new LinkedList<ServerResponse>();
             _remaining_unseen_peers = new Dictionary<byte, Peer>();
             _rsa_server = new RSACryptoServiceProvider();
             _rsa_p2p = new RSACryptoServiceProvider();
@@ -88,6 +89,7 @@ namespace MindTris
             try
             {
                 _socket_server.BeginConnect(_server_address, _server_port, new AsyncCallback(CallbackConnect), null);
+                _user_server = new User(_socket_server);
             }
             catch (SocketException e)
             {
@@ -95,6 +97,14 @@ namespace MindTris
                 return;
             }
             Console.WriteLine("Connecting...");
+        }
+        void CallbackConnect(IAsyncResult res)
+        {
+            //Start the engine
+            _main = new Thread(new ThreadStart(Listening));
+            _main.Name = "Main Client Thread";
+            _main.Start();
+            Send_HelloFromClient();
         }
 
         public void CreateUser(string login, string pass, string email)
@@ -104,14 +114,7 @@ namespace MindTris
             _email = email;
             if (_status.Connected == 1 && _status.Logged_on == 0)
             {
-                //[TOCHECK] Faire ça mieux, peut-être
-                Thread t = new Thread(() =>
-                    {
-                        byte res = CreateUserSync();
-                        if (UserCreated != null) UserCreated(res);
-                    }
-                );
-                t.Start();
+                Send_CreateUser();
             }
         }
 
@@ -121,14 +124,7 @@ namespace MindTris
             _pass = pass;
             if (_status.Connected == 1 && _status.Logged_on == 0)
             {
-                Thread t = new Thread(() =>
-                    {
-                        string displayed_username;
-                        byte res = LoginSync(out displayed_username);
-                        if (LoggedOn != null) LoggedOn(res, displayed_username);
-                    }
-                );
-                t.Start();
+                Send_Login();
             }
         }
 
@@ -136,15 +132,7 @@ namespace MindTris
         {
             if (_status.Logged_on == 1)
             {
-                Thread t = new Thread(() =>
-                    {
-                        uint lobbyID;
-                        ulong sessionID;
-                        byte res = CreateLobbySync(name, max_players, hasPassword, pass, out lobbyID, out sessionID);
-                        if (LobbyCreated != null) LobbyCreated(res, lobbyID, sessionID);
-                    }
-                );
-                t.Start();
+                Send_CreateLobby(name, max_players, hasPassword, pass);
             }
         }
 
@@ -152,14 +140,7 @@ namespace MindTris
         {
             if (_status.Logged_on == 1)
             {
-                Thread t = new Thread(() =>
-                    {
-                        Lobby[] lobbies;
-                        lobbies = RetrieveLobbiesSync();
-                        if (LobbiesRetrieved != null) LobbiesRetrieved(lobbies);
-                    }
-                );
-                t.Start();
+                Send_RetrieveLobbies();
             }
         }
 
@@ -167,32 +148,16 @@ namespace MindTris
         {
             if (_status.Logged_on == 1)
             {
-                Thread t = new Thread(() =>
-                    {
-                        byte clientID;
-                        ulong sessionID;
-                        Peer[] peers;
-                        byte res = JoinLobbySync(lobbyID, pass, out clientID, out sessionID, out peers);
-                        foreach (Peer peer in peers)
-                        {
-                            _remaining_unseen_peers.Add(peer.ID, peer);
-                        }
-                        if (LobbyJoined != null) LobbyJoined(res, clientID, sessionID, peers);
-                    }
-                );
-                t.Start();
+                Send_JoinLobby(lobbyID, pass);
             }
         }
 
         public void LeaveLobby()
         {
-            Thread t = new Thread(() =>
+            if (_status.Logged_on == 1 && _status.Lobby != 0)
             {
-
-                if (LobbyLeft != null) LobbyLeft();
+                Send_LeaveLobby();
             }
-                );
-            t.Start();
         }
 
         public delegate void VoidFunction();
@@ -219,11 +184,7 @@ namespace MindTris
 
 
 
-
-
-
-
-        byte CreateUserSync()
+        void Send_CreateUser()
         {
             //[TODO] Gérer les dépassement de tailles d'entier
             byte[] login = Encoding.UTF8.GetBytes(_login);
@@ -239,31 +200,18 @@ namespace MindTris
             BigE.WriteSizePrefixed(packet, ref i, 2, email);
             //Encrypt
             byte[] encrypted_user_info = Encrypt(pass);
+            string lol2 = System.Convert.ToBase64String(encrypted_user_info);
+            string public_key = _rsa_server.ToXmlString(false);
             BigE.WriteSizePrefixed(packet, ref i, 2, encrypted_user_info);
 
             int length = Dgmt.FinalizePacket(packet, i - Dgmt.HEADER_LENGTH);
 
             //Send
-            _socket_server.Send(packet, 0, length, SocketFlags.None);
-
-            //Grab the response
-            Retry:
-            byte[] response = ReceiveServerResponseContents();
-            if (response[0] == (byte)Dgmt.PacketID.UserCreation)
-            {
-                return response[1];
-            }
-            else
-            {
-                //throw new DgmtProtocolException("Invalid message type. USER_CREATION was expected.");
-                Peer peer;
-                byte lol = StatusUpdateSync(response, out peer);
-                if (StatusUpdated != null) StatusUpdated(lol, peer);
-                goto Retry;
-            }
+            ServerResponse response = new ServerResponse(_socket_server, packet, length);
+            QueueResponse(response);
         }
 
-        byte LoginSync(out string displayed_username)
+        void Send_Login()
         {
             //[TODO] Gérer les dépassement de tailles d'entier
             byte[] login = Encoding.UTF8.GetBytes(_login);
@@ -283,38 +231,11 @@ namespace MindTris
             int length = Dgmt.FinalizePacket(packet, encrypted_user_info.Length + 1);
 
             //Send
-            _socket_server.Send(packet, 0, length, SocketFlags.None);
-
-            //[TODO] grab la réponse
-        Retry:
-            displayed_username = "";
-            byte[] response = ReceiveServerResponseContents();
-            if (response[0] == (byte)Dgmt.PacketID.LoginReply)
-            {
-                if (response[1] == 0x00)
-                {
-                    i = 2;
-                    displayed_username = BigE.ReadSizePrefixedUTF8(response, ref i, 1);
-                    //update le status
-                    lock (_status)
-                    {
-                        _status.Logged_on = 1;
-                        _status.User = _login;
-                    }
-                }
-                return response[1];
-            }
-            else
-            {
-                //throw new DgmtProtocolException("Invalid message type. LOGIN_REPLY was expected.");
-                Peer peer;
-                byte lol = StatusUpdateSync(response, out peer);
-                if (StatusUpdated != null) StatusUpdated(lol, peer);
-                goto Retry;
-            }
+            ServerResponse response = new ServerResponse(_socket_server, packet, length);
+            QueueResponse(response);
         }
 
-        byte CreateLobbySync(string name, byte max_players, bool hasPass, string pass, out uint lobbyID, out ulong sessionID)
+        void Send_CreateLobby(string name, byte max_players, bool hasPass, string pass)
         {
             byte[] lobby_name = Encoding.UTF8.GetBytes(name);
             pass = String.IsNullOrEmpty(pass) ? "" : pass;
@@ -338,85 +259,21 @@ namespace MindTris
 
             //Send
             int length = Dgmt.FinalizePacket(packet, i - Dgmt.HEADER_LENGTH);
-            _socket_server.Send(packet, 0, length, SocketFlags.None);
-
-            //Grab the response
-            Retry:
-            byte[] response = ReceiveServerResponseContents();
-            if (response[0] == (byte)Dgmt.PacketID.LobbyCreation)
-            {
-                i = 1;
-                byte answer = response[i];
-                if (answer == 0x00)
-                {
-                    i++;
-                    //Ensures BigE
-                    BigE.E(response, i, 4);
-                    lobbyID = BitConverter.ToUInt32(response, i);
-                    i += 4;
-                    BigE.E(response, i, 8);
-                    sessionID = BitConverter.ToUInt64(response, i);
-                    i += 8;
-                }
-                else
-                {
-                    lobbyID = 0;
-                    sessionID = 0;
-                }
-                return answer;
-            }
-            else
-            {
-                //throw new DgmtProtocolException("Invalid message type. LOBBY_CREATION was expected.");
-                Peer peer;
-                byte lol = StatusUpdateSync(response, out peer);
-                if (StatusUpdated != null) StatusUpdated(lol, peer);
-                goto Retry;
-            }
+            ServerResponse response = new ServerResponse(_socket_server, packet, length);
+            QueueResponse(response);
         }
 
-        Lobby[] RetrieveLobbiesSync()
+        void Send_RetrieveLobbies()
         {
             byte[] packet = Dgmt.ForgeNewPacket();
             packet[Dgmt.HEADER_LENGTH] = (byte)Dgmt.PacketID.GetLobbyList;
             int length = Dgmt.FinalizePacket(packet, 1);
             //Send
-            _socket_server.Send(packet, 0, length, SocketFlags.None);
-
-            //response
-            Retry:
-            byte[] response = ReceiveServerResponseContents();
-            if (response[0] == (byte)Dgmt.PacketID.LobbyList)
-            {
-                int i = 1;
-                int count = response[i++];
-                Lobby[] result = new Lobby[count];
-                for (int k = 0; k < count; k++)
-                {
-                    result[k] = new Lobby();
-                    //Ensuring BigE
-                    BigE.E(response, i, 4);
-                    result[k].ID = BitConverter.ToUInt32(response, i);
-                    i += 4;
-                    result[k].Name = BigE.ReadSizePrefixedUTF8(response, ref i, 1);
-                    result[k].PlayerCount = response[i++];
-                    result[k].PlayerMaxCount = response[i++];
-                    result[k].PasswordProtected = response[i++] > 0;
-                    result[k].Creator = BigE.ReadSizePrefixedUTF8(response, ref i, 1);
-                }
-                return result;
-            }
-            else
-            {
-                //throw new DgmtProtocolException("Invalid message type. LOBBY_LIST was expected.");
-                Peer peer;
-                byte lol = StatusUpdateSync(response, out peer);
-                if (StatusUpdated != null) StatusUpdated(lol, peer);
-                goto Retry;
-            }
+            ServerResponse response = new ServerResponse(_socket_server, packet, length);
+            QueueResponse(response);
         }
 
-        byte JoinLobbySync(uint lobbyID, string pass, out byte clientID, out ulong sessionID, out Peer[] peers)
+        void Send_JoinLobby(uint lobbyID, string pass)
         {
             byte[] packet = Dgmt.ForgeNewPacket();
             int i = Dgmt.HEADER_LENGTH;
@@ -428,104 +285,25 @@ namespace MindTris
 
             int length = Dgmt.FinalizePacket(packet, i - Dgmt.HEADER_LENGTH);
 
-            //Send
-            _socket_server.Send(packet, 0, length, SocketFlags.None);
-
-            //Response
-            Retry:
-            byte[] response = ReceiveServerResponseContents();
-            if (response[0] != (byte)Dgmt.PacketID.JoinedLobby)
-            {
-                //throw new DgmtProtocolException("Invalid message type. JOINED_LOBBY was expected.");
-                Peer peer;
-                byte lol = StatusUpdateSync(response, out peer);
-                if (StatusUpdated != null) StatusUpdated(lol, peer);
-                goto Retry;
-            }
-            i = 1;
-            uint lobbyID2 = BigE.ReadInt32(response, ref i);
-            if (lobbyID != lobbyID2)
-            {
-                //[TODO] Faire quelque chose de witty
-            }
-            byte answer = response[i++];
-            if (answer == 0x00)
-            {
-                clientID = BigE.ReadByte(response, ref i);
-                _clientID = clientID;
-                sessionID = BigE.ReadInt64(response, ref i);
-                _sessionID = sessionID;
-                byte count = BigE.ReadByte(response, ref i);
-                peers = new Peer[count];
-                for (byte k = 0; k < count; k++)
-                {
-                    peers[k] = new Peer();
-                    peers[k].ID = BigE.ReadByte(response, ref i);
-                    peers[k].DisplayName = BigE.ReadSizePrefixedUTF8(response, ref i, 1);
-                    peers[k].IpAddress = BigE.ReadIPAddress(response, ref i);
-                    peers[k].Port = BigE.ReadInt16(response, ref i);
-                    peers[k].PublicKey = BigE.ReadPublicKey(packet, ref i); 
-                }
-                _lobby = new Lobby()
-                {
-                    Creator = "[Unknown]",
-                    ID = lobbyID,
-                    Name = "[Unknown]",
-                    PasswordProtected = !String.IsNullOrEmpty(pass),
-                    PlayerCount = (byte)(count + 1),
-                };
-            }
-            else
-            {
-                clientID = 0;
-                sessionID = 0;
-                peers = null;
-            }
-            return answer;
+            //Add to requests to grant
+            ClientRequestJoinLobby request = new ClientRequestJoinLobby(lobbyID, pass);
+            RegisterRequest(request);
+            //Send to server
+            ServerResponse response = new ServerResponse(_socket_server, packet, length);
+            QueueResponse(response);
         }
 
-        void LeaveLobbySync()
+        void Send_LeaveLobby()
         {
             byte[] packet = Dgmt.ForgeNewPacket();
             packet[Dgmt.HEADER_LENGTH] = (byte)Dgmt.PacketID.LeaveLobby;
             int length = Dgmt.FinalizePacket(packet, 1);
 
-            _socket_server.Send(packet, 0, length, SocketFlags.None);
+            ServerResponse response = new ServerResponse(_socket_server, packet, length);
+            QueueResponse(response);
         }
 
-        byte StatusUpdateSync(byte[] contents, out Peer peer)
-        {
-            int i = 0;
-            if (contents[i++] != (byte)Dgmt.PacketID.UpdateClientStatus)
-                throw new DgmtProtocolException("Expected UPDATE_CLIENT_STATUS.");
-            peer = new Peer();
-            byte answer = contents[i++];
-            peer.ID = contents[i++];
-            if (answer == 0x00)
-            {
-                peer.DisplayName = BigE.ReadSizePrefixedUTF8(contents, ref i, 1);
-                peer.IpAddress = BigE.ReadIPAddress(contents, ref i);
-                peer.Port = BigE.ReadInt16(contents, ref i);
-                peer.PublicKey = BigE.ReadPublicKey(contents, ref i);
-            }
-            return answer;
-        }
-
-        void CallbackConnect(IAsyncResult res)
-        {
-            string motd = HelloFromClient();
-            if (motd != null)
-            {
-                Console.WriteLine("Connected.");
-                if (Connected != null) Connected(motd);
-            }
-            else
-            {
-                //[TODO] Traiter l'erreur
-            }
-        }
-
-        string HelloFromClient()
+        void Send_HelloFromClient()
         {
             byte[] packet = Dgmt.ForgeNewPacket();
             int i = Dgmt.HEADER_LENGTH;
@@ -535,79 +313,15 @@ namespace MindTris
 
             //Sending
             Console.WriteLine("Sending...");
-            _socket_server.Send(packet, 0, length, SocketFlags.None);
+            ServerResponse response = new ServerResponse(_socket_server, packet, length);
+            QueueResponse(response);
             Console.WriteLine("Sent.");
-
-            //Receving
-            byte[] buffer = ReceiveServerResponseContents();
-            i = 1;
-            //End
-            switch (buffer[i])
-            {
-                case 0x00:
-                    Console.WriteLine("Connection success.");
-                    break;
-                case 0x01:
-                    Console.WriteLine("Connection failed. Wrong protocol version number.");
-                    break;
-                case 0x02:
-                    Console.WriteLine("Connection failed. Unknown error.");
-                    break;
-                default:
-                    Console.WriteLine("This was not supposed to happen, lol.");
-                    break;
-            }
-            if (buffer[i] == 0x00)
-            {
-                //Récupérer la public key du serveur
-                i++;
-                _server_public_key = BigE.ReadPublicKey(buffer, ref i);
-                _rsa_server.FromXmlString(_server_public_key);
-                string motd = BigE.ReadSizePrefixedUTF8(buffer, ref i, 2);
-                //update status
-                lock (_status)
-                {
-                    _status.Connected = 1;
-                }
-                Console.WriteLine("Connected:");
-                Console.WriteLine("Receiving MOTD...");
-                Console.WriteLine(motd);
-                return motd;
-            }
-            else return null;
-        }
-
-        byte[] ReceiveServerResponseContents()
-        {
-            byte[] buffer = new byte[Dgmt.HEADER_LENGTH];
-            int qte = 0;
-            while (qte < Dgmt.HEADER_LENGTH)
-            {
-                qte += _socket_server.Receive(buffer, qte, Dgmt.HEADER_LENGTH - qte, SocketFlags.None);
-            }
-            //Here, the header is complete
-            //Checks
-            //...
-            //Read la length
-            BigE.E(buffer, Dgmt.PROTOCOL_ID_LENGTH, Dgmt.PACKET_LENGTH_LENGTH);
-            ushort content_length = (ushort)(BitConverter.ToUInt16(buffer, Dgmt.PROTOCOL_ID_LENGTH) - Dgmt.HEADER_LENGTH);
-            //Continue receiving
-            buffer = new byte[content_length];
-            qte = 0;
-            while (qte < content_length)
-            {
-                qte += _socket_server.Receive(buffer, qte, content_length - qte, SocketFlags.None);
-            }
-            return buffer;
         }
 
         byte[] Encrypt(byte[] rgb)
         {
             return _rsa_server.Encrypt(rgb, true);
         }
-
-
-        //PEER2PEER
 
         //Client side
         public void ConnectPeer(Peer peer)
@@ -692,9 +406,6 @@ namespace MindTris
             Console.WriteLine("Binding...");
             _listener.Listen(MAX_CONNECTION_COUNT);
             Console.WriteLine("Listening...");
-
-            _main = new Thread(new ThreadStart(Listening));
-            _main.Start();
         }
 
         public void Stop()
@@ -705,7 +416,6 @@ namespace MindTris
             }
             _main.Abort();
         }
-
 
 
         void Welcoming()
@@ -748,8 +458,10 @@ namespace MindTris
         {
             while (true)
             {
-                Welcoming();
+                if (_listener.IsBound) Welcoming();
                 IList list = _users.Keys.ToList<Socket>();
+                //Add server socket to the list
+                list.Add(_user_server.Socket);
                 if (list.Count > 0)
                 {
                     //Select
@@ -771,7 +483,7 @@ namespace MindTris
         {
             foreach (Socket socket in sockets)
             {
-                User user = _users[socket];
+                User user = GetUserFromSocket(socket);
                 /*
                 if (user.Locked) continue;
                 user.Lock();
@@ -807,10 +519,10 @@ namespace MindTris
 
         void SendResponses()
         {
-            foreach (User user in _users.Values)
+            foreach (User user in _users.Values.Concat<User>(new List<User>(){ _user_server }))
             {
-                if (user.ResponsesPending.Count == 0) continue;
-                ServerResponse response = user.ResponsesPending.First.Value;
+                if (user.SendingPending.Count == 0) continue;
+                ServerResponse response = user.SendingPending.First.Value;
                 SocketError err;
                 int qte = response.Socket.Send(response.Packet, response.Offset, response.Length - response.Offset, SocketFlags.None, out err);
                 switch (err)
@@ -821,12 +533,15 @@ namespace MindTris
                 response.Offset += qte;
                 //If completed, remove the packet from pending responses
                 if (response.Offset >= response.Length)
-                    user.ResponsesPending.RemoveFirst();
+                    user.SendingPending.RemoveFirst();
             }
         }
 
         void ProcessPackets()
         {
+            //Server
+            ProcessServerPacket(_user_server);
+            //Peers
             foreach (User user in _users.Values)
             {
                 ProcessUserPacket(user);
@@ -860,10 +575,72 @@ namespace MindTris
                     switch ((Dgmt.PacketP2PID)id)
                     {
                         case Dgmt.PacketP2PID.HelloFromPeer:
-
+                            Process_HelloFromPeer(user, content_length);
                             break;
                         case Dgmt.PacketP2PID.ChatSend:
+                            Process_ChatSend(user, content_length);
+                            break;
+                        default:
+                            throw new NotImplementedException("Unknown message type, or the feature is not implemented yet.");
+                    }
+                }
+                //Update the window
+                user.Buffer.WindowStart += packet_length;
+                user.Buffer.WindowLength -= packet_length;
+            }
+            else
+            {
+                //Solution temporaire
+                DisconnectUser(user.Socket);
+            }
+        }
 
+        void ProcessServerPacket(User user)
+        {
+            //If the data do not even contain a full header, skip
+            if (user.Buffer.WindowLength < Dgmt.HEADER_LENGTH) return;
+            //Header check
+            byte[] minibuffer = user.Buffer.GetSubbufferCopy(0, Dgmt.HEADER_LENGTH);
+            if (Dgmt.DGMTCheck(minibuffer, 0))
+            {
+                Console.WriteLine("{0}: DGMT passed.", user.Socket.RemoteEndPoint);
+                int i = Dgmt.PROTOCOL_ID_LENGTH;
+                ushort packet_length = BigE.ReadInt16(minibuffer, ref i);
+                //If the whole packet has not been read yet, skip
+                if (user.Buffer.WindowLength < packet_length) return;
+                ushort content_length = (ushort)(packet_length - Dgmt.HEADER_LENGTH);
+                if (content_length <= 0)
+                {
+                    //It's a keep-alive, we update
+                    user.LastTimeSeen = DateTime.Now;
+                }
+                else
+                {
+                    //Grab the message type
+                    byte id = user.Buffer[Dgmt.PROTOCOL_ID_LENGTH + Dgmt.PACKET_LENGTH_LENGTH];
+                    //Process accordingly
+                    switch ((Dgmt.PacketID)id)
+                    {
+                        case Dgmt.PacketID.HelloFromServer:
+                            Process_HelloFromServer(user, content_length);
+                            break;
+                        case Dgmt.PacketID.UserCreation:
+                            Process_CreateUser(user, content_length);
+                            break;
+                        case Dgmt.PacketID.LoginReply:
+                            Process_Login(user, content_length);
+                            break;
+                        case Dgmt.PacketID.LobbyCreation:
+                            Process_CreateLobby(user, content_length);
+                            break;
+                        case Dgmt.PacketID.LobbyList:
+                            Process_RetrieveLobbyList(user, content_length);
+                            break;
+                        case Dgmt.PacketID.JoinedLobby:
+                            Process_JoinLobby(user, content_length);
+                            break;
+                        case Dgmt.PacketID.UpdateClientStatus:
+                            Process_UpdateClientStatus(user, content_length);
                             break;
                         default:
                             throw new NotImplementedException("Unknown message type, or the feature is not implemented yet.");
@@ -913,10 +690,26 @@ namespace MindTris
             }
         }
 
+        User GetUserFromSocket(Socket socket)
+        {
+            if (Object.ReferenceEquals(_socket_server, socket))
+            {
+                //Server
+                return _user_server;
+            }
+                //Peer
+            else return _users[socket];
+        }
+
         void QueueResponse(ServerResponse response)
         {
-            User user = _users[response.Socket];
-            user.ResponsesPending.AddLast(response);
+            User user = GetUserFromSocket(response.Socket);
+            user.SendingPending.AddLast(response);
+        }
+
+        void RegisterRequest(ClientRequest request)
+        {
+            _requests_to_grant.AddLast(request);
         }
 
         //Process Packets from peers
@@ -962,6 +755,204 @@ namespace MindTris
             }
         }
 
+        //Process Packets from server
+
+        void Process_HelloFromServer(User user, int content_length)
+        {
+            int i = Dgmt.HEADER_LENGTH;
+            byte[] response = user.Buffer.GetSubbufferCopy(i, content_length);
+            i = 1;
+            //End
+            switch (response[i])
+            {
+                case 0x00:
+                    Console.WriteLine("Connection success.");
+                    break;
+                case 0x01:
+                    Console.WriteLine("Connection failed. Wrong protocol version number.");
+                    break;
+                case 0x02:
+                    Console.WriteLine("Connection failed. Unknown error.");
+                    break;
+                default:
+                    Console.WriteLine("This was not supposed to happen, lol.");
+                    break;
+            }
+            string motd;
+            if (response[i] == 0x00)
+            {
+                //Récupérer la public key du serveur
+                i++;
+                _server_public_key = BigE.ReadPublicKey(response, ref i);
+                _rsa_server.FromXmlString(_server_public_key);
+                motd = BigE.ReadSizePrefixedUTF8(response, ref i, 2);
+                //update status
+                _status.Connected = 1;
+                Console.WriteLine("Connected:");
+                Console.WriteLine("Receiving MOTD...");
+                Console.WriteLine(motd);
+            }
+            else motd = "";
+            
+            if (Connected != null) Connected(motd);
+        }
+
+        void Process_CreateUser(User user, int content_length)
+        {
+            int i = Dgmt.HEADER_LENGTH;
+            byte[] response = user.Buffer.GetSubbufferCopy(i, content_length);
+            byte res = response[1];
+            if (UserCreated != null) UserCreated(res);
+        }
+
+        void Process_Login(User user, int content_length)
+        {
+            string displayed_username = "";
+            int i = Dgmt.HEADER_LENGTH;
+            byte[] response = user.Buffer.GetSubbufferCopy(i, content_length);
+            if (response[1] == 0x00)
+            {
+                i = 2;
+                displayed_username = BigE.ReadSizePrefixedUTF8(response, ref i, 1);
+                //update le status
+                _status.Logged_on = 1;
+                _status.User = _login;
+            }
+            if (LoggedOn != null) LoggedOn(response[1], displayed_username);
+        }
+
+        void Process_CreateLobby(User user, int content_length)
+        {
+            int i = Dgmt.HEADER_LENGTH;
+            byte[] response = user.Buffer.GetSubbufferCopy(i, content_length);
+            i = 1;
+            uint lobbyID;
+            ulong sessionID;
+            byte answer = BigE.ReadByte(response, ref i);
+            if (answer == 0x00)
+            {
+                lobbyID = BigE.ReadInt32(response, ref i);
+                sessionID = BigE.ReadInt64(response, ref i);
+            }
+            else
+            {
+                lobbyID = 0;
+                sessionID = 0;
+            }
+            if (LobbyCreated != null) LobbyCreated(answer, lobbyID, sessionID);
+        }
+
+        void Process_RetrieveLobbyList(User user, int content_length)
+        {
+            int i = Dgmt.HEADER_LENGTH;
+            byte[] response = user.Buffer.GetSubbufferCopy(i, content_length);
+            i = 1;
+            int count = BigE.ReadByte(response, ref i);
+            Lobby[] result = new Lobby[count];
+            for (int k = 0; k < count; k++)
+            {
+                result[k] = new Lobby();
+                //Ensuring BigE
+                result[k].ID = BigE.ReadInt32(response, ref i);
+                result[k].Name = BigE.ReadSizePrefixedUTF8(response, ref i, 1);
+                result[k].PlayerCount = BigE.ReadByte(response, ref i);
+                result[k].PlayerMaxCount = BigE.ReadByte(response, ref i);
+                result[k].PasswordProtected = BigE.ReadBool(response, ref i);
+                result[k].Creator = BigE.ReadSizePrefixedUTF8(response, ref i, 1);
+            }
+            if (LobbiesRetrieved != null) LobbiesRetrieved(result);
+        }
+
+        void Process_JoinLobby(User user, int content_length)
+        {
+            int i = Dgmt.HEADER_LENGTH;
+            byte[] response = user.Buffer.GetSubbufferCopy(i, content_length);
+            i = 1;
+            uint lobbyID = BigE.ReadInt32(response, ref i);
+            //Find the matching request in the registered requests
+            ClientRequestJoinLobby request = null;
+            foreach (ClientRequest request2 in _requests_to_grant)
+            {
+                if (request2 is ClientRequestJoinLobby)
+                {
+                    request = (ClientRequestJoinLobby)request2;
+                    break;
+                }
+            }
+            if (request == null)
+            {
+                //If a JoinLobby request has never been sent, just skip this
+                return;
+            }
+            else _requests_to_grant.Remove(request);
+            if (request.LobbyID != lobbyID)
+            {
+                //[TODO]Comment on fait si on avait demandé un autre lobby ? Wtf?
+            }
+            byte answer = BigE.ReadByte(response, ref i);
+            Peer[] peers;
+            if (answer == 0x00)
+            {
+                _clientID = BigE.ReadByte(response, ref i);
+                _sessionID = BigE.ReadInt64(response, ref i);
+                byte count = BigE.ReadByte(response, ref i);
+                peers = new Peer[count];
+                for (byte k = 0; k < count; k++)
+                {
+                    peers[k] = new Peer();
+                    peers[k].ID = BigE.ReadByte(response, ref i);
+                    peers[k].DisplayName = BigE.ReadSizePrefixedUTF8(response, ref i, 1);
+                    peers[k].IpAddress = BigE.ReadIPAddress(response, ref i);
+                    peers[k].Port = BigE.ReadInt16(response, ref i);
+                    peers[k].PublicKey = BigE.ReadPublicKey(response, ref i);
+                }
+                _lobby = new Lobby()
+                {
+                    Creator = "[Unknown]",
+                    ID = lobbyID,
+                    Name = "[Unknown]",
+                    PasswordProtected = !String.IsNullOrEmpty(request.Pass),
+                    PlayerCount = (byte)(count + 1),
+                };
+                //Add to the list of peers who will connect later on
+                foreach (Peer peer in peers)
+                {
+                    _remaining_unseen_peers.Add(peer.ID, peer);
+                }
+            }
+            else
+            {
+                _clientID = 0;
+                _sessionID = 0;
+                peers = null;
+            }
+            if (LobbyJoined != null) LobbyJoined(answer, _clientID, _sessionID, peers);
+        }
+
+        void Process_UpdateClientStatus(User user, int content_length)
+        {
+            int i = Dgmt.HEADER_LENGTH;
+            byte[] response = user.Buffer.GetSubbufferCopy(i, content_length);
+            i = 1;
+            Peer peer = new Peer();
+            uint lobbyID = BigE.ReadInt32(response, ref i);
+            peer.ID = BigE.ReadByte(response, ref i);
+            byte answer = BigE.ReadByte(response, ref i);
+            if (answer == 0x00)
+            {
+                peer.DisplayName = BigE.ReadSizePrefixedUTF8(response, ref i, 1);
+                peer.IpAddress = BigE.ReadIPAddress(response, ref i);
+                peer.Port = BigE.ReadInt16(response, ref i);
+                peer.PublicKey = BigE.ReadPublicKey(response, ref i);
+            }
+            if (StatusUpdated != null) StatusUpdated(answer, peer);
+            if (peer.ID == _clientID)
+            {
+                //[TOCHECK] On fire les 2 events pour l'instant
+                if (LobbyLeft != null) LobbyLeft();
+            }
+        }
+
         //Send Packets to peers
         void Send_HelloFromPeer(User user)
         {
@@ -973,7 +964,8 @@ namespace MindTris
             int length = Dgmt.FinalizePacket(packet, i - Dgmt.HEADER_LENGTH);
 
             //Send
-            user.Socket.Send(packet, 0, length, SocketFlags.None);
+            ServerResponse response = new ServerResponse(user.Socket, packet, length);
+            QueueResponse(response);
         }
 
         void Send_ChatSend(User user, string message)
@@ -986,7 +978,8 @@ namespace MindTris
             int length = Dgmt.FinalizePacket(packet, i - Dgmt.HEADER_LENGTH);
 
             //Send
-            user.Socket.Send(packet, 0, length, SocketFlags.None);
+            ServerResponse response = new ServerResponse(user.Socket, packet, length);
+            QueueResponse(response);
         }
     }
 }

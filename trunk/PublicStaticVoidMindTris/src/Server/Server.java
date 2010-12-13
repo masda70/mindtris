@@ -49,7 +49,7 @@ public class Server extends Thread {
 			e.printStackTrace();
 		}
 		
-		/* connect to the sql db *
+		/* connect to the sql db * /
 	    try {
 	    	String driverName = "org.gjt.mm.mysql.Driver";
 			Class.forName(driverName);

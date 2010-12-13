@@ -9,6 +9,8 @@ import java.security.PublicKey;
 import java.security.spec.InvalidKeySpecException;
 import java.security.spec.RSAPublicKeySpec;
 
+import com.sun.org.apache.xml.internal.security.utils.Base64;
+
 import IO.*;
 
 public class RSAKey implements Serializable, Encodable {
@@ -27,6 +29,7 @@ public class RSAKey implements Serializable, Encodable {
 		try {
 			KeyFactory fact = KeyFactory.getInstance("RSA");
 			RSAPublicKeySpec spec = fact.getKeySpec(_k, RSAPublicKeySpec.class);
+			
 			_mod = spec.getModulus().toByteArray();
 			_exp = spec.getPublicExponent().toByteArray();
 		} catch ( NoSuchAlgorithmException e ) {

@@ -42,9 +42,13 @@ public class RSAKey implements Serializable, Encodable {
 	public RSAKey ( InData in ) throws IOException {
 		try {
 			int modLen = in.readUnsignedShort();
-			_mod = new byte[modLen];
-			in.readFully(_mod);
-
+			// TODO DEBUG
+			byte[] debugMod = new byte[modLen];
+			in.readFully(debugMod);
+			_mod = new byte[1+modLen];
+			_mod[0] = 0x00;
+			System.arraycopy(debugMod, 0, _mod, 1, modLen);
+			
 			int expLen = in.readUnsignedByte();
 			_exp = new byte[expLen];
 			in.readFully(_exp);
@@ -64,14 +68,18 @@ public class RSAKey implements Serializable, Encodable {
 
 	////// ENCODING //////
 	public void toBytes ( OutData out ) throws IOException {
-		out.writeShort(_mod.length);
-		out.write(_mod);
+		out.writeShort(_mod.length - 1);
+		// TODO DEBUG
+		byte[] modDebug = new byte[_mod.length - 1];
+		System.arraycopy(_mod, 1, modDebug, 0, _mod.length-1);
+		out.write(modDebug);
 		out.writeByte(_exp.length);
 		out.write(_exp);
 	}
 
 	public int len () {
-		return 2 + _mod.length + 1 + _exp.length;
+		// TODO DEBUG
+		return 2 + _mod.length -1 + 1 + _exp.length;
 	}
 
 	////// PUBLIC METHODS //////

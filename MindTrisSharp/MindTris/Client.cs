@@ -364,6 +364,7 @@ namespace MindTris
                         lock (_players) { _players.Add(user, player); }
                         //On envoie l'HelloFromPeer
                         Send_HelloFromPeer(user);
+                        user.UserStatus.Logged_on = 1;
                         if (PeerHandshaken != null) PeerHandshaken(peer);
                     }
                     else

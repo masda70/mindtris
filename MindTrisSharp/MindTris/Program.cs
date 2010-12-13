@@ -6,6 +6,7 @@ using MindTrisCore;
 using System.Threading;
 using ZenithMFramework;
 using System.Net;
+using System.Security.Cryptography;
 
 namespace MindTris
 {
@@ -37,8 +38,37 @@ namespace MindTris
         static string _email = "zenithm@lolzorz1337.org";
         static ushort _port;
 
+        public static byte[] StringToByteArray(string hex)
+        {
+            return Enumerable.Range(0, hex.Length).
+                   Where(x => 0 == x % 2).
+                   Select(x => Convert.ToByte(hex.Substring(x, 2), 16)).
+                   ToArray();
+        }
+
         static void Main(string[] args)
         {
+            string keys_0 = "<RSAKeyValue><Modulus>kVPEnS5vVgdySMJGDHLdBg+mPjB8FVx82tZWSHwY9PwFeXntZJ1pdal+L10ScdgHrj8kduz2x3FwgYQbuRy1SwhEI1Tia6rsCd1Asxl20ZhsllRXO4YprkuPCAWtro7xwSDpscr5OYV1oVnxwqbY9E5KyaVtHiFusdh8X+PuQO0=</Modulus><Exponent>AQAB</Exponent><P>xfje5exXOw239RbMU0e0dMEQfihCwtJQ9IlmGIp33HAHcbAhT/SDDPiZtXeRZhZiPJUUHEE+5PmqUgm+gRTFCQ==</P><Q>u+ybpZkyl8NiYgZyWUbYCR706J9ZausHlTKFpjKp6VtuvFgIf/Y9pLAqeQX78T9UuqB+Kr0WtGVJKfGHDf7ZxQ==</Q><DP>YlHrQX1TBT0W813TNDkUYjfQHReZsHALTKdAUUfTp2LsD4ZNxQvGWhbNH9a2G2FagIP5bN7qgYWNFRlJx4mtIQ==</DP><DQ>OGNx/MmwTauaDNHkY/eHAY2hbV/LQ/LMLq+fPNR8+YGvA6LiwgrQSmd2BySNicE4GlvoH8jnVDAEOSq5HLD5BQ==</DQ><InverseQ>hE4FodZRhsiee+AtJlNmci+EGce3jWHfNAKLB+bBCN5udVrHLPkgvQkh5oOTjDe/0/NXpa/yyN9F/4etR88ASw==</InverseQ><D>YF6fO+gl9nN7qpoBn5Gv1awc/pJiRjwNo4SMtQZt+k8BRlu/O4BTBa5+uePLLmkmNrsycBaVUw57n7c+NxO9d+M99EmLaUxIGFvoOPVbVS/U1Opj2jPlqzybxN2Z+JIO7ZaATg8Cuscgy+1b41o12kBcFlpttlbbsc1f41kvnmE=</D></RSAKeyValue>";
+            string keys_1 = "<RSAKeyValue><Modulus>kVPEnS5vVgdySMJGDHLdBg+mPjB8FVx82tZWSHwY9PwFeXntZJ1pdal+L10ScdgHrj8kduz2x3FwgYQbuRy1SwhEI1Tia6rsCd1Asxl20ZhsllRXO4YprkuPCAWtro7xwSDpscr5OYV1oVnxwqbY9E5KyaVtHiFusdh8X+PuQO0=</Modulus><Exponent>AQAB</Exponent></RSAKeyValue>";
+            string msg = "Est-ce que ca marche vraiment lolilol";
+            RSACryptoServiceProvider p = new RSACryptoServiceProvider();
+            p.FromXmlString(keys_1);
+            byte[] lol = p.Encrypt(Encoding.ASCII.GetBytes(msg), true);
+            string base64 = System.Convert.ToBase64String(lol);
+            base64.ToString();
+
+            p = new RSACryptoServiceProvider();
+            p.FromXmlString(keys_0);
+            //PAR DAVID base64 = "Mw+Cd7j27tvL36DH7jgfjrhGHK8eJc2XEXIkuwGpOruvLRdrkhEo/houQaJ9Qy5Zkxu7MWNIcQAJtyH4DWG9wa4QctdlCFR6aZ/2ryTuUz4YcQGFijjkllQ331m3u+YRM+YMOGset9h8FxRqqtcpJWK7MjJUh18agjzUlRuDK3A=";
+            //PAR Emile base64 = "Qh+V7nIpPZE5kLazNG0xmU4WnjAdjLugxIoN3B+MJpOrPRi9ClpK85kHFtT1y3kC0x/Z0UqkpB7valjIHspg/oZy82afey6h0zseE6EdT0Hgfc2TsXsifF4J2zDYijjkt1Qifny3Lo3mwSQXJ7P8k5Gy/CkXqhekbAovJU3T1K0=";
+            base64 = "PTKla7xLGPlxvi/LZ+nXjjhzzBW4ftt7p0QVXz4uGpsTX7vURbC9sMm41l68bF86H4k/R408RVV4vlTXFVmGZCmBCsrsD118D+7a62JILLk9V7L2/MhIEeeaAIOugtwfQCdR5C7hWmkT5831buhd59Q78c7UMVIIdbEqnMIcK6E=";
+            byte[] rgb = System.Convert.FromBase64String(base64);
+            byte[] decrypted = p.Decrypt(rgb, true);
+            msg = Encoding.ASCII.GetString(decrypted);
+            msg.ToString();
+
+
+
 			if (args.Length > 0)
 			{
 				_ip_server = args[0];
@@ -158,6 +188,8 @@ namespace MindTris
                 }
                 ConsoleMenu menu = new ConsoleMenu("Lobbies", lobbies_name);
                 int choix = menu.Show();
+                //D'abord, on start le listening
+                _client.StartListening(IPAddress.Any, _port);
                 _client.JoinLobby((uint)(choix + 1), "");
             }
             else
@@ -177,6 +209,7 @@ namespace MindTris
 
         static void _client_LobbyCreated(byte response, uint lobbyID, ulong sessionID)
         {
+            //D'abord, on start le listening
             _client.StartListening(IPAddress.Any, _port);
             _client.JoinLobby(lobbyID, "");
         }

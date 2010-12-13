@@ -18,8 +18,8 @@ public class MsgHandler<C extends Channel> extends Thread {
 	}
 
 	public void run () {
-		while( ! _stop ) {
-			try {
+		try {
+			while( ! _stop ) {
 				Msg m = _ch.read();
 				int type = m._type;
 				InData in = m._in;
@@ -27,9 +27,9 @@ public class MsgHandler<C extends Channel> extends Thread {
 				Handler<C> hdl = _handlers.get(type);
 				if( hdl != null ) hdl.handle(in, _ch);
 				else System.out.println("No handler for type "+type);				
-			} catch (IOException e) {
-				e.printStackTrace();
 			}
+		} catch (IOException e) {
+			e.printStackTrace();
 		}
 	}
 	

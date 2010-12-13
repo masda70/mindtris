@@ -13,6 +13,8 @@ import java.util.Map.Entry;
 import javax.crypto.Cipher;
 import javax.crypto.NoSuchPaddingException;
 
+import org.bouncycastle.jce.provider.BouncyCastleProvider;
+
 public class Server extends Thread {
 	////// STATIC //////
 	public static final short PORT = 1337+42;
@@ -38,14 +40,18 @@ public class Server extends Thread {
 			gen.initialize(Crypted.KEY_LEN);
 			KeyPair keyPair = gen.generateKeyPair();
 			_publicKey = new RSAKey( keyPair.getPublic() );
-						
-			_decrypter = Cipher.getInstance(Crypted.CRYPT_SCHEME);
+
+			Security.addProvider(new BouncyCastleProvider());
+			_decrypter = Cipher.getInstance(Crypted.CRYPT_SCHEME, Crypted.PROVIDER);
 			_decrypter.init(Cipher.DECRYPT_MODE, keyPair.getPrivate());
 		} catch (NoSuchAlgorithmException e) {
 			e.printStackTrace();
 		} catch (InvalidKeyException e) {
 			e.printStackTrace();
 		} catch (NoSuchPaddingException e) {
+			e.printStackTrace();
+		} catch (NoSuchProviderException e) {
+			// TODO Auto-generated catch block
 			e.printStackTrace();
 		}
 		

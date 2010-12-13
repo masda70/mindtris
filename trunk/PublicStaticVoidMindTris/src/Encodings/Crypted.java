@@ -8,10 +8,12 @@ import javax.crypto.Cipher;
 import javax.crypto.IllegalBlockSizeException;
 
 import IO.*;
+import org.bouncycastle.jce.provider.BouncyCastleProvider;
 
 public class Crypted implements Serializable, Encodable {
 	////// STATIC //////
-	public static final String CRYPT_SCHEME = "RSA/ECB/OAEPwithSHA1andMGF1Padding";
+	public static final String CRYPT_SCHEME = "RSA/NONE/OAEPwithSHA1andMGF1Padding";
+    public static final String PROVIDER = BouncyCastleProvider.PROVIDER_NAME;
 	public static final short KEY_LEN = 1024;
 	private static final long serialVersionUID = 1L;
 	

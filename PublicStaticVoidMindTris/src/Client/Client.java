@@ -258,7 +258,7 @@ public class Client {
 				
 				try {
 					RSAKey encodedKey = new RSAKey(in);
-					_srvCrypter = Cipher.getInstance(Crypted.CRYPT_SCHEME);
+					_srvCrypter = Cipher.getInstance(Crypted.CRYPT_SCHEME, Crypted.PROVIDER);
 					_srvCrypter.init(Cipher.ENCRYPT_MODE, encodedKey.getKey());
 					
 					debug("receive server public key");

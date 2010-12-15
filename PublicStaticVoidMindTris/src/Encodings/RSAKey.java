@@ -9,12 +9,11 @@ import java.security.PublicKey;
 import java.security.spec.InvalidKeySpecException;
 import java.security.spec.RSAPublicKeySpec;
 
-import com.sun.org.apache.xml.internal.security.utils.Base64;
-
 import IO.*;
 
 public class RSAKey implements Serializable, Encodable {
 	////// STATIC //////
+	public static RSAKey nullKey = new RSAKey ();
 	private static final long serialVersionUID = 1L;
 	
 	////// FIELDS //////
@@ -66,6 +65,11 @@ public class RSAKey implements Serializable, Encodable {
 		}
 	}
 
+	private RSAKey () {
+		_mod = new byte[0];
+		_exp = new byte[0];
+	}
+	
 	////// ENCODING //////
 	public void toBytes ( OutData out ) throws IOException {
 		out.writeShort(_mod.length - 1);

@@ -13,8 +13,6 @@ import java.util.Map.Entry;
 import javax.crypto.Cipher;
 import javax.crypto.NoSuchPaddingException;
 
-import org.bouncycastle.jce.provider.BouncyCastleProvider;
-
 public class Server extends Thread {
 	////// STATIC //////
 	public static final short PORT = 1337+42;
@@ -40,9 +38,9 @@ public class Server extends Thread {
 			gen.initialize(Crypted.KEY_LEN);
 			KeyPair keyPair = gen.generateKeyPair();
 			_publicKey = new RSAKey( keyPair.getPublic() );
-
-			Security.addProvider(new BouncyCastleProvider());
-			_decrypter = Cipher.getInstance(Crypted.CRYPT_SCHEME, Crypted.PROVIDER);
+			
+//			Security.addProvider(new BouncyCastleProvider());
+			_decrypter = Cipher.getInstance(Crypted.CRYPT_SCHEME);
 			_decrypter.init(Cipher.DECRYPT_MODE, keyPair.getPrivate());
 		} catch (NoSuchAlgorithmException e) {
 			e.printStackTrace();
@@ -50,9 +48,9 @@ public class Server extends Thread {
 			e.printStackTrace();
 		} catch (NoSuchPaddingException e) {
 			e.printStackTrace();
-		} catch (NoSuchProviderException e) {
-			// TODO Auto-generated catch block
-			e.printStackTrace();
+//		} catch (NoSuchProviderException e) {
+//			// TODO Auto-generated catch block
+//			e.printStackTrace();
 		}
 		
 		/* connect to the sql db * /
@@ -131,7 +129,15 @@ public class Server extends Thread {
 				ch.sendMsg();
 			} else {
 				debug("Wrong protocol version");
-				ch.send(MsgCltSrv.S_HELLO, new byte[]{0x01, 0x00});
+				Channel.debug(protocolVersion);
+				
+				UString msg = new UString("Owned nood !");
+				ch.createMsg(MsgCltSrv.S_HELLO, 1+RSAKey.nullKey.len()+2+msg.len());
+				ch.msg().writeByte(0X01);
+				ch.msg().write(RSAKey.nullKey);
+				ch.msg().writeShort(msg.len());
+				ch.msg().write(msg);
+				ch.sendMsg();
 			}
 		}
 	}

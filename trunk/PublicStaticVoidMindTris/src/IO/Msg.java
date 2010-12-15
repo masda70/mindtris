@@ -6,7 +6,7 @@ import java.util.Arrays;
 
 public abstract class Msg {
 	////// STATIC //////
-	public static final byte[] protocolVersion = {0,0,0,0};//{1,2,0,1};
+	public static final byte[] protocolVersion = {1,2,0,3};
 	
 	////// FIELDS //////
 	public int _type;

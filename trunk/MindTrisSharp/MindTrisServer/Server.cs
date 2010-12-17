@@ -221,7 +221,6 @@ namespace MindTrisServer
             byte[] minibuffer = user.Buffer.GetSubbufferCopy(0, Dgmt.HEADER_LENGTH);
             if (Dgmt.DGMTCheck(minibuffer, 0))
             {
-                Console.WriteLine("{0}: DGMT passed.", user.Socket.RemoteEndPoint);
                 //On assure l'endianness
                 BigE.E(minibuffer, Dgmt.PROTOCOL_ID_LENGTH, Dgmt.PACKET_LENGTH_LENGTH);
                 //Attention, dépend du protocole : sizeof(ushort) == PACKET_LENGTH_LENGTH
@@ -272,22 +271,23 @@ namespace MindTrisServer
             }
             else
             {
+                Console.WriteLine("{0}: DGMT failed, user will be disconnected.", user.Socket.RemoteEndPoint);
                 //[TOCHECK] Je fais quoi là ?
                 Response_HelloFromServer(user, 0x02);
+                DisconnectUser(user.Socket);
             }
         }
 
         void Process_HelloFromClient(User user, int content_length)
         {
-            if (user.UserStatus.Connected == 0 && content_length == Dgmt.PROTOCOL_VERSION_LENGTH + 1)
+            if (!user.UserStatus.Connected && content_length == Dgmt.PROTOCOL_VERSION_LENGTH + 1)
             {
                 Console.WriteLine("{0}: HelloFromClient passed.", user.Socket.RemoteEndPoint);
                 //On vérifie la version du protocole
                 int i = Dgmt.HEADER_LENGTH + 1;
                 byte[] minibuffer = user.Buffer.GetSubbufferCopy(i, content_length - 1);
                 Console.WriteLine("{0}: Version number #{1}", user.Socket.RemoteEndPoint, BitConverter.ToUInt32(minibuffer, 0));
-                BigE.E(minibuffer, 0, Dgmt.PROTOCOL_VERSION_LENGTH);
-                if (BitConverter.ToUInt32(minibuffer, 0) == Dgmt.VERSION)
+                if (minibuffer[0] == Dgmt.VERSION[0] && minibuffer[1] == Dgmt.VERSION[1] && minibuffer[2] == Dgmt.VERSION[2] && minibuffer[3] == Dgmt.VERSION[3])
                 {
                     //Connection success
                     Response_HelloFromServer(user, 0x00);
@@ -302,7 +302,7 @@ namespace MindTrisServer
 
         void Process_CreateUser(User user, int content_length)
         {
-            if (user.UserStatus.Connected == 1 && user.UserStatus.Logged_on == 0)
+            if (user.UserStatus.Connected && !user.UserStatus.Logged_on)
             {
                 Console.WriteLine("{0}: Attempting user creation.", user.Socket.RemoteEndPoint);
                 int i = Dgmt.HEADER_LENGTH;
@@ -345,15 +345,15 @@ namespace MindTrisServer
 
         void Process_Login(User user, int content_length)
         {
-            if (user.UserStatus.Connected == 1 && user.UserStatus.Logged_on == 0)
+            if (user.UserStatus.Connected && !user.UserStatus.Logged_on)
             {
                 Console.WriteLine("{0}: Logging in.", user.Socket.RemoteEndPoint);
-                int i = Dgmt.HEADER_LENGTH + 1;
-                byte[] rgb = user.Buffer.GetSubbufferCopy(i, content_length - 1);
-                i = 0;
-                byte[] plain = Decrypt(rgb);
-                string username = BigE.ReadSizePrefixedUTF8(plain, ref i, 1);
-                string pass = BigE.ReadSizePrefixedASCII(plain, ref i, 1);
+                int i = Dgmt.HEADER_LENGTH;
+                byte[] packet = user.Buffer.GetSubbufferCopy(i, content_length);
+                i = 1;
+                string username = BigE.ReadSizePrefixedUTF8(packet, ref i, 1);
+                byte[] rgb = BigE.ReadSizePrefixedRawBytes(packet, ref i, 2);
+                string pass = Encoding.ASCII.GetString(Decrypt(rgb));
                 //Check
                 if (_accounts.ContainsKey(username))
                 {
@@ -361,7 +361,7 @@ namespace MindTrisServer
                     if (pass == account.Password)
                     {
                         _logged_users.Add(user, account);
-                        user.UserStatus.Logged_on = 1;
+                        user.UserStatus.Logged_on = true;
                         user.UserStatus.User = username;
                         Response_Login(user, 0x00, account.DisplayedName);
                     }
@@ -382,7 +382,7 @@ namespace MindTrisServer
         }
         void Process_CreateLobby(User user, int content_length)
         {
-            if (user.UserStatus.Connected == 1)
+            if (user.UserStatus.Connected)
             {
                 Console.WriteLine("{0}: Creating lobby.", user.Socket.RemoteEndPoint);
                 int i = Dgmt.HEADER_LENGTH;
@@ -402,17 +402,15 @@ namespace MindTrisServer
                 lobby.PasswordProtected = BigE.ReadBool(packet, ref i);
                 if (lobby.PasswordProtected)
                 {
-                    byte[] rgb_pass = BigE.ReadRawBytes(packet, ref i, content_length - i);
+                    byte[] rgb_pass = BigE.ReadSizePrefixedRawBytes(packet, ref i, 2);
                     byte[] pass = Decrypt(rgb_pass);
-                    i = 0;
+                    lobby.Password = Encoding.ASCII.GetString(pass);
                     if (!Regex.IsMatch(lobby.Password, Dgmt.REGEX_PASSWORD))
                     {
                         Response_CreateLobby(user, 0x01, lobby);
                         return;
                     }
-                    lobby.Password = BigE.ReadSizePrefixedASCII(pass, ref i, 1);
                 }
-                else lobby.Password = "";
                 lobby.ID = (uint)id;
                 lobby.Players = new LinkedList<PeerServer>();
                 byte[] uint64 = new byte[8];
@@ -420,6 +418,17 @@ namespace MindTrisServer
                 lobby.SessionID = BitConverter.ToUInt64(uint64, 0);
                 lobby.Creator = _logged_users[user].DisplayedName;
                 lobby.UserCreator = user;
+                //We connect the creator to its own lobby
+                user.Port = BigE.ReadInt16(packet, ref i);
+                user.PublicKey = BigE.ReadDSAPublicKey(packet, ref i);
+                PeerServer player = new PeerServer(lobby, user, user.UserStatus.User);
+                lobby.Players.AddLast(player);
+                lobby.PlayerCount++;
+                user.UserStatus.Lobby_id = lobby.ID;
+                user.UserStatus.Creator_lobby_id = lobby.ID;
+                user.UserStatus.Peer_id = player.ID;
+                user.UserStatus.Session_id = lobby.SessionID;
+                lobby.CreatorPeerID = player.ID;
 
                 //Add lobby
                 _lobbies[id] = lobby;
@@ -437,7 +446,7 @@ namespace MindTrisServer
 
         void Process_JoinLobby(User user, int content_length)
         {
-            if (user.UserStatus.Connected == 1)
+            if (user.UserStatus.Connected)
             {
                 Console.WriteLine("{0}: Joining lobby.", user.Socket.RemoteEndPoint);
                 int i = Dgmt.HEADER_LENGTH;
@@ -447,7 +456,7 @@ namespace MindTrisServer
                 uint lobby_id = BigE.ReadInt32(packet, ref i);
                 string pass = BigE.ReadSizePrefixedASCII(packet, ref i, 1);
                 user.Port = BigE.ReadInt16(packet, ref i);
-                user.PublicKey = BigE.ReadPublicKey(packet, ref i);
+                user.PublicKey = BigE.ReadDSAPublicKey(packet, ref i);
 
                 //Process
                 if (lobby_id > MAX_LOBBIES_COUNT
@@ -455,7 +464,7 @@ namespace MindTrisServer
                     || (_lobbies[lobby_id].PasswordProtected && _lobbies[lobby_id].Password != pass))
                 {
                     //If ID is invalid, unallocated or password doesn't match
-                    Response_JoinLobby(user, 0x01, 0, 0, 0, null);
+                    Response_JoinLobby(user, 0x01, lobby_id, null, 0);
                     return;
                 }
 
@@ -463,7 +472,7 @@ namespace MindTrisServer
                 if (lobby.PlayerCount >= lobby.PlayerMaxCount)
                 {
                     //Lobby is full
-                    Response_JoinLobby(user, 0x02, 0, 0, 0, null);
+                    Response_JoinLobby(user, 0x02, lobby_id, null, 0);
                     return;
                 }
                 //User has the right password and there is room for him, go for it
@@ -476,18 +485,20 @@ namespace MindTrisServer
                 lobby.Players.AddLast(player);
                 lobby.PlayerCount++;
                 //Update status
-                user.UserStatus.Lobby = lobby.ID;
+                user.UserStatus.Lobby_id = lobby.ID;
+                user.UserStatus.Peer_id = player.ID;
+                user.UserStatus.Session_id = lobby.SessionID;
                 //Send response
-                Response_JoinLobby(user, 0x00, lobby.ID, player.ID, lobby.SessionID, peers);
+                Response_JoinLobby(user, 0x00, lobby.ID, lobby, player.ID);
             }
         }
 
         void Process_LeaveLobby(User user, int content_length)
         {
-            if (user.UserStatus.Lobby > 0)
+            if (user.UserStatus.Lobby_id != null)
             {
                 Console.WriteLine("{0}: Has left lobby.", user.Socket.RemoteEndPoint);
-                LobbyServer lobby = _lobbies[user.UserStatus.Lobby];
+                LobbyServer lobby = _lobbies[(uint)user.UserStatus.Lobby_id];
                 PeerServer peer = null;
                 foreach (PeerServer peerouze in lobby.Players)
                 {
@@ -498,15 +509,17 @@ namespace MindTrisServer
                     }
                 }
                 Debug.Assert(peer != null);
-                //Removing peer
-                lobby.Players.Remove(peer);
-                lobby.PlayerCount--;
                 //Update user status
-                user.UserStatus.Am_playing = 0;
-                user.UserStatus.Lobby = 0;
+                user.UserStatus.Am_playing = false;
+                user.UserStatus.Lobby_id = null;
+                user.UserStatus.Peer_id = null;
+                user.UserStatus.Session_id = null;
 
                 //Updates peer
                 Response_UpdateClientLobbyStatus(user, peer.ID, 0x01, peer, lobby.Players);
+                //Removing peer
+                lobby.Players.Remove(peer);
+                lobby.PlayerCount--;
             }
         }
 
@@ -577,7 +590,7 @@ namespace MindTrisServer
 
         void Response_HelloFromServer(User user, byte response)
         {
-            user.UserStatus.Connected = 1;
+            user.UserStatus.Connected = true;
             string motd = String.Format(_motd, _name);
             byte[] packet = Dgmt.ForgeNewPacket();
             int i = Dgmt.HEADER_LENGTH;
@@ -587,7 +600,7 @@ namespace MindTrisServer
             i++;
             //Sending server public key
             string xml = _rsa.ToXmlString(false);
-            BigE.WritePublicKey(packet, ref i, xml);
+            BigE.WriteRSAPublicKey(packet, ref i, xml);
             if (response != 0x00) motd = "";
             BigE.WriteSizePrefixed(packet, ref i, 2, Encoding.UTF8.GetBytes(motd));
             //MOTD
@@ -637,11 +650,13 @@ namespace MindTrisServer
             if (response == 0x00)
             {
                 BigE.WriteInt32(packet, ref i, lobby.ID);
+                BigE.WriteByte(packet, ref i, lobby.Players.First.Value.ID);
                 BigE.WriteInt64(packet, ref i, lobby.SessionID);
             }
             else
             {
                 BigE.WriteInt32(packet, ref i, 0);
+                BigE.WriteByte(packet, ref i, 0);
                 BigE.WriteInt64(packet, ref i, 0);
             }
             int length = Dgmt.FinalizePacket(packet, i - Dgmt.HEADER_LENGTH);
@@ -671,7 +686,7 @@ namespace MindTrisServer
             QueueResponse(res);
         }
 
-        void Response_JoinLobby(User user, byte response, uint lobbyID, byte clientID, ulong sessionID, ICollection<Peer> peers)
+        void Response_JoinLobby(User user, byte response, uint lobbyID, LobbyServer lobby, byte peerID)
         {
             byte[] packet = Dgmt.ForgeNewPacket();
             int i = Dgmt.HEADER_LENGTH;
@@ -680,16 +695,22 @@ namespace MindTrisServer
             BigE.WriteByte(packet, ref i, response);
             if (response == 0x00)
             {
-                BigE.WriteByte(packet, ref i, clientID);
-                BigE.WriteInt64(packet, ref i, sessionID);
-                BigE.WriteByte(packet, ref i, (byte)peers.Count());
-                foreach (Peer peer in peers)
+                BigE.WriteSizePrefixedUTF8(packet, ref i, 1, lobby.Name);
+                BigE.WriteByte(packet, ref i, lobby.PlayerMaxCount);
+                BigE.WriteByte(packet, ref i, lobby.CreatorPeerID);
+                BigE.WriteByte(packet, ref i, peerID);
+                BigE.WriteInt64(packet, ref i, lobby.SessionID);
+                BigE.WriteByte(packet, ref i, (byte)(lobby.Players.Count - 1));
+                foreach (Peer peer in lobby.Players)
                 {
-                    BigE.WriteByte(packet, ref i, peer.ID);
-                    BigE.WriteSizePrefixedUTF8(packet, ref i, 1, peer.DisplayName);
-                    BigE.WriteIPAddress(packet, ref i, peer.IpAddress);
-                    BigE.WriteInt16(packet, ref i, peer.Port);
-                    BigE.WritePublicKey(packet, ref i, peer.PublicKey);
+                    if (peer.ID != peerID)
+                    {
+                        BigE.WriteByte(packet, ref i, peer.ID);
+                        BigE.WriteSizePrefixedUTF8(packet, ref i, 1, peer.DisplayName);
+                        BigE.WriteIPAddress(packet, ref i, peer.IpAddress);
+                        BigE.WriteInt16(packet, ref i, peer.Port);
+                        BigE.WriteDSAPublicKey(packet, ref i, peer.PublicKey);
+                    }
                 }
             }
 
@@ -704,7 +725,8 @@ namespace MindTrisServer
             byte[] packet = Dgmt.ForgeNewPacket();
             int i = Dgmt.HEADER_LENGTH;
             BigE.WritePacketID(packet, ref i, Dgmt.PacketID.UpdateClientStatus);
-            BigE.WriteInt32(packet, ref i, user.UserStatus.Lobby);
+            Debug.Assert(user.UserStatus.Lobby_id != null);
+            BigE.WriteInt32(packet, ref i, (uint)user.UserStatus.Lobby_id);
             BigE.WriteByte(packet, ref i, clientID);
             BigE.WriteByte(packet, ref i, statusUpdate);
             if (statusUpdate == 0x00)
@@ -712,7 +734,7 @@ namespace MindTrisServer
                 BigE.WriteSizePrefixedUTF8(packet, ref i, 1, peer.DisplayName);
                 BigE.WriteIPAddress(packet, ref i, peer.IpAddress);
                 BigE.WriteInt16(packet, ref i, peer.Port);
-                BigE.WritePublicKey(packet, ref i, peer.PublicKey);
+                BigE.WriteDSAPublicKey(packet, ref i, peer.PublicKey);
             }
             int length = Dgmt.FinalizePacket(packet, i - Dgmt.HEADER_LENGTH);
             //Multiple send to other players
@@ -745,9 +767,9 @@ namespace MindTrisServer
             User user = _users[socket];
             _users.Remove(socket);
             if (_logged_users.ContainsKey(user)) _logged_users.Remove(user);
-            if (user.UserStatus.Lobby > 0)
+            if (user.UserStatus.Lobby_id != null)
             {
-                LobbyServer lobby = _lobbies[user.UserStatus.Lobby];
+                LobbyServer lobby = _lobbies[(uint)user.UserStatus.Lobby_id];
                 PeerServer peer = null;
                 foreach (PeerServer peerouze in lobby.Players)
                 {

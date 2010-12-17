@@ -39,7 +39,7 @@ namespace MindTris
         Socket _listener;
         IPAddress _address;
         ushort _port;
-        RSACryptoServiceProvider _rsa_p2p;
+        DSACryptoServiceProvider _dsa_client;
 
         //Incoming connections handling
         Thread _main;
@@ -50,8 +50,6 @@ namespace MindTris
         User _user_server;
 
         //Lobby
-        byte _clientID;
-        ulong _sessionID;
         Lobby _lobby;
         Dictionary<byte, Peer> _remaining_unseen_peers;
         Dictionary<User, PeerPlayer> _players;
@@ -77,7 +75,9 @@ namespace MindTris
             _players = new Dictionary<User, PeerPlayer>(20);
             _remaining_unseen_peers = new Dictionary<byte, Peer>();
             _rsa_server = new RSACryptoServiceProvider();
-            _rsa_p2p = new RSACryptoServiceProvider();
+            _dsa_client = new DSACryptoServiceProvider();
+            string lol = _dsa_client.ToXmlString(false);
+            lol.ToString();
             _status = new ClientStatus();
         }
 
@@ -112,7 +112,7 @@ namespace MindTris
             _login = login;
             _pass = pass;
             _email = email;
-            if (_status.Connected == 1 && _status.Logged_on == 0)
+            if (_status.Connected && !_status.Logged_on)
             {
                 Send_CreateUser();
             }
@@ -122,7 +122,7 @@ namespace MindTris
         {
             _login = login;
             _pass = pass;
-            if (_status.Connected == 1 && _status.Logged_on == 0)
+            if (_status.Connected && !_status.Logged_on)
             {
                 Send_Login();
             }
@@ -130,7 +130,7 @@ namespace MindTris
 
         public void CreateLobby(string name, byte max_players, bool hasPassword, string pass)
         {
-            if (_status.Logged_on == 1)
+            if (_status.Logged_on)
             {
                 Send_CreateLobby(name, max_players, hasPassword, pass);
             }
@@ -138,7 +138,7 @@ namespace MindTris
 
         public void LobbyListRetrieval()
         {
-            if (_status.Logged_on == 1)
+            if (_status.Logged_on)
             {
                 Send_RetrieveLobbies();
             }
@@ -146,7 +146,7 @@ namespace MindTris
 
         public void JoinLobby(uint lobbyID, string pass)
         {
-            if (_status.Logged_on == 1)
+            if (_status.Logged_on)
             {
                 Send_JoinLobby(lobbyID, pass);
             }
@@ -154,7 +154,7 @@ namespace MindTris
 
         public void LeaveLobby()
         {
-            if (_status.Logged_on == 1 && _status.Lobby != 0)
+            if (_status.Logged_on && _status.Lobby_id != 0)
             {
                 Send_LeaveLobby();
             }
@@ -167,11 +167,11 @@ namespace MindTris
         public event ConfirmationFunction UserCreated;
         public delegate void LoggedOnFunction(byte response, string displayed_username);
         public event LoggedOnFunction LoggedOn;
-        public delegate void LobbyCreatedFunction(byte response, uint lobbyID, ulong sessionID);
+        public delegate void LobbyCreatedFunction(byte response, uint? lobbyID, byte? peerID, ulong? sessionID);
         public event LobbyCreatedFunction LobbyCreated;
         public delegate void RetrieveLobbiesFunction(Lobby[] lobbies);
         public event RetrieveLobbiesFunction LobbiesRetrieved;
-        public delegate void JoinedLobbyFunction(byte response, byte clientID, ulong sessionID, Peer[] peers);
+        public delegate void JoinedLobbyFunction(byte response, byte? clientID, ulong? sessionID, Peer[] peers);
         public event JoinedLobbyFunction LobbyJoined;
         public event VoidFunction LobbyLeft;
         public delegate void UpdateFunction(byte update, Peer peer);
@@ -213,22 +213,13 @@ namespace MindTris
 
         void Send_Login()
         {
-            //[TODO] Gérer les dépassement de tailles d'entier
-            byte[] login = Encoding.UTF8.GetBytes(_login);
-            byte[] pass = Encoding.ASCII.GetBytes(_pass);
-
-            //Copy all infos
-            byte[] plain_user_info = new byte[1 + login.Length + 1 + pass.Length];
-            int i = 0;
-            BigE.WriteSizePrefixed(plain_user_info, ref i, 1, login);
-            BigE.WriteSizePrefixed(plain_user_info, ref i, 1, pass);
-
-            //Encrypt
-            byte[] encrypted_user_info = Encrypt(plain_user_info);
             byte[] packet = Dgmt.ForgeNewPacket();
-            packet[Dgmt.HEADER_LENGTH] = (byte)Dgmt.PacketID.Login;
-            encrypted_user_info.CopyTo(packet, Dgmt.HEADER_LENGTH + 1);
-            int length = Dgmt.FinalizePacket(packet, encrypted_user_info.Length + 1);
+            int i = Dgmt.HEADER_LENGTH;
+            BigE.WritePacketID(packet, ref i, Dgmt.PacketID.Login);
+            BigE.WriteSizePrefixedUTF8(packet, ref i, 1, _login);
+            BigE.WriteSizePrefixed(packet, ref i, 2, Encrypt(Encoding.ASCII.GetBytes(_pass)));
+
+            int length = Dgmt.FinalizePacket(packet, i - Dgmt.HEADER_LENGTH);
 
             //Send
             ServerResponse response = new ServerResponse(_socket_server, packet, length);
@@ -237,25 +228,28 @@ namespace MindTris
 
         void Send_CreateLobby(string name, byte max_players, bool hasPass, string pass)
         {
-            byte[] lobby_name = Encoding.UTF8.GetBytes(name);
-            pass = String.IsNullOrEmpty(pass) ? "" : pass;
-            byte pass_length = (byte)Encoding.ASCII.GetByteCount(pass);
-            byte[] pass_b = new byte[1 + Encoding.ASCII.GetByteCount(pass)];
-            Encoding.ASCII.GetBytes(pass).CopyTo(pass_b, 1);
-            pass_b[0] = pass_length;
-
             byte[] packet = Dgmt.ForgeNewPacket();
             int i = Dgmt.HEADER_LENGTH;
-            packet[i++] = (byte)Dgmt.PacketID.CreateLobby;
-            BigE.WriteSizePrefixed(packet, ref i, 1, lobby_name);
-            packet[i++] = max_players;
-            packet[i++] = (byte)(hasPass ? 1 : 0);
+            BigE.WritePacketID(packet, ref i, Dgmt.PacketID.CreateLobby);
+            BigE.WriteSizePrefixedUTF8(packet, ref i, 1, name);
+            BigE.WriteByte(packet, ref i, max_players);
+            BigE.WriteBool(packet, ref i, hasPass);
             if (hasPass)
             {
-                byte[] pass_crypted = Encrypt(pass_b);
-                pass_crypted.CopyTo(packet, i);
-                i += pass_crypted.Length;
+                byte[] pass_crypted = Encrypt(Encoding.ASCII.GetBytes(pass));
+                BigE.WriteSizePrefixed(packet, ref i, 2, pass_crypted);
             }
+            BigE.WriteInt32(packet, ref i, _port);
+            BigE.WriteDSAPublicKey(packet, ref i, _dsa_client.ToXmlString(false));
+
+            _lobby = new Lobby()
+            {
+                Creator = _status.User,
+                ID = 0,
+                Name = name,
+                PasswordProtected = hasPass,
+                PlayerCount = max_players,
+            };
 
             //Send
             int length = Dgmt.FinalizePacket(packet, i - Dgmt.HEADER_LENGTH);
@@ -281,7 +275,7 @@ namespace MindTris
             BigE.WriteInt32(packet, ref i, lobbyID);
             BigE.WriteSizePrefixedASCII(packet, ref i, 1, pass);
             BigE.WriteInt16(packet, ref i, _port);
-            BigE.WritePublicKey(packet, ref i, _rsa_p2p.ToXmlString(false));
+            BigE.WriteDSAPublicKey(packet, ref i, _dsa_client.ToXmlString(false));
 
             int length = Dgmt.FinalizePacket(packet, i - Dgmt.HEADER_LENGTH);
 
@@ -308,7 +302,7 @@ namespace MindTris
             byte[] packet = Dgmt.ForgeNewPacket();
             int i = Dgmt.HEADER_LENGTH;
             BigE.WritePacketID(packet, ref i, Dgmt.PacketID.HelloFromClient);
-            BigE.WriteInt32(packet, ref i, Dgmt.VERSION);
+            BigE.WriteRawBytes(packet, ref i, Dgmt.VERSION);
             int length = Dgmt.FinalizePacket(packet, i - Dgmt.HEADER_LENGTH);
 
             //Sending
@@ -363,8 +357,8 @@ namespace MindTris
                         lock (_users) { _users.Add(client, user); }
                         lock (_players) { _players.Add(user, player); }
                         //On envoie l'HelloFromPeer
-                        Send_HelloFromPeer(user);
-                        user.UserStatus.Logged_on = 1;
+                        Send_ConnectionRequest(user);
+                        user.UserStatus.Logged_on = true;
                         if (PeerHandshaken != null) PeerHandshaken(peer);
                     }
                     else
@@ -557,7 +551,6 @@ namespace MindTris
             byte[] minibuffer = user.Buffer.GetSubbufferCopy(0, Dgmt.HEADER_LENGTH);
             if (Dgmt.DGMTCheck(minibuffer, 0))
             {
-                Console.WriteLine("{0}: DGMT passed.", user.Socket.RemoteEndPoint);
                 int i = Dgmt.PROTOCOL_ID_LENGTH;
                 ushort packet_length = BigE.ReadInt16(minibuffer, ref i);
                 //If the whole packet has not been read yet, skip
@@ -591,6 +584,7 @@ namespace MindTris
             }
             else
             {
+                Console.WriteLine("{0}: DGMT failed, user will be disconnected.", user.Socket.RemoteEndPoint);
                 //Solution temporaire
                 DisconnectUser(user.Socket);
             }
@@ -604,7 +598,6 @@ namespace MindTris
             byte[] minibuffer = user.Buffer.GetSubbufferCopy(0, Dgmt.HEADER_LENGTH);
             if (Dgmt.DGMTCheck(minibuffer, 0))
             {
-                Console.WriteLine("{0}: DGMT passed.", user.Socket.RemoteEndPoint);
                 int i = Dgmt.PROTOCOL_ID_LENGTH;
                 ushort packet_length = BigE.ReadInt16(minibuffer, ref i);
                 //If the whole packet has not been read yet, skip
@@ -653,6 +646,7 @@ namespace MindTris
             }
             else
             {
+                Console.WriteLine("{0}: DGMT failed, user will be disconnected.", user.Socket.RemoteEndPoint);
                 //Solution temporaire
                 DisconnectUser(user.Socket);
             }
@@ -716,7 +710,7 @@ namespace MindTris
         //Process Packets from peers
         void Process_HelloFromPeer(User user, int content_length)
         {
-            if (user.UserStatus.Logged_on == 0)
+            if (!user.UserStatus.Logged_on)
             {
                 Console.WriteLine("{0}: Handshaking.", user.Socket.RemoteEndPoint);
                 int i = Dgmt.HEADER_LENGTH;
@@ -734,7 +728,7 @@ namespace MindTris
                 PeerPlayer player = new PeerPlayer(matching_peer, user);
                 lock (_players) { _players.Add(user, player); }
                 lock (_remaining_unseen_peers) { _remaining_unseen_peers.Remove(cliendID); }
-                user.UserStatus.Logged_on = 1;
+                user.UserStatus.Logged_on = true;
 
                 if (PeerHandshaken != null) PeerHandshaken(player);
             }
@@ -742,7 +736,7 @@ namespace MindTris
 
         void Process_ChatSend(User user, int content_length)
         {
-            if (user.UserStatus.Logged_on == 1)
+            if (user.UserStatus.Logged_on)
             {
                 int i = Dgmt.HEADER_LENGTH;
                 byte[] packet = user.Buffer.GetSubbufferCopy(i, content_length);
@@ -784,11 +778,11 @@ namespace MindTris
             {
                 //Récupérer la public key du serveur
                 i++;
-                _server_public_key = BigE.ReadPublicKey(response, ref i);
+                _server_public_key = BigE.ReadRSAPublicKey(response, ref i);
                 _rsa_server.FromXmlString(_server_public_key);
                 motd = BigE.ReadSizePrefixedUTF8(response, ref i, 2);
                 //update status
-                _status.Connected = 1;
+                _status.Connected = true;
                 Console.WriteLine("Connected:");
                 Console.WriteLine("Receiving MOTD...");
                 Console.WriteLine(motd);
@@ -816,7 +810,7 @@ namespace MindTris
                 i = 2;
                 displayed_username = BigE.ReadSizePrefixedUTF8(response, ref i, 1);
                 //update le status
-                _status.Logged_on = 1;
+                _status.Logged_on = true;
                 _status.User = _login;
             }
             if (LoggedOn != null) LoggedOn(response[1], displayed_username);
@@ -828,19 +822,30 @@ namespace MindTris
             byte[] response = user.Buffer.GetSubbufferCopy(i, content_length);
             i = 1;
             uint lobbyID;
+            byte peerID;
             ulong sessionID;
             byte answer = BigE.ReadByte(response, ref i);
             if (answer == 0x00)
             {
                 lobbyID = BigE.ReadInt32(response, ref i);
+                peerID = BigE.ReadByte(response, ref i);
                 sessionID = BigE.ReadInt64(response, ref i);
             }
             else
             {
                 lobbyID = 0;
+                peerID = 0;
                 sessionID = 0;
             }
-            if (LobbyCreated != null) LobbyCreated(answer, lobbyID, sessionID);
+            //Creator is by default joining his lobby
+            _status.Peer_id = peerID;
+            _status.Creator_lobby_id = lobbyID;
+            _status.Lobby_id = lobbyID;
+            _status.Session_id = sessionID;
+            _lobby.ID = lobbyID;
+            _lobby.PlayerCount = 1;
+
+            if (LobbyCreated != null) LobbyCreated(answer, lobbyID, peerID, sessionID);
         }
 
         void Process_RetrieveLobbyList(User user, int content_length)
@@ -853,7 +858,6 @@ namespace MindTris
             for (int k = 0; k < count; k++)
             {
                 result[k] = new Lobby();
-                //Ensuring BigE
                 result[k].ID = BigE.ReadInt32(response, ref i);
                 result[k].Name = BigE.ReadSizePrefixedUTF8(response, ref i, 1);
                 result[k].PlayerCount = BigE.ReadByte(response, ref i);
@@ -894,8 +898,12 @@ namespace MindTris
             Peer[] peers;
             if (answer == 0x00)
             {
-                _clientID = BigE.ReadByte(response, ref i);
-                _sessionID = BigE.ReadInt64(response, ref i);
+                _lobby = new Lobby();
+                _lobby.Name = BigE.ReadSizePrefixedUTF8(response, ref i, 1);
+                _lobby.PlayerMaxCount = BigE.ReadByte(response, ref i);
+                _lobby.CreatorPeerID = BigE.ReadByte(response, ref i);
+                _status.Peer_id = BigE.ReadByte(response, ref i);
+                _status.Session_id = BigE.ReadInt64(response, ref i);
                 byte count = BigE.ReadByte(response, ref i);
                 peers = new Peer[count];
                 for (byte k = 0; k < count; k++)
@@ -905,16 +913,9 @@ namespace MindTris
                     peers[k].DisplayName = BigE.ReadSizePrefixedUTF8(response, ref i, 1);
                     peers[k].IpAddress = BigE.ReadIPAddress(response, ref i);
                     peers[k].Port = BigE.ReadInt16(response, ref i);
-                    peers[k].PublicKey = BigE.ReadPublicKey(response, ref i);
+                    peers[k].PublicKey = BigE.ReadDSAPublicKey(response, ref i);
                 }
-                _lobby = new Lobby()
-                {
-                    Creator = "[Unknown]",
-                    ID = lobbyID,
-                    Name = "[Unknown]",
-                    PasswordProtected = !String.IsNullOrEmpty(request.Pass),
-                    PlayerCount = (byte)(count + 1),
-                };
+                _status.Lobby_id = lobbyID;
                 //Add to the list of peers who will connect later on
                 foreach (Peer peer in peers)
                 {
@@ -923,11 +924,11 @@ namespace MindTris
             }
             else
             {
-                _clientID = 0;
-                _sessionID = 0;
+                _status.Peer_id = 0;
+                _status.Session_id = 0;
                 peers = null;
             }
-            if (LobbyJoined != null) LobbyJoined(answer, _clientID, _sessionID, peers);
+            if (LobbyJoined != null) LobbyJoined(answer, _status.Peer_id, _status.Session_id, peers);
         }
 
         void Process_UpdateClientStatus(User user, int content_length)
@@ -944,10 +945,10 @@ namespace MindTris
                 peer.DisplayName = BigE.ReadSizePrefixedUTF8(response, ref i, 1);
                 peer.IpAddress = BigE.ReadIPAddress(response, ref i);
                 peer.Port = BigE.ReadInt16(response, ref i);
-                peer.PublicKey = BigE.ReadPublicKey(response, ref i);
+                peer.PublicKey = BigE.ReadDSAPublicKey(response, ref i);
             }
             if (StatusUpdated != null) StatusUpdated(answer, peer);
-            if (peer.ID == _clientID)
+            if (peer.ID == _status.Peer_id)
             {
                 //[TOCHECK] On fire les 2 events pour l'instant
                 if (LobbyLeft != null) LobbyLeft();
@@ -955,13 +956,16 @@ namespace MindTris
         }
 
         //Send Packets to peers
-        void Send_HelloFromPeer(User user)
+        void Send_ConnectionRequest(User user)
         {
             byte[] packet = Dgmt.ForgeNewPacket();
             int i = Dgmt.HEADER_LENGTH;
-            BigE.WritePacketIDP2P(packet, ref i, Dgmt.PacketP2PID.HelloFromPeer);
-            BigE.WriteByte(packet, ref i, _clientID);
+            BigE.WritePacketIDP2P(packet, ref i, Dgmt.PacketP2PID.ConnectionRequest);
             BigE.WriteInt32(packet, ref i, _lobby.ID);
+            Debug.Assert(_status.Peer_id != null);
+            BigE.WriteByte(packet, ref i, (byte)_status.Peer_id);
+            Debug.Assert(_status.Peer_id != null);
+            BigE.WriteByte(packet, ref i, (byte)user.UserStatus.Peer_id);
             int length = Dgmt.FinalizePacket(packet, i - Dgmt.HEADER_LENGTH);
 
             //Send

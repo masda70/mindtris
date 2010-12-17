@@ -9,17 +9,23 @@ namespace MindTrisCore
     {
         public ClientStatus()
         {
-            Connected = 0;
-            Logged_on = 0;
+            Connected = false;
+            Logged_on = false;
             User = "";
-            Lobby = 0;
-            Am_playing = 0;
+            Lobby_id = null;
+            Peer_id = null;
+            Creator_lobby_id = null;
+            Session_id = null;
+            Am_playing = false;
         }
-        public int Connected { get; set; }
-        public int Logged_on { set; get; } //or handshaken
+        public bool Connected { get; set; }
+        public bool Logged_on { set; get; } //or handshaken
         public string User { get; set; }
-        public uint Lobby { get; set; }
-        public int Am_playing { get; set; }
+        public uint? Lobby_id { get; set; }
+        public byte? Peer_id { get; set; }
+        public uint? Creator_lobby_id { get; set; }
+        public ulong? Session_id { get; set; }
+        public bool Am_playing { get; set; }
         //Il faudra inclure le client public key
     }
 }

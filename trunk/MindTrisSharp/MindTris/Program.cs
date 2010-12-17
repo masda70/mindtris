@@ -7,6 +7,7 @@ using System.Threading;
 using ZenithMFramework;
 using System.Net;
 using System.Security.Cryptography;
+using System.Diagnostics;
 
 namespace MindTris
 {
@@ -60,8 +61,8 @@ namespace MindTris
             p = new RSACryptoServiceProvider();
             p.FromXmlString(keys_0);
             //PAR DAVID base64 = "Mw+Cd7j27tvL36DH7jgfjrhGHK8eJc2XEXIkuwGpOruvLRdrkhEo/houQaJ9Qy5Zkxu7MWNIcQAJtyH4DWG9wa4QctdlCFR6aZ/2ryTuUz4YcQGFijjkllQ331m3u+YRM+YMOGset9h8FxRqqtcpJWK7MjJUh18agjzUlRuDK3A=";
-            //PAR Emile base64 = "Qh+V7nIpPZE5kLazNG0xmU4WnjAdjLugxIoN3B+MJpOrPRi9ClpK85kHFtT1y3kC0x/Z0UqkpB7valjIHspg/oZy82afey6h0zseE6EdT0Hgfc2TsXsifF4J2zDYijjkt1Qifny3Lo3mwSQXJ7P8k5Gy/CkXqhekbAovJU3T1K0=";
-            base64 = "PTKla7xLGPlxvi/LZ+nXjjhzzBW4ftt7p0QVXz4uGpsTX7vURbC9sMm41l68bF86H4k/R408RVV4vlTXFVmGZCmBCsrsD118D+7a62JILLk9V7L2/MhIEeeaAIOugtwfQCdR5C7hWmkT5831buhd59Q78c7UMVIIdbEqnMIcK6E=";
+            base64 = "Qh+V7nIpPZE5kLazNG0xmU4WnjAdjLugxIoN3B+MJpOrPRi9ClpK85kHFtT1y3kC0x/Z0UqkpB7valjIHspg/oZy82afey6h0zseE6EdT0Hgfc2TsXsifF4J2zDYijjkt1Qifny3Lo3mwSQXJ7P8k5Gy/CkXqhekbAovJU3T1K0=";
+            //base64 = "PTKla7xLGPlxvi/LZ+nXjjhzzBW4ftt7p0QVXz4uGpsTX7vURbC9sMm41l68bF86H4k/R408RVV4vlTXFVmGZCmBCsrsD118D+7a62JILLk9V7L2/MhIEeeaAIOugtwfQCdR5C7hWmkT5831buhd59Q78c7UMVIIdbEqnMIcK6E=";
             byte[] rgb = System.Convert.FromBase64String(base64);
             byte[] decrypted = p.Decrypt(rgb, true);
             msg = Encoding.ASCII.GetString(decrypted);
@@ -74,11 +75,13 @@ namespace MindTris
 				_ip_server = args[0];
 			}
 			else _ip_server = "127.0.0.1";
-            //_ip_server = "138.231.141.213";
-            /*
-            IPAddress address = Dns.GetHostAddresses("pcm70.crans.org")[0];
+            
+            _ip_server = "138.231.142.111";
+            
+            IPAddress address = Dns.GetHostAddresses("m70.crans.org")[0];
             _ip_server = address.ToString();
             //*/
+            _peers = new Dictionary<byte, Peer>();
             _client = new Client(_ip_server);
             _client.Connected += new Client.ConnectedFunction(client_Connected);
             _client.StatusUpdated += new Client.UpdateFunction(_client_StatusUpdated);
@@ -103,7 +106,8 @@ namespace MindTris
             Console.WriteLine("Port?");
             while (!UInt16.TryParse(Console.ReadLine(), out _port)) ;
             _client.UserCreated += new Client.ConfirmationFunction(_client_UserCreated);
-            _client.CreateUser(_login, _pass, _email);
+            //_client.CreateUser(_login, _pass, _email);
+            _client_UserCreated(0x00);
                     });
             t.Start();
         }
@@ -190,7 +194,9 @@ namespace MindTris
                 int choix = menu.Show();
                 //D'abord, on start le listening
                 _client.StartListening(IPAddress.Any, _port);
-                _client.JoinLobby((uint)(choix + 1), "");
+                Console.WriteLine("Password?");
+                string pass = Console.ReadLine();
+                _client.JoinLobby(lobbies[choix].ID, pass);
             }
             else
             {
@@ -207,14 +213,15 @@ namespace MindTris
             t.Start();
         }
 
-        static void _client_LobbyCreated(byte response, uint lobbyID, ulong sessionID)
+        static void _client_LobbyCreated(byte response, uint? lobbyID, byte? peerID, ulong? sessionID)
         {
             //D'abord, on start le listening
             _client.StartListening(IPAddress.Any, _port);
-            _client.JoinLobby(lobbyID, "");
+            Debug.Assert(lobbyID != null);
+            _client.JoinLobby((uint)lobbyID, "");
         }
 
-        static void _client_LobbyJoined(byte response, byte clientID, ulong sessionID, Peer[] peers)
+        static void _client_LobbyJoined(byte response, byte? clientID, ulong? sessionID, Peer[] peers)
         {
                         Thread t = new Thread(() =>
                 {
@@ -235,11 +242,9 @@ namespace MindTris
                 default:
                     throw new Exception("Ne devrait pas arriver, ;D");
             }
-
-            _peers = new Dictionary<byte, Peer>();
             foreach (Peer peer in peers)
             {
-                _peers.Add(peer.ID, peer);
+                _peers[peer.ID] = peer;
             }
             Console.WriteLine("Starting chat...");
             StartChat();

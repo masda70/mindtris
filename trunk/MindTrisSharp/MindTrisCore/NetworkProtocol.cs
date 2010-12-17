@@ -12,7 +12,7 @@ namespace MindTrisCore
         public const string DGMT_STRING = "DGMT";
         public static readonly byte[] DGMT_BYTES = Encoding.ASCII.GetBytes(DGMT_STRING);
         //Protocol version
-        public const uint VERSION = 0;
+        public static readonly byte[] VERSION = { 1, 2, 0, 1 };
         //Default port for early versions of the protocol
         public const int DEFAULT_PORT = 1337 + 42;
 
@@ -28,8 +28,8 @@ namespace MindTrisCore
         public const int PROTOCOL_VERSION_LENGTH = 4;
 
         //Regex
-        public const string REGEX_LOGIN = @"[A-Za-z][A-Za-z0-9_.\-]*";
-        public const string REGEX_PASSWORD = @"^.*(?=.{6,})(?=.*\d)(?=.*[a-z])(?=.*[A-Z])(?=.*[@#$%^&+=]).*$";
+        public const string REGEX_LOGIN = @"[:alpha:][:alnum:_.-]*";
+        public const string REGEX_PASSWORD = @"^.*(?=.{6,})(?=.*[:alnum:])(?=.*[:punct:]).*$";
         public const string REGEX_EMAIL = @"^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,4}$";
 
         public static bool DGMTCheck(byte[] buffer, int offset)
@@ -82,8 +82,10 @@ namespace MindTrisCore
 
         public enum PacketP2PID
         {
-            HelloFromPeer = (byte)0x00,
-            ChatSend = 0x01
+            ConnectionRequest = (byte)0x00,
+            ConnectionAccepted = 0x01,
+            ConnectionAcknowledged = 0x02,
+            ChatSend = 0x10
         }
     }
 

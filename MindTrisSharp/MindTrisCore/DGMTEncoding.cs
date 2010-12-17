@@ -24,6 +24,13 @@ namespace MindTrisCore.DGMTEncoding
 			}
 		}
 
+        public static int WriteRawBytes(byte[] buffer, ref int i, byte[] value)
+        {
+            value.CopyTo(buffer, i);
+            i += value.Length;
+            return value.Length;
+        }
+
         public static int WriteSizePrefixed(byte[] buffer, ref int i, int byteCount, byte[] value)
         {
             switch (byteCount)
@@ -103,7 +110,7 @@ namespace MindTrisCore.DGMTEncoding
             return 4;
         }
 
-        public static int WritePublicKey(byte[] buffer, ref int i, string xml)
+        public static int WriteRSAPublicKey(byte[] buffer, ref int i, string xml)
         {
             string modulusBase64;
             string exponentbase64;
@@ -114,11 +121,35 @@ namespace MindTrisCore.DGMTEncoding
             parser.GetStringBefore("<", out exponentbase64);
             byte[] modulus = System.Convert.FromBase64String(modulusBase64);
             byte[] exponent = System.Convert.FromBase64String(exponentbase64);
-            BigE.E(modulus, 0, modulus.Length);
-            BigE.E(exponent, 0, exponent.Length);
+            //Big Endianness is already insured by base64 encoding of the xml string representation
             BigE.WriteSizePrefixed(buffer, ref i, 2, modulus);
             BigE.WriteSizePrefixed(buffer, ref i, 1, exponent);
             return 1 + 2 + modulus.Length + exponent.Length;
+        }
+
+        public static int WriteDSAPublicKey(byte[] buffer, ref int i, string xml)
+        {
+            string p;
+            string q;
+            string g;
+            string y;
+            WebParser parser = new WebParser(xml);
+            parser.JumpAfter(">", ">");
+            parser.GetStringBefore("<", out p);
+            parser.JumpAfter(">", ">");
+            parser.GetStringBefore("<", out q);
+            parser.JumpAfter(">", ">");
+            parser.GetStringBefore("<", out g);
+            parser.JumpAfter(">", ">");
+            parser.GetStringBefore("<", out y);
+            string[] a = { p, q, g, y };
+            int length = 0;
+            for (int k = 0; k < 4; k++)
+            {
+                byte[] bytes = System.Convert.FromBase64String(a[k]);
+                length += BigE.WriteSizePrefixed(buffer, ref i, 2, bytes);
+            }
+            return length;
         }
 
         public static int WriteByte(byte[] buffer, ref int i, byte value)
@@ -267,16 +298,25 @@ namespace MindTrisCore.DGMTEncoding
             return lol > 0;
         }
 
-        public static string ReadPublicKey(byte[] buffer, ref int i)
+        public static string ReadRSAPublicKey(byte[] buffer, ref int i)
         {
             byte[] modulus = BigE.ReadSizePrefixedRawBytes(buffer, ref i, 2);
             byte[] exponent = BigE.ReadSizePrefixedRawBytes(buffer, ref i, 1);
-            BigE.E(modulus, 0, modulus.Length);
-            BigE.E(exponent, 0, exponent.Length);
             string modulus64 = System.Convert.ToBase64String(modulus);
             string exponent64 = System.Convert.ToBase64String(exponent);
-            return String.Format(
-                "<RSAKeyValue><Modulus>{0}</Modulus><Exponent>{1}</Exponent></RSAKeyValue>", modulus64, exponent64);
+            //XML Format and base64 show numbers in bigendian, so no need to call BigE.E
+            const string format = "<RSAKeyValue><Modulus>{0}</Modulus><Exponent>{1}</Exponent></RSAKeyValue>";
+            return String.Format(format, modulus64, exponent64);
+        }
+
+        public static string ReadDSAPublicKey(byte[] buffer, ref int i)
+        {
+            byte[][] b = new byte[4][];
+            string[] s = new string[4];
+            for (int k = 0; k < 4; k++) b[k] = BigE.ReadSizePrefixedRawBytes(buffer, ref i, 2);
+            for (int k = 0; k < 4; k++) s[k] = System.Convert.ToBase64String(b[k]);
+            const string format = "<DSAKeyValue><P>{0}</P><Q>{1}</Q><G>{2}</G><Y>{3}</Y></DSAKeyValue>";
+            return String.Format(format, s);
         }
 	}
 }

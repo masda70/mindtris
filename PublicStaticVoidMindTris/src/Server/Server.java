@@ -39,7 +39,6 @@ public class Server extends Thread {
 			KeyPair keyPair = gen.generateKeyPair();
 			_publicKey = new RSAKey( keyPair.getPublic() );
 			
-//			Security.addProvider(new BouncyCastleProvider());
 			_decrypter = Cipher.getInstance(Crypted.CRYPT_SCHEME);
 			_decrypter.init(Cipher.DECRYPT_MODE, keyPair.getPrivate());
 		} catch (NoSuchAlgorithmException e) {
@@ -48,9 +47,6 @@ public class Server extends Thread {
 			e.printStackTrace();
 		} catch (NoSuchPaddingException e) {
 			e.printStackTrace();
-//		} catch (NoSuchProviderException e) {
-//			// TODO Auto-generated catch block
-//			e.printStackTrace();
 		}
 		
 		/* connect to the sql db * /
@@ -110,6 +106,7 @@ public class Server extends Thread {
 			addHdl(MsgCltSrv.CREATE_LOBBY,		new LobbyCreateHdl());
 			addHdl(MsgCltSrv.GET_LOBBY_LIST,	new LobbyListHdl());
 			addHdl(MsgCltSrv.JOIN_LOBBY,		new LobbyJoinHdl());
+			addHdl(MsgCltSrv.START_GAME,		new StartHdl());
 		}
 	}
 	
@@ -222,8 +219,8 @@ public class Server extends Thread {
 			_rdmGen.nextBytes(nonce);
 			Lobby l = new Lobby(lobbyId, name, nonce, (byte)1, maxPlayers, pwd, creator);
 			
-			System.out.println(l.getCreatorName());
 			_lobbies.add(l);
+			ch.getUsr().setCreatedLobbyId(lobbyId);
 			
 			ch.createMsg(MsgCltSrv.LOBBY_CREATED, 1+4+1+8);
 			ch.msg().writeByte(0x00);
@@ -300,5 +297,34 @@ public class Server extends Thread {
 				ch.sendMsg();
 			}
 		}
+	}
+	
+	private class StartHdl implements Handler<ChCltSrv> {
+		public void handle(InData _, ChCltSrv ch) throws IOException {
+			int lobbyCreatedId;
+			
+			try {
+				lobbyCreatedId = ch.getUsr().getCreatedLobbyId();
+			} catch( IOException e ) {
+				debug("StartGame request by a non-creator peer");
+				return;
+			}
+
+			Lobby l = _lobbies.get(lobbyCreatedId);
+			Game g = new Game(l);
+			Piece[] pieces = g.getNewPieces();
+			
+			Msg loadMsg = new MsgCltSrv(MsgCltSrv.LOAD_GAME, 1+pieces.length);
+			loadMsg._out.write(pieces.length);
+			
+			for( Piece p : pieces ) loadMsg._out.write(p);
+
+			ch.send(MsgCltSrv.GAME_STARTING, (byte)0x00);
+			
+			for( Map.Entry<Integer, Peer> o : l._peers ) {
+				o.getValue().getCh().send(loadMsg);
+			}
+		}
+		
 	}
 }

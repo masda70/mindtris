@@ -20,7 +20,9 @@ public class User implements Serializable, Encodable {
 				   _displayName;
 	public AString _email;
 	public AString _pwd;
+	private transient boolean _isConnected;	// TODO
 	private transient Crypted _crypyedPwd;
+	private transient int _createdLobbyId = -1;
 	
 	////// CONSTRUCTORS //////
 	public User ( UString name, UString displayName, AString email, AString pwd, Cipher crypter ) throws IOException {
@@ -28,7 +30,6 @@ public class User implements Serializable, Encodable {
 		_displayName = displayName;
 		_email = email;
 		_pwd = pwd;
-		
 		if( pwd != null ) _crypyedPwd = new Crypted(pwd, crypter);
 	}
 	
@@ -75,5 +76,15 @@ public class User implements Serializable, Encodable {
 
 	public boolean isPwdValid () {
 		return _pwd != null;
+	}
+
+	public int getCreatedLobbyId() throws IOException {
+		if( _createdLobbyId == -1 ) throw new IOException("no lobby created");
+		
+		return _createdLobbyId;
+	}
+
+	public void setCreatedLobbyId ( int lobbyId ) {
+		_createdLobbyId = lobbyId;
 	}
 }

@@ -20,15 +20,18 @@ import Util.*;
 import Encodings.*;
 
 public class MainWindow extends JFrame {
+	////// STATIC FIELDS //////
 	private static final long serialVersionUID = 1L;
 	private static final Color bg = new Color(30, 30, 30); // kikoo style
+	
+	////// FIELDS //////
 	private Client _c;
-
 	private TxtField _error = new TxtField();
 	private JComponent _text = new Lbl("PublicStaticVoidMindTris");
 	private JComponent _top,
 					   _center;
 	
+	////// CONSTRUCTORS //////
 	public MainWindow ( Client c ) {
 		super("MindTris");
 
@@ -49,8 +52,7 @@ public class MainWindow extends JFrame {
 		setVisible(true);
 	}
 	
-	////////// PAINT ///////////
-	
+	////// PAINT //////
 	public void paintMenu () {
 		Container p = this.getContentPane();
 		
@@ -372,8 +374,22 @@ public class MainWindow extends JFrame {
 		_center.revalidate();
 	}
 
-	public void printLobby ( Lobby l, final UString displayName ) {
+	public void printLobby ( Lobby l, final UString displayName, boolean isCreator ) {
 		Lbl name = new Lbl(l._name.v() + " (created by "+l.getCreatorName()+")");
+		Btn start = null;
+		
+		if( isCreator ) {
+			start = new Btn("Start");
+			start.addActionListener(new ActionListener() {
+				public void actionPerformed(ActionEvent ev) {
+					try {
+						_c.startGame();
+					} catch (IOException e) {
+						printError(e.getMessage());
+					}
+				}
+			});
+		}
 		
 		JPanel connected = new JPanel();
 		connected.setBackground(bg);
@@ -402,6 +418,10 @@ public class MainWindow extends JFrame {
 		
 		_top.removeAll();
 		_top.add(name);
+		if( isCreator ) {
+			((JToolBar) _top).addSeparator();
+			_top.add(start);
+		}
 		_top.repaint();
 		
 		_center.removeAll();
@@ -415,8 +435,20 @@ public class MainWindow extends JFrame {
 		_center.revalidate();
 	}
 
-	/////////// PRINT ///////////
+	public void startGame ( Game g ) {
+		GameLeft left = new GameLeft();
+		left.setNext(g.getNextPiece());
+		
+		_center.removeAll();
+		_center.add(left, BorderLayout.WEST);
+		_center.add(new Tetris(), BorderLayout.CENTER);
+		_center.add(new GameRight(), BorderLayout.EAST);
+		
+		_center.repaint();
+		_center.revalidate();
+	}
 	
+	////// PRINT //////	
 	public void print (String txt) {
 		_error.setForeground(Color.WHITE);
 		_error.setText(txt);

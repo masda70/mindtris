@@ -15,6 +15,8 @@ import java.util.Map.Entry;
 import javax.crypto.Cipher;
 import javax.crypto.IllegalBlockSizeException;
 
+import sun.reflect.generics.reflectiveObjects.NotImplementedException;
+
 public class Client {
 	////// STATIC //////
 	private static final boolean DEBUG = true;
@@ -154,6 +156,10 @@ public class Client {
 		_srvCh.sendMsg();
 	}
 
+	public void startGame () throws IOException {
+		_srvCh.send(MsgCltSrv.START_GAME);
+	}
+	
 	public void sendChatMsg ( UString s ) throws IOException {
 		Msg m = new SignedMsg(MsgP2P.CHAT_SEND, 8+2+s.len(), _signer);
 		m._out.write(_lobby._sessionId);
@@ -169,8 +175,24 @@ public class Client {
 	}
 
 	////// PRIVATE METHODS //////
-	private void lobbyJoined () {
-		_w.printLobby(_lobby, _me._displayName);
+	private void keepAlive () {
+		Thread sendKeepAlive = new Thread () {
+			public void run () {
+				try {
+					Thread.sleep(60*1000);
+					_srvCh.send(MsgCltSrv.KEEP_ALIVE_MSG);
+				} catch ( IOException e ) {
+					e.printStackTrace();
+				} catch (InterruptedException e) {
+					e.printStackTrace();
+				}
+			}
+		};
+		sendKeepAlive.start();
+	}
+	
+	private void lobbyJoined ( boolean isCreator ) {
+		_w.printLobby(_lobby, _me._displayName, isCreator);
 		
 		/* start to listen peers */
 		Thread listenPeers = new Thread() {
@@ -247,6 +269,8 @@ public class Client {
 			addHdl(MsgCltSrv.LOBBY_LIST, new LobbyListHdl());
 			addHdl(MsgCltSrv.JOINED_LOBBY, new LobbyJoinedHdl());
 			addHdl(MsgCltSrv.UPDATE_CLIENT, new UpdateClientHdl());
+			addHdl(MsgCltSrv.GAME_STARTING, new GameStartedHdl());
+			addHdl(MsgCltSrv.LOAD_GAME, new GameLoadHdl());
 		}
 	}
 	
@@ -269,6 +293,8 @@ public class Client {
 				int motdLen = in.readUnsignedShort();
 				UString motd = new UString(in, motdLen);
 				_w.printCenter(motd.v());
+				
+				keepAlive();
 				break;
 			case 0x01:	_w.printError("Wrong protocol");	break;
 			default:	_w.printError("Unkown error");
@@ -325,7 +351,7 @@ public class Client {
 				_lobby._sessionId = sessionId;
 				_lobby._creator._id = _lobby._myPeerId;
 				
-				lobbyJoined();
+				lobbyJoined(true);
 				break;
 			case 0x01:	_w.printError("invalid password");	break;
 			case 0x02:	_w.printError("not enough rights");	break;
@@ -370,7 +396,7 @@ public class Client {
 					}
 				}
 				
-				lobbyJoined();
+				lobbyJoined(false);
 				break;
 			case 0x01:	_w.printError("Wrong password");	break;
 			case 0x02:	_w.printError("Lobby is full");		break;
@@ -400,11 +426,34 @@ public class Client {
 				
 				break;
 			default:
-				System.out.println("not implemented");
-				
+				throw new NotImplementedException();
 			}
 		}
-		
+	}
+	
+	private class GameStartedHdl implements Handler<ChCltSrv> {
+		public void handle(InData in, ChCltSrv ch) throws IOException {
+			switch( in.readUnsignedByte() ) {
+			case 0x00 :
+				debug("game started");
+				break;
+			default:
+				debug("error in game starting");
+			}
+		}
+	}
+	
+	private class GameLoadHdl implements Handler<ChCltSrv> {
+		public void handle(InData in, ChCltSrv ch) throws IOException {
+			Game g = new Game(_lobby);
+			
+			int nbPieces = in.readUnsignedByte();
+			for( int i=0; i<nbPieces; i++ ) {
+				g.addNewPiece( new Piece(in) );
+			}
+			
+			_w.startGame(g);
+		}
 	}
 	
 	////// P2P HANDLERS //////

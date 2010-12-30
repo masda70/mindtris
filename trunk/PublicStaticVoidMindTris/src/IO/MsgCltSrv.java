@@ -11,7 +11,8 @@ public class MsgCltSrv extends Msg {
 		LOGIN =			 	0x02,
 		CREATE_LOBBY =		0x03,
 		GET_LOBBY_LIST =	0x04,
-		JOIN_LOBBY =		0x05,		
+		JOIN_LOBBY =		0x05,
+		START_GAME =		0x10,
 		
 		S_HELLO = 			0x80,
 		USR_CREATION = 		0x81,
@@ -20,8 +21,11 @@ public class MsgCltSrv extends Msg {
 		LOBBY_LIST = 		0x84,
 		JOINED_LOBBY = 		0x85,
 		UPDATE_CLIENT =		0x88,
+		GAME_STARTING = 	0x90,
+		LOAD_GAME = 		0x91,
 		
 		UNDEFINED = 		0x7F;
+	public static final Msg KEEP_ALIVE_MSG = new KeepAliveMsg();
 
 	////// CONSTRUCTORS //////
 	public MsgCltSrv ( OutData out, int type, int len ) {
@@ -31,10 +35,31 @@ public class MsgCltSrv extends Msg {
 	public MsgCltSrv ( InData in ) throws IOException {
 		super(in);
 	}
+	
+	public MsgCltSrv ( int type, int l) {
+		super(type, l);
+	}
+	
+	protected MsgCltSrv () {}
 
 	////// OVERRIDE //////
 	protected byte[] getProtocolId() {
 		return protocolId;
 	}
 
+	////// PRIVATE CLASSES //////
+	private static class KeepAliveMsg extends MsgCltSrv {
+		public KeepAliveMsg () {
+			_out = new OutData(0);
+		}
+		
+		public void wrHeader ( OutData out ) {
+			try {
+				out.write(getProtocolId());
+				out.writeShort(getProtocolId().length + 2);
+			} catch ( IOException e ) {
+				e.printStackTrace();
+			}
+		}
+	}
 }

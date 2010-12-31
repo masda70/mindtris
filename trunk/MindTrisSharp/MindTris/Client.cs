@@ -568,7 +568,7 @@ namespace MindTris
                     //Process accordingly
                     switch ((Dgmt.PacketP2PID)id)
                     {
-                        case Dgmt.PacketP2PID.HelloFromPeer:
+                        case Dgmt.PacketP2PID.ConnectionRequest:
                             Process_HelloFromPeer(user, content_length);
                             break;
                         case Dgmt.PacketP2PID.ChatSend:

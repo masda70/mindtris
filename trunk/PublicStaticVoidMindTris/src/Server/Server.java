@@ -13,6 +13,10 @@ import java.util.Map.Entry;
 import javax.crypto.Cipher;
 import javax.crypto.NoSuchPaddingException;
 
+import com.sun.org.apache.bcel.internal.generic.LADD;
+
+import sun.reflect.generics.reflectiveObjects.NotImplementedException;
+
 public class Server extends Thread {
 	////// STATIC //////
 	public static final short PORT = 1337+42;
@@ -91,6 +95,22 @@ public class Server extends Thread {
 	}
 	
 	////// PRIVATE METHODS //////
+	private void mayBeginGame ( Lobby l ) throws IOException {
+		boolean loaded = true;
+		
+		for( Entry<Integer, Peer> o : l._peers ) {
+			if( o.getValue()._isLoaded == false ) {
+				loaded = false;
+				break;
+			}
+		}
+		
+		if( loaded ) {
+			for( Entry<Integer, Peer> o : l._peers )
+				o.getValue().getCh().send(MsgCltSrv.BEGIN_GAME);
+		}
+	}
+	
 	private void debug ( String m ) {
 		if( DEBUG ) System.out.println(m);
 	}
@@ -107,6 +127,7 @@ public class Server extends Thread {
 			addHdl(MsgCltSrv.GET_LOBBY_LIST,	new LobbyListHdl());
 			addHdl(MsgCltSrv.JOIN_LOBBY,		new LobbyJoinHdl());
 			addHdl(MsgCltSrv.START_GAME,		new StartHdl());
+			addHdl(MsgCltSrv.LOADED_GAME,		new LoadedHdl());
 		}
 	}
 	
@@ -209,9 +230,11 @@ public class Server extends Thread {
 				}
 			}
 			
+			User usr = ch.getUsr();
+			
 			int creatorPort = in.readUnsignedShort();
 			DSAKey creatorKey = new DSAKey(in);
-			Peer creator = new Peer(0, ch.getUsr()._displayName, ch.getIp(), creatorPort, creatorKey);
+			Peer creator = new Peer(0, usr._displayName, ch.getIp(), creatorPort, creatorKey);
 			creator.setCh(ch);
 			
 			int lobbyId = _lobbies.getNextId();
@@ -219,13 +242,16 @@ public class Server extends Thread {
 			_rdmGen.nextBytes(nonce);
 			Lobby l = new Lobby(lobbyId, name, nonce, (byte)1, maxPlayers, pwd, creator);
 			
+			int peerId = l._creator._id;
 			_lobbies.add(l);
-			ch.getUsr().setCreatedLobbyId(lobbyId);
+			usr.setCreatedLobbyId(lobbyId);
+			usr.setLobbyId(lobbyId);
+			usr.setPeerId(peerId);
 			
 			ch.createMsg(MsgCltSrv.LOBBY_CREATED, 1+4+1+8);
 			ch.msg().writeByte(0x00);
 			ch.msg().writeInt(lobbyId);
-			ch.msg().writeByte(l._creator._id);
+			ch.msg().writeByte(peerId);
 			ch.msg().write(nonce);
 			ch.sendMsg();
 		}
@@ -283,6 +309,8 @@ public class Server extends Thread {
 					}
 
 					l.add(peerId, newPeer);
+					usr.setLobbyId(lobbyId);
+					usr.setPeerId(peerId);
 					return;
 				} else {
 					ch.createMsg(MsgCltSrv.JOINED_LOBBY, 4+1);
@@ -323,6 +351,23 @@ public class Server extends Thread {
 			
 			for( Map.Entry<Integer, Peer> o : l._peers ) {
 				o.getValue().getCh().send(loadMsg);
+			}
+		}
+	}
+	
+	private class LoadedHdl implements Handler<ChCltSrv> {
+		public void handle(InData in, ChCltSrv ch) throws IOException {
+			switch( in.readUnsignedByte() ) {
+			case 0x00 :
+				User usr = ch.getUsr();
+				
+				Lobby l = _lobbies.get(usr.getLobbyId());
+				l._peers.get(usr.getPeerId())._isLoaded = true;
+				
+				mayBeginGame(l);
+				break;
+			default :
+				throw new NotImplementedException();
 			}
 		}
 		

@@ -20,9 +20,11 @@ public class User implements Serializable, Encodable {
 				   _displayName;
 	public AString _email;
 	public AString _pwd;
+	private transient int _peerId = -1;
+	private transient int _createdLobbyId = -1;
+	private transient int _lobbyId = -1;
 	private transient boolean _isConnected;	// TODO
 	private transient Crypted _crypyedPwd;
-	private transient int _createdLobbyId = -1;
 	
 	////// CONSTRUCTORS //////
 	public User ( UString name, UString displayName, AString email, AString pwd, Cipher crypter ) throws IOException {
@@ -80,11 +82,25 @@ public class User implements Serializable, Encodable {
 
 	public int getCreatedLobbyId() throws IOException {
 		if( _createdLobbyId == -1 ) throw new IOException("no lobby created");
-		
 		return _createdLobbyId;
 	}
-
 	public void setCreatedLobbyId ( int lobbyId ) {
 		_createdLobbyId = lobbyId;
+	}
+
+	public int getLobbyId () throws IOException {
+		if( _lobbyId == -1 ) throw new IOException("no lobby joined");
+		return _lobbyId;
+	}
+	public void setLobbyId ( int lobbyId ) {
+		_lobbyId = lobbyId;
+	}
+
+	public int getPeerId () throws IOException {
+		if( _peerId == -1 ) throw new IOException("no peerId");
+		return _peerId;
+	}
+	public void setPeerId ( int id ) {
+		_peerId = id;
 	}
 }

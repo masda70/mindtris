@@ -35,12 +35,14 @@ public abstract class Msg {
 			throw new IOException("Wrong protocol");
 		
 		int len = in.readUnsignedShort();
-		_type = in.readUnsignedByte();
-		
-		byte [] data = new byte[len - ptclId.length - 2 - 1];
-		in.readFully(data);
-
-		_in = new InData(new ByteArrayInputStream(data));
+		if( len > ptclId.length + 2 ) {
+			_type = in.readUnsignedByte();
+			
+			byte [] data = new byte[len - ptclId.length - 2 - 1];
+			in.readFully(data);
+	
+			_in = new InData(new ByteArrayInputStream(data));
+		} // else, this is just a keep alive msg
 	}
 	
 	protected Msg () {}

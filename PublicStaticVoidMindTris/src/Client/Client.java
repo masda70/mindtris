@@ -11,6 +11,8 @@ import java.net.Socket;
 import java.net.UnknownHostException;
 import java.security.*;
 import java.util.Arrays;
+import java.util.LinkedList;
+import java.util.List;
 import java.util.Map.Entry;
 import javax.crypto.Cipher;
 import javax.crypto.IllegalBlockSizeException;
@@ -37,6 +39,7 @@ public class Client {
 	private IdMap<byte[][]>		_challengeCodes;	// [ initCode, lstnCode ]
 	private IdMap<ChP2P>		_waitingPeerCh;
 	private IdMap<InData>		_waitingAck;
+	private Game				_game;
 
 	
 	////// CONSTRUCTORS //////
@@ -160,6 +163,10 @@ public class Client {
 		_srvCh.send(MsgCltSrv.START_GAME);
 	}
 	
+	public Game getGame () {
+		return _game;
+	}
+	
 	public void sendChatMsg ( UString s ) throws IOException {
 		Msg m = new SignedMsg(MsgP2P.CHAT_SEND, 8+2+s.len(), _signer);
 		m._out.write(_lobby._sessionId);
@@ -205,7 +212,6 @@ public class Client {
 						Socket skt = srv.accept();
 						ChP2P peerCh = new ChP2P(skt);
 						PeerHandler hdl = new PeerHandler(peerCh);
-						
 						hdl.start();
 					}
 				} catch ( IOException e ) {
@@ -233,6 +239,7 @@ public class Client {
 	}
 	
 	private void sendConnexionAck ( Peer p, ChP2P ch, InData in ) throws IOException {
+		debug("send connexion ack");
 		SignedMsg.verify(in, p._verifier);
 		ch.setPeer(p);
 		
@@ -262,15 +269,16 @@ public class Client {
 		public SrvHandler(ChCltSrv ch) {
 			super(ch);
 			
-			addHdl(MsgCltSrv.S_HELLO, new SrvHelloHdl());
-			addHdl(MsgCltSrv.USR_CREATION, new UsrCreateHdl());
-			addHdl(MsgCltSrv.LOGIN_REPLY, new LoginHdl());
-			addHdl(MsgCltSrv.LOBBY_CREATED, new LobbyCreatedHdl());
-			addHdl(MsgCltSrv.LOBBY_LIST, new LobbyListHdl());
-			addHdl(MsgCltSrv.JOINED_LOBBY, new LobbyJoinedHdl());
-			addHdl(MsgCltSrv.UPDATE_CLIENT, new UpdateClientHdl());
-			addHdl(MsgCltSrv.GAME_STARTING, new GameStartedHdl());
-			addHdl(MsgCltSrv.LOAD_GAME, new GameLoadHdl());
+			addHdl(MsgCltSrv.S_HELLO,			new SrvHelloHdl());
+			addHdl(MsgCltSrv.USR_CREATION,		new UsrCreateHdl());
+			addHdl(MsgCltSrv.LOGIN_REPLY,		new LoginHdl());
+			addHdl(MsgCltSrv.LOBBY_CREATED,		new LobbyCreatedHdl());
+			addHdl(MsgCltSrv.LOBBY_LIST,		new LobbyListHdl());
+			addHdl(MsgCltSrv.JOINED_LOBBY,		new LobbyJoinedHdl());
+			addHdl(MsgCltSrv.UPDATE_CLIENT,		new UpdateClientHdl());
+			addHdl(MsgCltSrv.GAME_STARTING,		new GameStartedHdl());
+			addHdl(MsgCltSrv.LOAD_GAME,			new GameLoadHdl());
+			addHdl(MsgCltSrv.BEGIN_GAME,		new BeginGameHdl());
 		}
 	}
 	
@@ -374,7 +382,7 @@ public class Client {
 			switch( in.readUnsignedByte() ) {
 			case 0x00:
 				_lobby = new Lobby(lobbyId, in);
-
+				
 				for( Entry<Integer, Peer> o : _lobby._peers ) {
 					Peer p = o.getValue();
 					String ip = p._ip.toString();
@@ -418,10 +426,12 @@ public class Client {
 					debug(p._displayName.v() + " has join, wait handshakes");
 					_lobby._peers.add(p._id, p);
 				} else {
+					debug("receive update from server");
 					InData ack = _waitingAck.get(p._id);
 					verifyConnexionAck(p, waitingPeerCh, ack);
 					_waitingPeerCh.rm(p._id);
 					_waitingAck.rm(p._id);
+					_challengeCodes.rm(p._id);
 				}
 				
 				break;
@@ -445,14 +455,35 @@ public class Client {
 	
 	private class GameLoadHdl implements Handler<ChCltSrv> {
 		public void handle(InData in, ChCltSrv ch) throws IOException {
-			Game g = new Game(_lobby);
+			_game = new Game(_lobby);
 			
 			int nbPieces = in.readUnsignedByte();
 			for( int i=0; i<nbPieces; i++ ) {
-				g.addNewPiece( new Piece(in) );
+				_game.addNewPiece( new Piece(in) );
 			}
 			
-			_w.startGame(g);
+			_w.loadGame();
+			
+			List<Integer> notConnected = new LinkedList<Integer>();
+			notConnected.addAll(_challengeCodes.keys());
+			// TODO add others cases
+			
+			if( notConnected.size() > 0 ) {
+				_srvCh.createMsg(MsgCltSrv.LOADED_GAME, 1+1+notConnected.size());
+				_srvCh.msg().writeByte(0x01);
+				_srvCh.msg().writeByte(notConnected.size());
+				for( Integer id : notConnected )
+					_srvCh.msg().writeByte(id);
+			} else {
+				_srvCh.send(MsgCltSrv.LOADED_GAME, (byte)0x00);
+			}
+		}
+	}
+	
+	private class BeginGameHdl implements Handler<ChCltSrv> {
+		public void handle(InData in, ChCltSrv ch) throws IOException {
+			debug("Begin Game");
+			_w.beginGame(_game.start());
 		}
 	}
 	
@@ -461,10 +492,10 @@ public class Client {
 		public PeerHandler(ChP2P ch) {
 			super(ch);
 			
-			addHdl(MsgP2P.CONNEXION_REQUEST, new ConnexionRequestHdl());
-			addHdl(MsgP2P.CONNEXION_ACCEPTED, new ConnexionAcceptedHdl());
-			addHdl(MsgP2P.CONNEXION_ACK, new ConnexionAck());
-			addHdl(MsgP2P.CHAT_SEND, new ChatHdl());
+			addHdl(MsgP2P.CONNEXION_REQUEST,	new ConnexionRequestHdl());
+			addHdl(MsgP2P.CONNEXION_ACCEPTED,	new ConnexionAcceptedHdl());
+			addHdl(MsgP2P.CONNEXION_ACK,		new ConnexionAck());
+			addHdl(MsgP2P.CHAT_SEND,			new ChatHdl());
 		}
 	}
 	
@@ -515,6 +546,7 @@ public class Client {
 					
 					Peer p = _lobby._peers.get(peerId);
 					sendConnexionAck(p, ch, in);
+					_challengeCodes.rm(peerId);
 				} else {
 					System.out.println("connexion acc with wrong init code");
 				}
@@ -544,6 +576,7 @@ public class Client {
 					if( p != null ) {
 						debug("connexion ack ok, verify signature");
 						verifyConnexionAck(p, ch, in);
+						_challengeCodes.rm(peerId);
 					} else {
 						debug("connexion ack ok, but wait for update status from server");
 						_waitingPeerCh.add(peerId, ch);

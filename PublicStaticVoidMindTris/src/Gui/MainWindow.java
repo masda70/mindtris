@@ -30,6 +30,9 @@ public class MainWindow extends JFrame {
 	private JComponent _text = new Lbl("PublicStaticVoidMindTris");
 	private JComponent _top,
 					   _center;
+	private GameLeft _left;
+	private Tetris _board;
+	private GameRight _right;
 	
 	////// CONSTRUCTORS //////
 	public MainWindow ( Client c ) {
@@ -435,17 +438,27 @@ public class MainWindow extends JFrame {
 		_center.revalidate();
 	}
 
-	public void startGame ( Game g ) {
-		GameLeft left = new GameLeft();
-		left.setNext(g.getNextPiece());
+	public void loadGame () {
+		Game g = _c.getGame();
+		
+		_left = new GameLeft();
+		_left.setNextPieces(g.nextPieces());
+		_board = new Tetris();
+		_right = new GameRight();
 		
 		_center.removeAll();
-		_center.add(left, BorderLayout.WEST);
-		_center.add(new Tetris(), BorderLayout.CENTER);
-		_center.add(new GameRight(), BorderLayout.EAST);
+		_center.add(_left, BorderLayout.WEST);
+		_center.add(_board, BorderLayout.CENTER);
+		_center.add(_right, BorderLayout.EAST);
 		
 		_center.repaint();
 		_center.revalidate();
+	}
+	
+	public void beginGame ( Piece p ) {
+		_board.initFall(p);
+		_board.repaint();
+		
 	}
 	
 	////// PRINT //////	

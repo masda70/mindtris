@@ -17,6 +17,7 @@ public class Peer implements Encodable {
 	public Ip _ip;
 	public DSAKey _key;
 	public Signature _verifier;
+	public boolean _isLoaded=false;
 	
 	private Channel _ch;
 	

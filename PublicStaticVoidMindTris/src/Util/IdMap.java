@@ -21,7 +21,6 @@ public class IdMap <O> implements Iterable<Map.Entry<Integer, O>> {
 		_size++;
 		return id;
 	}
-
 	public void add ( int id, O o ) {
 		if( ! _m.containsKey(id) ) {
 			_m.put(id, o);
@@ -33,6 +32,13 @@ public class IdMap <O> implements Iterable<Map.Entry<Integer, O>> {
 	
 	public O get ( int id ) {
 		return _m.get(id);
+	}
+
+	public Set<Integer> keys () {
+		return _m.keySet();
+	}
+	public Collection<O> elements () {
+		return _m.values();
 	}
 	
 	public void rm ( int id ) {

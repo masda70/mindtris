@@ -6,6 +6,9 @@ import java.security.SignatureException;
 import java.security.spec.AlgorithmParameterSpec;
 import java.security.spec.PSSParameterSpec;
 
+import sun.security.util.DerInputStream;
+import sun.security.util.DerValue;
+
 public class SignedMsg extends MsgP2P {
 	////// STATIC //////
 	public static final String SIGN_SCHEME = "SHA1withDSA";
@@ -32,11 +35,19 @@ public class SignedMsg extends MsgP2P {
 		try {
 			byte[] data = _out.getData();
 			_signer.update(data);
-			byte[] sign = _signer.sign();
-			_length += 2 + sign.length;
+			byte[] derSign = _signer.sign();
+
+			DerInputStream derIS = new DerInputStream(derSign);
+			DerValue[] seq = derIS.getSequence(0);
+			byte[] r = seq[0].getBigInteger().toByteArray(),
+				   s = seq[1].getBigInteger().toByteArray();
 			
-			_out.writeShort(sign.length);
-			_out.write(sign);
+			_length += 2 + r.length + s.length;
+			System.out.println(r.length+" "+s.length);
+			
+			_out.writeShort(r.length + s.length);
+			_out.write(r);
+			_out.write(s);
 		} catch ( SignatureException e ) {
 			throw new IOException("unable to sign message");
 		}

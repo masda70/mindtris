@@ -76,10 +76,10 @@ namespace MindTris
 			}
 			else _ip_server = "127.0.0.1";
             
-            _ip_server = "138.231.142.111";
+            //_ip_server = "138.231.142.111";
             
-            IPAddress address = Dns.GetHostAddresses("m70.crans.org")[0];
-            _ip_server = address.ToString();
+            //IPAddress address = Dns.GetHostAddresses("m70.crans.org")[0];
+            //_ip_server = address.ToString();
             //*/
             _peers = new Dictionary<byte, Peer>();
             _client = new Client(_ip_server);
@@ -106,8 +106,8 @@ namespace MindTris
             Console.WriteLine("Port?");
             while (!UInt16.TryParse(Console.ReadLine(), out _port)) ;
             _client.UserCreated += new Client.ConfirmationFunction(_client_UserCreated);
-            //_client.CreateUser(_login, _pass, _email);
-            _client_UserCreated(0x00);
+            _client.CreateUser(_login, _pass, _email);
+            //_client_UserCreated(0x00);
                     });
             t.Start();
         }
@@ -218,7 +218,7 @@ namespace MindTris
             //D'abord, on start le listening
             _client.StartListening(IPAddress.Any, _port);
             Debug.Assert(lobbyID != null);
-            _client.JoinLobby((uint)lobbyID, "");
+            //_client.JoinLobby((uint)lobbyID, "");
         }
 
         static void _client_LobbyJoined(byte response, byte? clientID, ulong? sessionID, Peer[] peers)

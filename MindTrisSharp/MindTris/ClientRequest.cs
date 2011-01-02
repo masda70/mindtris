@@ -25,4 +25,38 @@ namespace MindTris
         public uint LobbyID { get { return _lobbyID; } }
         public string Pass { get { return _pass; } }
     }
+
+    class ClientRequestConnectionRequest : ClientRequest
+    {
+        uint _lobbyID;
+        byte _peerID;
+        byte _listeningPeerID;
+        ulong _challengeNumber;
+
+        public ClientRequestConnectionRequest(uint lobbyID, byte peerID, byte listeningPeerID, ulong challengeNumber)
+        {
+            _lobbyID = lobbyID;
+            _peerID = peerID;
+            _listeningPeerID = listeningPeerID;
+            _challengeNumber = challengeNumber;
+        }
+
+        public uint LobbyID { get { return _lobbyID; } }
+        public byte PeerID { get { return _peerID; } }
+        public byte ListeningPeerID { get { return _listeningPeerID; } }
+        public ulong ChallengeNumber { get { return _challengeNumber; } }
+    }
+
+    class ClientRequestConnectionAccepted : ClientRequestConnectionRequest
+    {
+        ulong _listeningChallengeNumber;
+
+        public ClientRequestConnectionAccepted(uint lobbyID, byte peerID, byte listeningPeerID, ulong challengeNumber, ulong listeningChallengeNumber) :
+            base(lobbyID, peerID, listeningPeerID, challengeNumber)
+        {
+            _listeningChallengeNumber = listeningChallengeNumber;
+        }
+
+        public ulong ListeningChallengeNumber { get { return _listeningChallengeNumber; } }
+    }
 }

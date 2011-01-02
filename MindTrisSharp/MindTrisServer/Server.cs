@@ -481,7 +481,7 @@ namespace MindTrisServer
                 PeerServer player = new PeerServer(lobby, user, _logged_users[user].DisplayedName);
                 //Update peers
                 Response_UpdateClientLobbyStatus(user, player.ID, 0x00, player, lobby.Players);
-                //Player is added server side
+                //Player is added server side, after the response
                 lobby.Players.AddLast(player);
                 lobby.PlayerCount++;
                 //Update status

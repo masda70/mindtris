@@ -66,10 +66,10 @@ namespace MindTris
             }
             else _ip_server = "127.0.0.1";
 
-            //_ip_server = "138.231.142.111";
+            _ip_server = "138.231.142.111";
 
-            //IPAddress address = Dns.GetHostAddresses("m70.crans.org")[0];
-            //_ip_server = address.ToString();
+            IPAddress address = Dns.GetHostAddresses("m70.crans.org")[0];
+            _ip_server = address.ToString();
             //*/
             _peers = new Dictionary<byte, Peer>();
             _client = new Client(_ip_server);
@@ -96,8 +96,12 @@ namespace MindTris
             Console.WriteLine("Port?");
             while (!UInt16.TryParse(Console.ReadLine(), out _port)) ;
             _client.UserCreated += new Client.ConfirmationFunction(_client_UserCreated);
-            _client.CreateUser(_login, _pass, _email);
-            //_client_UserCreated(0x00);
+            Console.WriteLine("Create user? (y/other)");
+            if (Console.ReadLine() == "y")
+            {
+                _client.CreateUser(_login, _pass, _email);
+            }
+            else _client_UserCreated(0x00);
                     });
             t.Start();
         }
@@ -166,40 +170,43 @@ namespace MindTris
         {
             Thread t = new Thread(() =>
                 {
-            _client.LobbyJoined += new Client.JoinedLobbyFunction(_client_LobbyJoined);
+                    _client.LobbyJoined += new Client.JoinedLobbyFunction(_client_LobbyJoined);
 
-            const string lobby_format = "{0} | ID:{1} | {2}/{3}";
-            if (lobbies.Length > 0)
-            {
-                string[] lobbies_name = new string[lobbies.Length];
-                for (int k = 0; k < lobbies.Length; k++)
-                {
-                    lobbies_name[k] = String.Format(lobby_format,
-                        lobbies[k].Name,
-                        lobbies[k].ID,
-                        lobbies[k].PlayerCount,
-                        lobbies[k].PlayerMaxCount);
-                }
-                ConsoleMenu menu = new ConsoleMenu("Lobbies", lobbies_name);
-                int choix = menu.Show();
-                //D'abord, on start le listening
-                _client.StartListening(IPAddress.Any, _port);
-                Console.WriteLine("Password?");
-                string pass = Console.ReadLine();
-                _client.JoinLobby(lobbies[choix].ID, pass);
-            }
-            else
-            {
-                Console.WriteLine("[Server]: Create a lobby.");
-                Console.WriteLine("Name?");
-                string name = Console.ReadLine();
-                Console.WriteLine("Player allowed count?");
-                int count;
-                while (!Int32.TryParse(Console.ReadLine(), out count)) ;
-                _client.LobbyCreated += new Client.LobbyCreatedFunction(_client_LobbyCreated);
-                _client.CreateLobby(name, (byte)count, false, "");
-            }
-                    });
+                    const string lobby_format = "{0} | ID:{1} | {2}/{3}";
+
+                    string[] lobbies_name = new string[lobbies.Length + 1];
+                    lobbies_name[lobbies_name.Length - 1] = "[Create a new fucking lobby.]";
+                    for (int k = 0; k < lobbies.Length; k++)
+                    {
+                        lobbies_name[k] = String.Format(lobby_format,
+                            lobbies[k].Name,
+                            lobbies[k].ID,
+                            lobbies[k].PlayerCount,
+                            lobbies[k].PlayerMaxCount);
+                    }
+                    ConsoleMenu menu = new ConsoleMenu("Lobbies", lobbies_name);
+                    int choix = menu.Show();
+
+                    if (choix != lobbies_name.Length - 1)
+                    {
+                        //D'abord, on start le listening
+                        _client.StartListening(IPAddress.Any, _port);
+                        Console.WriteLine("Password?");
+                        string pass = Console.ReadLine();
+                        _client.JoinLobby(lobbies[choix].ID, pass);
+                    }
+                    else
+                    {
+                        Console.WriteLine("[Server]: Create a lobby.");
+                        Console.WriteLine("Name?");
+                        string name = Console.ReadLine();
+                        Console.WriteLine("Player allowed count?");
+                        int count;
+                        while (!Int32.TryParse(Console.ReadLine(), out count)) ;
+                        _client.LobbyCreated += new Client.LobbyCreatedFunction(_client_LobbyCreated);
+                        _client.CreateLobby(name, (byte)count, false, "", _port);
+                    }
+            });
             t.Start();
         }
 

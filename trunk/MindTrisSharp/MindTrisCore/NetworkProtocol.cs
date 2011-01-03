@@ -11,6 +11,8 @@ namespace MindTrisCore
         //Protocol ID
         public const string DGMT_STRING = "DGMT";
         public static readonly byte[] DGMT_BYTES = Encoding.ASCII.GetBytes(DGMT_STRING);
+        public const string DGMTP2P_STRING = "DGMTP2P";
+        public static readonly byte[] DGMTP2P_BYTES = Encoding.ASCII.GetBytes(DGMTP2P_STRING);
         //Protocol version
         public static readonly byte[] VERSION = { 1, 2, 0, 3 };
         //Default port for early versions of the protocol
@@ -25,6 +27,9 @@ namespace MindTrisCore
         public const int PACKET_ID_LENGTH = 1;
         public const int HEADER_LENGTH = PROTOCOL_ID_LENGTH + PACKET_LENGTH_LENGTH;
 
+        public const int PROTOCOL_P2P_ID_LENGTH = 7;
+        public const int HEADER_P2P_LENGTH = PROTOCOL_P2P_ID_LENGTH + PACKET_LENGTH_LENGTH;
+
         public const int PROTOCOL_VERSION_LENGTH = 4;
 
         //Regex
@@ -36,6 +41,12 @@ namespace MindTrisCore
         {
             if (buffer.Length < offset + PROTOCOL_ID_LENGTH) return false;
             return Encoding.ASCII.GetString(buffer, offset, PROTOCOL_ID_LENGTH) == DGMT_STRING;
+        }
+
+        public static bool DGMTP2PCheck(byte[] buffer, int offset)
+        {
+            if (buffer.Length < offset + PROTOCOL_P2P_ID_LENGTH) return false;
+            return Encoding.ASCII.GetString(buffer, offset, PROTOCOL_P2P_ID_LENGTH) == DGMTP2P_STRING;
         }
 
         public static byte[] ForgeNewPacket()
@@ -55,6 +66,21 @@ namespace MindTrisCore
             BitConverter.GetBytes(length).CopyTo(packet, Dgmt.PROTOCOL_ID_LENGTH);
             //On assure le BigEndian
             BigE.E(packet, Dgmt.PROTOCOL_ID_LENGTH, Dgmt.PACKET_LENGTH_LENGTH);
+            //return the full length of the packet
+            return size;
+        }
+
+        public static int FinalizePacketP2P(byte[] packet, int content_length)
+        {
+            int size = Dgmt.PROTOCOL_P2P_ID_LENGTH +
+                Dgmt.PACKET_LENGTH_LENGTH +
+                content_length
+                ;
+            DGMTP2P_BYTES.CopyTo(packet, 0);
+            ushort length = (ushort)size;
+            BitConverter.GetBytes(length).CopyTo(packet, Dgmt.PROTOCOL_P2P_ID_LENGTH);
+            //On assure le BigEndian
+            BigE.E(packet, Dgmt.PROTOCOL_P2P_ID_LENGTH, Dgmt.PACKET_LENGTH_LENGTH);
             //return the full length of the packet
             return size;
         }

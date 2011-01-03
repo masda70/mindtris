@@ -101,7 +101,6 @@ namespace MindTrisCore.DGMTEncoding
         {
             byte[] ip = address.GetAddressBytes();
             Debug.Assert(ip.Length == 4);
-            BigE.E(ip, 0, 4);
             for (int k = 0; k < 4; k++)
             {
                 buffer[i + k] = ip[k];
@@ -259,11 +258,9 @@ namespace MindTrisCore.DGMTEncoding
 
         public static IPAddress ReadIPAddress(byte[] buffer, ref int i)
         {
-            BigE.E(buffer, i, 4);
             byte[] ip_b = new byte[4];
             for (int j = 0; j < 4; j++) ip_b[j] = buffer[i + j];
             //Restore le buffer
-            BigE.E(buffer, i, 4);
             i += 4;
 
             return new IPAddress(ip_b);

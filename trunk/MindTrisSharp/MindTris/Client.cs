@@ -132,11 +132,11 @@ namespace MindTris
             }
         }
 
-        public void CreateLobby(string name, byte max_players, bool hasPassword, string pass)
+        public void CreateLobby(string name, byte max_players, bool hasPassword, string pass, ushort port)
         {
             if (_status.Logged_on)
             {
-                Send_CreateLobby(name, max_players, hasPassword, pass);
+                Send_CreateLobby(name, max_players, hasPassword, pass, port);
             }
         }
 
@@ -230,7 +230,7 @@ namespace MindTris
             QueueResponse(response);
         }
 
-        void Send_CreateLobby(string name, byte max_players, bool hasPass, string pass)
+        void Send_CreateLobby(string name, byte max_players, bool hasPass, string pass, ushort port)
         {
             byte[] packet = Dgmt.ForgeNewPacket();
             int i = Dgmt.HEADER_LENGTH;
@@ -243,6 +243,7 @@ namespace MindTris
                 byte[] pass_crypted = Encrypt(Encoding.ASCII.GetBytes(pass));
                 BigE.WriteSizePrefixed(packet, ref i, 2, pass_crypted);
             }
+            _port = port;
             BigE.WriteInt16(packet, ref i, _port);
             string key = _dsa_client.ToXmlString(false);
             BigE.WriteDSAPublicKey(packet, ref i, key);
@@ -557,16 +558,16 @@ namespace MindTris
         void ProcessUserPacket(User user)
         {
             //If the data do not even contain a full header, skip
-            if (user.Buffer.WindowLength < Dgmt.HEADER_LENGTH) return;
+            if (user.Buffer.WindowLength < Dgmt.HEADER_P2P_LENGTH) return;
             //Header check
-            byte[] minibuffer = user.Buffer.GetSubbufferCopy(0, Dgmt.HEADER_LENGTH);
-            if (Dgmt.DGMTCheck(minibuffer, 0))
+            byte[] minibuffer = user.Buffer.GetSubbufferCopy(0, Dgmt.HEADER_P2P_LENGTH);
+            if (Dgmt.DGMTP2PCheck(minibuffer, 0))
             {
-                int i = Dgmt.PROTOCOL_ID_LENGTH;
+                int i = Dgmt.PROTOCOL_P2P_ID_LENGTH;
                 ushort packet_length = BigE.ReadInt16(minibuffer, ref i);
                 //If the whole packet has not been read yet, skip
                 if (user.Buffer.WindowLength < packet_length) return;
-                ushort content_length = (ushort)(packet_length - Dgmt.HEADER_LENGTH);
+                ushort content_length = (ushort)(packet_length - Dgmt.HEADER_P2P_LENGTH);
                 if (content_length <= 0)
                 {
                     //It's a keep-alive, we update
@@ -575,7 +576,7 @@ namespace MindTris
                 else
                 {
                     //Grab the message type
-                    Dgmt.PacketP2PID id = (Dgmt.PacketP2PID)user.Buffer[Dgmt.PROTOCOL_ID_LENGTH + Dgmt.PACKET_LENGTH_LENGTH];
+                    Dgmt.PacketP2PID id = (Dgmt.PacketP2PID)user.Buffer[Dgmt.HEADER_P2P_LENGTH];
                     //Process accordingly
                     switch (id)
                     {
@@ -737,7 +738,7 @@ namespace MindTris
             if (!user.UserStatus.Logged_on)
             {
                 Console.WriteLine("{0}: Handshaking.", user.Socket.RemoteEndPoint);
-                int i = Dgmt.HEADER_LENGTH;
+                int i = Dgmt.HEADER_P2P_LENGTH;
                 byte[] packet = user.Buffer.GetSubbufferCopy(i, content_length);
                 //Skip the type
                 i = 1;
@@ -771,7 +772,7 @@ namespace MindTris
             if (user.UserStatus.Logged_on)
             {
                 Console.WriteLine("{0}: is accepting the connection.", user.Socket.RemoteEndPoint);
-                int i = Dgmt.HEADER_LENGTH;
+                int i = Dgmt.HEADER_P2P_LENGTH;
                 byte[] packet = user.Buffer.GetSubbufferCopy(i, content_length);
                 //Skip the type
                 i = 1;
@@ -829,7 +830,7 @@ namespace MindTris
             if (user.UserStatus.Logged_on)
             {
                 Console.WriteLine("{0}: is acknowledging your accepting the connection.", user.Socket.RemoteEndPoint);
-                int i = Dgmt.HEADER_LENGTH;
+                int i = Dgmt.HEADER_P2P_LENGTH;
                 byte[] packet = user.Buffer.GetSubbufferCopy(i, content_length);
                 //Skip the type
                 i = 1;
@@ -882,17 +883,17 @@ namespace MindTris
         {
             if (user.UserStatus.Logged_on)
             {
-                int i = Dgmt.HEADER_LENGTH;
+                int i = Dgmt.HEADER_P2P_LENGTH;
                 byte[] packet = user.Buffer.GetSubbufferCopy(i, content_length);
                 //Skip the type
                 i = 1;
-                byte[] signature = BigE.ReadSizePrefixedRawBytes(packet, ref i, 2);
                 int j = i;
                 ulong sessionID = BigE.ReadInt64(packet, ref i);
                 string message = BigE.ReadSizePrefixedUTF8(packet, ref i, 2);
                 //On copie le bordel dont on doit vérifier la signature
                 byte[] to_sign = new byte[i - j];
                 Array.Copy(packet, j, to_sign, 0, i - j);
+                byte[] signature = BigE.ReadSizePrefixedRawBytes(packet, ref i, 2);
 
                 _dsa_peer.FromXmlString(user.PublicKey);
                 if (!_dsa_peer.VerifyData(to_sign, signature)) Console.WriteLine("{0}: Bad signature on sent message.", user.Socket.RemoteEndPoint);
@@ -1088,8 +1089,8 @@ namespace MindTris
             i = 1;
             Peer peer = new Peer();
             uint lobbyID = BigE.ReadInt32(response, ref i);
-            peer.ID = BigE.ReadByte(response, ref i);
             byte answer = BigE.ReadByte(response, ref i);
+            peer.ID = BigE.ReadByte(response, ref i);
             if (answer == 0x00)
             {
                 peer.DisplayName = BigE.ReadSizePrefixedUTF8(response, ref i, 1);
@@ -1110,7 +1111,7 @@ namespace MindTris
         void Send_ConnectionRequest(User user)
         {
             byte[] packet = Dgmt.ForgeNewPacket();
-            int i = Dgmt.HEADER_LENGTH;
+            int i = Dgmt.HEADER_P2P_LENGTH;
             BigE.WritePacketIDP2P(packet, ref i, Dgmt.PacketP2PID.ConnectionRequest);
             BigE.WriteInt32(packet, ref i, _lobby.ID);
             Debug.Assert(_status.Peer_id != null);
@@ -1122,7 +1123,7 @@ namespace MindTris
             _rand.NextBytes(bytes);
             ulong challengeNumber = BitConverter.ToUInt64(bytes, 0);
             BigE.WriteInt64(packet, ref i, challengeNumber);
-            int length = Dgmt.FinalizePacket(packet, i - Dgmt.HEADER_LENGTH);
+            int length = Dgmt.FinalizePacketP2P(packet, i - Dgmt.HEADER_P2P_LENGTH);
 
             //Add to requests to grant
             ClientRequestConnectionRequest request = new ClientRequestConnectionRequest(_lobby.ID, (byte)_status.Peer_id, (byte)user.UserStatus.Peer_id, challengeNumber);
@@ -1135,7 +1136,7 @@ namespace MindTris
         void Send_ConnectionAccepted(User user, ulong challengeNumber)
         {
             byte[] packet = Dgmt.ForgeNewPacket();
-            int i = Dgmt.HEADER_LENGTH;
+            int i = Dgmt.HEADER_P2P_LENGTH;
             BigE.WritePacketIDP2P(packet, ref i, Dgmt.PacketP2PID.ConnectionAccepted);
             int j = i;
             BigE.WriteInt32(packet, ref i, _lobby.ID);
@@ -1149,7 +1150,7 @@ namespace MindTris
             BigE.WriteInt64(packet, ref i, listeningChallengeNumber);
             byte[] signed = _dsa_client.SignData(packet, j, i - j);
             BigE.WriteSizePrefixed(packet, ref i, 2, signed);
-            int length = Dgmt.FinalizePacket(packet, i - Dgmt.HEADER_LENGTH);
+            int length = Dgmt.FinalizePacketP2P(packet, i - Dgmt.HEADER_P2P_LENGTH);
 
             ClientRequestConnectionAccepted request = new ClientRequestConnectionAccepted(_lobby.ID, (byte)user.UserStatus.Peer_id, (byte)_status.Peer_id, challengeNumber, listeningChallengeNumber);
             RegisterRequest(request);
@@ -1161,7 +1162,7 @@ namespace MindTris
         void Send_ConnectionAcknowledged(User user, ulong challengeNumber, ulong listeningChallengeNumber)
         {
             byte[] packet = Dgmt.ForgeNewPacket();
-            int i = Dgmt.HEADER_LENGTH;
+            int i = Dgmt.HEADER_P2P_LENGTH;
             BigE.WritePacketIDP2P(packet, ref i, Dgmt.PacketP2PID.ConnectionAcknowledged);
             int j = i;
             BigE.WriteInt32(packet, ref i, _lobby.ID);
@@ -1171,7 +1172,7 @@ namespace MindTris
             BigE.WriteInt64(packet, ref i, listeningChallengeNumber);
             byte[] signed = _dsa_client.SignData(packet, j, i - j);
             BigE.WriteSizePrefixed(packet, ref i, 2, signed);
-            int length = Dgmt.FinalizePacket(packet, i - Dgmt.HEADER_LENGTH);
+            int length = Dgmt.FinalizePacketP2P(packet, i - Dgmt.HEADER_P2P_LENGTH);
 
             //Send
             ServerResponse response = new ServerResponse(user.Socket, packet, length);
@@ -1181,24 +1182,18 @@ namespace MindTris
         void Send_ChatSend(User user, string message)
         {
             byte[] packet = Dgmt.ForgeNewPacket();
-            int i = Dgmt.HEADER_LENGTH;
+            int i = Dgmt.HEADER_P2P_LENGTH;
             BigE.WritePacketIDP2P(packet, ref i, Dgmt.PacketP2PID.ChatSend);
 
-            //On construit d'abord le reste du message, qui doit être signé
-            byte[] reste = new byte[Dgmt.BUFFER_MAX_LENGTH];
-            int j = 0;
-            BigE.WriteInt64(reste, ref j, (ulong)_status.Session_id);
-            BigE.WriteSizePrefixedUTF8(reste, ref j, 2, message);
-            //[TOCHECK] Resize fait bien ce qu'on veut ?
-            Array.Resize(ref reste, j);
+            int j = i;
+            BigE.WriteInt64(packet, ref i, (ulong)_status.Session_id);
+            BigE.WriteSizePrefixedUTF8(packet, ref i, 2, message);
 
             //Signature
             string public_key = _dsa_client.ToXmlString(false);
-            byte[] sign = _dsa_client.SignData(reste);
+            byte[] sign = _dsa_client.SignData(packet, j, i - j);
             BigE.WriteSizePrefixed(packet, ref i, 2, sign);
-            //Ecriture du reste du message
-            BigE.WriteRawBytes(packet, ref i, reste);
-            int length = Dgmt.FinalizePacket(packet, i - Dgmt.HEADER_LENGTH);
+            int length = Dgmt.FinalizePacketP2P(packet, i - Dgmt.HEADER_P2P_LENGTH);
 
             //Send
             ServerResponse response = new ServerResponse(user.Socket, packet, length);

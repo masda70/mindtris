@@ -584,8 +584,11 @@ namespace MindTrisServer
 
         void QueueResponse(ServerResponse response)
         {
-            User user = _users[response.Socket];
-            user.SendingPending.AddLast(response);
+            if (_users.ContainsKey(response.Socket))
+            {
+                User user = _users[response.Socket];
+                user.SendingPending.AddLast(response);
+            }
         }
 
         void Response_HelloFromServer(User user, byte response)
@@ -727,8 +730,8 @@ namespace MindTrisServer
             BigE.WritePacketID(packet, ref i, Dgmt.PacketID.UpdateClientStatus);
             Debug.Assert(user.UserStatus.Lobby_id != null);
             BigE.WriteInt32(packet, ref i, (uint)user.UserStatus.Lobby_id);
-            BigE.WriteByte(packet, ref i, clientID);
             BigE.WriteByte(packet, ref i, statusUpdate);
+            BigE.WriteByte(packet, ref i, clientID);
             if (statusUpdate == 0x00)
             {
                 BigE.WriteSizePrefixedUTF8(packet, ref i, 1, peer.DisplayName);

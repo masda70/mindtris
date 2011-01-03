@@ -725,13 +725,13 @@ All packets sent between the peers must be structured as follows:
   \begin{tabular}{|p{2cm}|c|c|c|p{8cm}|}
     \hline
     Name & Encoding & Size (B) & Default & Comment \\  \hline \hline
-    Protocol & STRING & 4 & "DGMTP2P" & Default protocol identifier. \\ \hline
+    Protocol & STRING & 7 & "DGMTP2P" & Default protocol identifier. \\ \hline
     Size & INTEGER & 2 & & The size of the message in bytes, including the header. \\ \hline
     Payload & BYTE & varies & & The content of this field will vary depending on the type of message.\\ \hline
   \end{tabular}
 \end{center}
 
-Basically, clients are expected to connect to each other the moment they join a lobby. The client having joined first must initiate the connection. They must use the TCP port each individual peer is listening to, as provided by the server. Before they engage in any conversation, they must go through a handshake phase.
+Basically, clients are expected to connect to each other the moment they join a lobby. The client having joined last must initiate the connection. They must use the TCP port each individual peer is listening to, as provided by the server. Before they engage in any conversation, they must go through a handshake phase.
 
 \subsection{Handshake}
 
@@ -804,11 +804,11 @@ Chat messages don't rely on the server for transmission. They are sent directly 
     \hline
     Name & Encoding & Size (B) & Default & Comment \\  \hline \hline
     Type & INTEGER & 1 & 0x10 & This identifies the message as \verb CHAT_SEND . \\ \hline
-    Signature Size & INTEGER & 2 & N/A & The size of the signature field in bytes. \\ \hline
-    Signature & BYTE & varies & N/A & The client's RSA signature for the rest of the message, generated with DSA. \\ \hline
 	Session ID & INTEGER & 8 & N/A & The lobby's session's ID. This makes reusing of old signed packets harder.\\ \hline
     Chat Message Length & INTEGER & 2 & N/A & The size of the Chat Message field. \\ \hline
     Chat Message & USTRING & varies & N/A & A chat message sent by the peer we are connected to. \\ \hline
+    Signature Size & INTEGER & 2 & N/A & The size of the signature field in bytes. \\ \hline
+    Signature & BYTE & varies & N/A & The client's RSA signature for the Session ID and Chat message, generated with DSA. \\ \hline
   \end{tabular}
 \end{center}
 
@@ -821,9 +821,9 @@ Most importantly, peers are supposed to send each other packets for each round t
     \hline
     Name & Encoding & Size (B) & Default & Comment \\  \hline \hline
     Type & INTEGER & 1 & 0x11 & This identifies the message as \verb ROUND . \\ \hline
+    Round Data & BYTE & varies & N/A & The data about the round, this is described below. \\ \hline
     Signature Size & INTEGER & 2 & N/A & The size of the signature field in bytes. \\ \hline
     Signature & BYTE & varies & N/A & The client's RSA signature for the Round Data field, generated with DSA. \\ \hline
-    Round Data & BYTE & varies & N/A & The data about the round, this is described below. \\ \hline
   \end{tabular}
 \end{center}
 

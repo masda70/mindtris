@@ -198,6 +198,7 @@ namespace MindTrisCore.DGMTEncoding
                 case 2:
                     BigE.E(buffer, i, 2);
                     size = BitConverter.ToUInt16(buffer, i);
+                    BigE.E(buffer, i, 2);
                     break;
                 default:
                     throw new Exception("Taille invalide d'entier");
@@ -223,6 +224,7 @@ namespace MindTrisCore.DGMTEncoding
                 case 2:
                     BigE.E(buffer, i, 2);
                     size = BitConverter.ToUInt16(buffer, i);
+                    BigE.E(buffer, i, 2);
                     break;
                 default:
                     throw new Exception("Taille invalide d'entier");
@@ -244,6 +246,7 @@ namespace MindTrisCore.DGMTEncoding
                 case 2:
                     BigE.E(buffer, i, 2);
                     size = BitConverter.ToUInt16(buffer, i);
+                    BigE.E(buffer, i, 2);
                     break;
                 default:
                     throw new Exception("Taille invalide d'entier");
@@ -259,7 +262,10 @@ namespace MindTrisCore.DGMTEncoding
             BigE.E(buffer, i, 4);
             byte[] ip_b = new byte[4];
             for (int j = 0; j < 4; j++) ip_b[j] = buffer[i + j];
+            //Restore le buffer
+            BigE.E(buffer, i, 4);
             i += 4;
+
             return new IPAddress(ip_b);
         }
 
@@ -267,6 +273,7 @@ namespace MindTrisCore.DGMTEncoding
         {
             BigE.E(buffer, i, 2);
             ushort res = BitConverter.ToUInt16(buffer, i);
+            BigE.E(buffer, i, 2);
             i += 2;
             return res;
         }
@@ -275,6 +282,7 @@ namespace MindTrisCore.DGMTEncoding
         {
             BigE.E(buffer, i, 4);
             uint res = BitConverter.ToUInt32(buffer, i);
+            BigE.E(buffer, i, 4);
             i += 4;
             return res;
         }
@@ -283,6 +291,7 @@ namespace MindTrisCore.DGMTEncoding
         {
             BigE.E(buffer, i, 8);
             ulong res = BitConverter.ToUInt64(buffer, i);
+            BigE.E(buffer, i, 8);
             i += 8;
             return res;
         }

@@ -12,7 +12,7 @@ namespace MindTrisCore
         public const string DGMT_STRING = "DGMT";
         public static readonly byte[] DGMT_BYTES = Encoding.ASCII.GetBytes(DGMT_STRING);
         //Protocol version
-        public static readonly byte[] VERSION = { 1, 2, 0, 1 };
+        public static readonly byte[] VERSION = { 1, 2, 0, 3 };
         //Default port for early versions of the protocol
         public const int DEFAULT_PORT = 1337 + 42;
 

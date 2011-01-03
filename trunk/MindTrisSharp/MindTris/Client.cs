@@ -78,6 +78,8 @@ namespace MindTris
             _remaining_unseen_peers = new Dictionary<byte, Peer>();
             _rsa_server = new RSACryptoServiceProvider();
             _dsa_client = new DSACryptoServiceProvider();
+            _dsa_peer = new DSACryptoServiceProvider();
+            _rand = new Random();
             string lol = _dsa_client.ToXmlString(false);
             lol.ToString();
             _status = new ClientStatus();
@@ -181,11 +183,8 @@ namespace MindTris
 
         public delegate void MessageReceivedFunction(Peer peer, string message);
         public event MessageReceivedFunction MessageReceived;
-        public delegate void PeerHandshakenFunction(Peer peer, ulong challengeNumber);
+        public delegate void PeerHandshakenFunction(Peer peer);
         public event PeerHandshakenFunction PeerHandshaken;
-        public delegate void ConnectionAcceptedFunction(Peer peer, ulong challengeNumber, ulong listeningChallengeNumber);
-        public event ConnectionAcceptedFunction ConnectionAccepted;
-        public event ConnectionAcceptedFunction ConnectionAcknowledged;
 
 
 
@@ -244,8 +243,9 @@ namespace MindTris
                 byte[] pass_crypted = Encrypt(Encoding.ASCII.GetBytes(pass));
                 BigE.WriteSizePrefixed(packet, ref i, 2, pass_crypted);
             }
-            BigE.WriteInt32(packet, ref i, _port);
-            BigE.WriteDSAPublicKey(packet, ref i, _dsa_client.ToXmlString(false));
+            BigE.WriteInt16(packet, ref i, _port);
+            string key = _dsa_client.ToXmlString(false);
+            BigE.WriteDSAPublicKey(packet, ref i, key);
 
             _lobby = new Lobby()
             {
@@ -358,6 +358,7 @@ namespace MindTris
                         User user = new User(client);
                         user.Port = peer.Port;
                         user.PublicKey = peer.PublicKey;
+                        user.UserStatus.Peer_id = peer.ID;
                         PeerPlayer player = new PeerPlayer(peer, user);
                         lock (_users) { _users.Add(client, user); }
                         lock (_players) { _players.Add(user, player); }
@@ -374,7 +375,7 @@ namespace MindTris
             );
             t.Start();
         }
-
+        
         public void SendMessage(string message)
         {
             Thread t = new Thread(() =>
@@ -449,7 +450,10 @@ namespace MindTris
                 {
                     //Add new user
                     User user = new User(client);
-                    _users.Add(client, user);
+                    lock (_users)
+                    {
+                        _users.Add(client, user);
+                    }
                 }
             }
         }
@@ -541,8 +545,10 @@ namespace MindTris
         {
             //Server
             ProcessServerPacket(_user_server);
+            //On effectue une copie, des fois que le processing modifie _users
+            LinkedList<User> copie = new LinkedList<User>(_users.Values);
             //Peers
-            foreach (User user in _users.Values)
+            foreach (User user in copie)
             {
                 ProcessUserPacket(user);
             }
@@ -569,9 +575,9 @@ namespace MindTris
                 else
                 {
                     //Grab the message type
-                    byte id = user.Buffer[Dgmt.PROTOCOL_ID_LENGTH + Dgmt.PACKET_LENGTH_LENGTH];
+                    Dgmt.PacketP2PID id = (Dgmt.PacketP2PID)user.Buffer[Dgmt.PROTOCOL_ID_LENGTH + Dgmt.PACKET_LENGTH_LENGTH];
                     //Process accordingly
-                    switch ((Dgmt.PacketP2PID)id)
+                    switch (id)
                     {
                         case Dgmt.PacketP2PID.ConnectionRequest:
                             Process_ConnectionRequest(user, content_length);
@@ -750,9 +756,13 @@ namespace MindTris
                 PeerPlayer player = new PeerPlayer(matching_peer, user);
                 lock (_players) { _players.Add(user, player); }
                 lock (_remaining_unseen_peers) { _remaining_unseen_peers.Remove(peerID); }
+                //On update l'user status
                 user.UserStatus.Logged_on = true;
+                user.UserStatus.Peer_id = peerID;
+                user.UserStatus.Lobby_id = lobbyID;
 
-                if (PeerHandshaken != null) PeerHandshaken(player, challengeNumber);
+                //Send the ConnectionAccepted packet : 2nd step of the 3-way handshake
+                Send_ConnectionAccepted(user, challengeNumber);
             }
         }
 
@@ -789,7 +799,8 @@ namespace MindTris
                 ulong challengeNumber = BigE.ReadInt64(packet, ref i);
                 ulong listeningChallengeNumber = BigE.ReadInt64(packet, ref i);
                 //On copie pour vérifier la signature
-                byte[] to_sign = user.Buffer.GetSubbufferCopy(j, i - j);
+                byte[] to_sign = new byte[i - j];
+                Array.Copy(packet, j, to_sign, 0, i - j);
                 byte[] signatureDSA = BigE.ReadSizePrefixedRawBytes(packet, ref i, 2);
 
                 //Là faire des tests
@@ -799,14 +810,15 @@ namespace MindTris
                     challengeNumber == request.ChallengeNumber)
                 {
                     _dsa_peer.FromXmlString(user.PublicKey);
-                    if (_dsa_peer.VerifyData(to_sign, signatureDSA))
-                    {
-                        //Tout est bon, dans le cochon
-                        Peer peer = _players[user];
-                        if (ConnectionAccepted != null) ConnectionAccepted(peer, challengeNumber, listeningChallengeNumber);
-                        return;
-                    }
-                    Console.WriteLine("{0}: bad DSA signature.", user.Socket.RemoteEndPoint);
+                    if (!_dsa_peer.VerifyData(to_sign, signatureDSA)) Console.WriteLine("{0}: bad DSA signature.", user.Socket.RemoteEndPoint);
+                    //Tout est bon, dans le cochon
+                    Peer peer = _players[user];
+                        
+                    //Proceed to the last step of the 3-way handshake
+                    Send_ConnectionAcknowledged(user, challengeNumber, listeningChallengeNumber);
+
+                    if (PeerHandshaken != null) PeerHandshaken(peer);
+                    return;
                 }
                 DisconnectUser(user.Socket);
             }
@@ -845,7 +857,8 @@ namespace MindTris
                 ulong challengeNumber = BigE.ReadInt64(packet, ref i);
                 ulong listeningChallengeNumber = BigE.ReadInt64(packet, ref i);
                 //On copie pour vérifier la signature
-                byte[] to_sign = user.Buffer.GetSubbufferCopy(j, i - j);
+                byte[] to_sign = new byte[i - j];
+                Array.Copy(packet, j, to_sign, 0, i - j);
                 byte[] signatureDSA = BigE.ReadSizePrefixedRawBytes(packet, ref i, 2);
 
                 //Là faire des tests
@@ -855,14 +868,11 @@ namespace MindTris
                     challengeNumber == request.ChallengeNumber)
                 {
                     _dsa_peer.FromXmlString(user.PublicKey);
-                    if (_dsa_peer.VerifyData(to_sign, signatureDSA))
-                    {
-                        //Tout est bon, dans le cochon
-                        Peer peer = _players[user];
-                        if (ConnectionAcknowledged != null) ConnectionAcknowledged(peer, challengeNumber, listeningChallengeNumber);
-                        return;
-                    }
-                    Console.WriteLine("{0}: bad DSA signature.", user.Socket.RemoteEndPoint);
+                    if (!_dsa_peer.VerifyData(to_sign, signatureDSA)) Console.WriteLine("{0}: bad DSA signature.", user.Socket.RemoteEndPoint);
+                    //Tout est bon, dans le cochon
+                    Peer peer = _players[user];
+                    if (PeerHandshaken != null) PeerHandshaken(peer);
+                    return;
                 }
                 DisconnectUser(user.Socket);
             }
@@ -880,13 +890,12 @@ namespace MindTris
                 int j = i;
                 ulong sessionID = BigE.ReadInt64(packet, ref i);
                 string message = BigE.ReadSizePrefixedUTF8(packet, ref i, 2);
-                byte[] to_sign = user.Buffer.GetSubbufferCopy(j, i - j);
+                //On copie le bordel dont on doit vérifier la signature
+                byte[] to_sign = new byte[i - j];
+                Array.Copy(packet, j, to_sign, 0, i - j);
 
                 _dsa_peer.FromXmlString(user.PublicKey);
-                if (!_dsa_peer.VerifyData(to_sign, signature))
-                {
-                    Console.WriteLine("{0}: Bad signature on sent message.", user.Socket.RemoteEndPoint);
-                }
+                if (!_dsa_peer.VerifyData(to_sign, signature)) Console.WriteLine("{0}: Bad signature on sent message.", user.Socket.RemoteEndPoint);
 
                 Console.WriteLine("{0} says: {1}", user.Socket.RemoteEndPoint, message);
 
@@ -1043,6 +1052,7 @@ namespace MindTris
             if (answer == 0x00)
             {
                 _lobby = new Lobby();
+                _lobby.ID = lobbyID;
                 _lobby.Name = BigE.ReadSizePrefixedUTF8(response, ref i, 1);
                 _lobby.PlayerMaxCount = BigE.ReadByte(response, ref i);
                 _lobby.CreatorPeerID = BigE.ReadByte(response, ref i);
@@ -1060,11 +1070,7 @@ namespace MindTris
                     peers[k].PublicKey = BigE.ReadDSAPublicKey(response, ref i);
                 }
                 _status.Lobby_id = lobbyID;
-                //Add to the list of peers who will connect later on
-                foreach (Peer peer in peers)
-                {
-                    _remaining_unseen_peers.Add(peer.ID, peer);
-                }
+                //[TOCHECK] On charge le programme utilisant la classe "Client" de se connecter au peers, renvoyés dans l'event LobbyJoined
             }
             else
             {
@@ -1090,6 +1096,7 @@ namespace MindTris
                 peer.IpAddress = BigE.ReadIPAddress(response, ref i);
                 peer.Port = BigE.ReadInt16(response, ref i);
                 peer.PublicKey = BigE.ReadDSAPublicKey(response, ref i);
+                _remaining_unseen_peers.Add(peer.ID, peer);
             }
             if (StatusUpdated != null) StatusUpdated(answer, peer);
             if (peer.ID == _status.Peer_id)
@@ -1144,7 +1151,7 @@ namespace MindTris
             BigE.WriteSizePrefixed(packet, ref i, 2, signed);
             int length = Dgmt.FinalizePacket(packet, i - Dgmt.HEADER_LENGTH);
 
-            ClientRequestConnectionAccepted request = new ClientRequestConnectionAccepted(_lobby.ID, (byte)_status.Peer_id, (byte)user.UserStatus.Peer_id, challengeNumber, listeningChallengeNumber);
+            ClientRequestConnectionAccepted request = new ClientRequestConnectionAccepted(_lobby.ID, (byte)user.UserStatus.Peer_id, (byte)_status.Peer_id, challengeNumber, listeningChallengeNumber);
             RegisterRequest(request);
             //Send
             ServerResponse response = new ServerResponse(user.Socket, packet, length);
@@ -1155,7 +1162,7 @@ namespace MindTris
         {
             byte[] packet = Dgmt.ForgeNewPacket();
             int i = Dgmt.HEADER_LENGTH;
-            BigE.WritePacketIDP2P(packet, ref i, Dgmt.PacketP2PID.ConnectionAccepted);
+            BigE.WritePacketIDP2P(packet, ref i, Dgmt.PacketP2PID.ConnectionAcknowledged);
             int j = i;
             BigE.WriteInt32(packet, ref i, _lobby.ID);
             BigE.WriteByte(packet, ref i, (byte)_status.Peer_id);
@@ -1186,6 +1193,7 @@ namespace MindTris
             Array.Resize(ref reste, j);
 
             //Signature
+            string public_key = _dsa_client.ToXmlString(false);
             byte[] sign = _dsa_client.SignData(reste);
             BigE.WriteSizePrefixed(packet, ref i, 2, sign);
             //Ecriture du reste du message

@@ -49,35 +49,25 @@ namespace MindTris
 
         static void Main(string[] args)
         {
-            string keys_0 = "<RSAKeyValue><Modulus>kVPEnS5vVgdySMJGDHLdBg+mPjB8FVx82tZWSHwY9PwFeXntZJ1pdal+L10ScdgHrj8kduz2x3FwgYQbuRy1SwhEI1Tia6rsCd1Asxl20ZhsllRXO4YprkuPCAWtro7xwSDpscr5OYV1oVnxwqbY9E5KyaVtHiFusdh8X+PuQO0=</Modulus><Exponent>AQAB</Exponent><P>xfje5exXOw239RbMU0e0dMEQfihCwtJQ9IlmGIp33HAHcbAhT/SDDPiZtXeRZhZiPJUUHEE+5PmqUgm+gRTFCQ==</P><Q>u+ybpZkyl8NiYgZyWUbYCR706J9ZausHlTKFpjKp6VtuvFgIf/Y9pLAqeQX78T9UuqB+Kr0WtGVJKfGHDf7ZxQ==</Q><DP>YlHrQX1TBT0W813TNDkUYjfQHReZsHALTKdAUUfTp2LsD4ZNxQvGWhbNH9a2G2FagIP5bN7qgYWNFRlJx4mtIQ==</DP><DQ>OGNx/MmwTauaDNHkY/eHAY2hbV/LQ/LMLq+fPNR8+YGvA6LiwgrQSmd2BySNicE4GlvoH8jnVDAEOSq5HLD5BQ==</DQ><InverseQ>hE4FodZRhsiee+AtJlNmci+EGce3jWHfNAKLB+bBCN5udVrHLPkgvQkh5oOTjDe/0/NXpa/yyN9F/4etR88ASw==</InverseQ><D>YF6fO+gl9nN7qpoBn5Gv1awc/pJiRjwNo4SMtQZt+k8BRlu/O4BTBa5+uePLLmkmNrsycBaVUw57n7c+NxO9d+M99EmLaUxIGFvoOPVbVS/U1Opj2jPlqzybxN2Z+JIO7ZaATg8Cuscgy+1b41o12kBcFlpttlbbsc1f41kvnmE=</D></RSAKeyValue>";
-            string keys_1 = "<RSAKeyValue><Modulus>kVPEnS5vVgdySMJGDHLdBg+mPjB8FVx82tZWSHwY9PwFeXntZJ1pdal+L10ScdgHrj8kduz2x3FwgYQbuRy1SwhEI1Tia6rsCd1Asxl20ZhsllRXO4YprkuPCAWtro7xwSDpscr5OYV1oVnxwqbY9E5KyaVtHiFusdh8X+PuQO0=</Modulus><Exponent>AQAB</Exponent></RSAKeyValue>";
-            string msg = "Est-ce que ca marche vraiment lolilol";
-            RSACryptoServiceProvider p = new RSACryptoServiceProvider();
-            p.FromXmlString(keys_1);
-            byte[] lol = p.Encrypt(Encoding.ASCII.GetBytes(msg), true);
-            string base64 = System.Convert.ToBase64String(lol);
-            base64.ToString();
-
-            p = new RSACryptoServiceProvider();
-            p.FromXmlString(keys_0);
-            //PAR DAVID base64 = "Mw+Cd7j27tvL36DH7jgfjrhGHK8eJc2XEXIkuwGpOruvLRdrkhEo/houQaJ9Qy5Zkxu7MWNIcQAJtyH4DWG9wa4QctdlCFR6aZ/2ryTuUz4YcQGFijjkllQ331m3u+YRM+YMOGset9h8FxRqqtcpJWK7MjJUh18agjzUlRuDK3A=";
-            base64 = "Qh+V7nIpPZE5kLazNG0xmU4WnjAdjLugxIoN3B+MJpOrPRi9ClpK85kHFtT1y3kC0x/Z0UqkpB7valjIHspg/oZy82afey6h0zseE6EdT0Hgfc2TsXsifF4J2zDYijjkt1Qifny3Lo3mwSQXJ7P8k5Gy/CkXqhekbAovJU3T1K0=";
-            //base64 = "PTKla7xLGPlxvi/LZ+nXjjhzzBW4ftt7p0QVXz4uGpsTX7vURbC9sMm41l68bF86H4k/R408RVV4vlTXFVmGZCmBCsrsD118D+7a62JILLk9V7L2/MhIEeeaAIOugtwfQCdR5C7hWmkT5831buhd59Q78c7UMVIIdbEqnMIcK6E=";
-            byte[] rgb = System.Convert.FromBase64String(base64);
-            byte[] decrypted = p.Decrypt(rgb, true);
-            msg = Encoding.ASCII.GetString(decrypted);
-            msg.ToString();
-
-
-
-			if (args.Length > 0)
-			{
-				_ip_server = args[0];
-			}
-			else _ip_server = "127.0.0.1";
             
+            DSACryptoServiceProvider dsa = new DSACryptoServiceProvider();
+            string key_full = "<DSAKeyValue><P>sJxfUYxEUgjnuhLBynemUKy5G2kPcOF4VRIH9aJxiGLBqBPEOVQMA80owCXl5F5/i9QFdJJCDUX/ImXMLsAWp6U9vxj1zaomIDzv8MpEcryXBibFg11Yvh2cDR9DZI4eV+SHJzn+a6P2hU7KRCKwp+14y7vGHof9R/DSIu1yZA0=</P><Q>jTNv9xnXJB9c6abp1iu2vqAX6dM=</Q><G>H3//2RD9pmD2IsprQuo6VR8hfDq42KLbPtsoFkR6tCGjIP02FDEOCttc5Keg34jczsDrXJNZx0sgFojWAd7yMd+q+ZiwaGN0pQ3VSA1/sUZLQNYY4Vh6YEf9+vCnrALBQMeK1BnIqEKgb8ait3WRp94bfS51wGGU4Uk3P4g9Fd0=</G><Y>mIiYdEwm/GGjljRwtEnGy2Ux9T4ovXe+iV4F7pSJ86avcsaFe9JsQZNGpn5A+1tA4rvi/kNiPM3xQiLW4ZBR9QJAQlof0XuMgwHT/VA8uK880n2QD0DFIUX0/3kXX6VDbmO9990OM55gPRpP+JkA8NRydXMO60xzYkc/Xj3ZIfE=</Y><J>AAAAAUAy5tNhYu8THruYM+UjDTc7Eq4aRWgQsLczHG98XVYTt+tDB/5hGxfcnTxXXjttHVHF3VfXjw3UENaU6hnaciqo1ARhdD2geaNk49iHEbxqreFxoHZrDO/pD7/flS9DhPbS36g2CTGKFdGYRA==</J><Seed>FCjuHV/spPIgRZ0ERHkF5rZSD20=</Seed><PgenCounter>Jw==</PgenCounter><X>Pw3RIO9+8iUMNGcmrfhhQ0Xb3g0=</X></DSAKeyValue>";
+            string key_public = "<DSAKeyValue><P>sJxfUYxEUgjnuhLBynemUKy5G2kPcOF4VRIH9aJxiGLBqBPEOVQMA80owCXl5F5/i9QFdJJCDUX/ImXMLsAWp6U9vxj1zaomIDzv8MpEcryXBibFg11Yvh2cDR9DZI4eV+SHJzn+a6P2hU7KRCKwp+14y7vGHof9R/DSIu1yZA0=</P><Q>jTNv9xnXJB9c6abp1iu2vqAX6dM=</Q><G>H3//2RD9pmD2IsprQuo6VR8hfDq42KLbPtsoFkR6tCGjIP02FDEOCttc5Keg34jczsDrXJNZx0sgFojWAd7yMd+q+ZiwaGN0pQ3VSA1/sUZLQNYY4Vh6YEf9+vCnrALBQMeK1BnIqEKgb8ait3WRp94bfS51wGGU4Uk3P4g9Fd0=</G><Y>mIiYdEwm/GGjljRwtEnGy2Ux9T4ovXe+iV4F7pSJ86avcsaFe9JsQZNGpn5A+1tA4rvi/kNiPM3xQiLW4ZBR9QJAQlof0XuMgwHT/VA8uK880n2QD0DFIUX0/3kXX6VDbmO9990OM55gPRpP+JkA8NRydXMO60xzYkc/Xj3ZIfE=</Y></DSAKeyValue>";//<J>AAAAAUAy5tNhYu8THruYM+UjDTc7Eq4aRWgQsLczHG98XVYTt+tDB/5hGxfcnTxXXjttHVHF3VfXjw3UENaU6hnaciqo1ARhdD2geaNk49iHEbxqreFxoHZrDO/pD7/flS9DhPbS36g2CTGKFdGYRA==</J><Seed>FCjuHV/spPIgRZ0ERHkF5rZSD20=</Seed><PgenCounter>Jw==</PgenCounter></DSAKeyValue>";
+            dsa.FromXmlString(key_full);
+            byte[] lol = { 108, 111, 108 };
+            DSACryptoServiceProvider dsa_public = new DSACryptoServiceProvider();
+            dsa_public.FromXmlString(key_public);
+            bool signed = dsa_public.VerifyData(lol, dsa.SignData(lol));
+            signed.ToString();
+
+            if (args.Length > 0)
+            {
+                _ip_server = args[0];
+            }
+            else _ip_server = "127.0.0.1";
+
             //_ip_server = "138.231.142.111";
-            
+
             //IPAddress address = Dns.GetHostAddresses("m70.crans.org")[0];
             //_ip_server = address.ToString();
             //*/
@@ -219,6 +209,7 @@ namespace MindTris
             _client.StartListening(IPAddress.Any, _port);
             Debug.Assert(lobbyID != null);
             //_client.JoinLobby((uint)lobbyID, "");
+            _client_LobbyJoined(0x00, 0, 1337, null);
         }
 
         static void _client_LobbyJoined(byte response, byte? clientID, ulong? sessionID, Peer[] peers)
@@ -242,9 +233,13 @@ namespace MindTris
                 default:
                     throw new Exception("Ne devrait pas arriver, ;D");
             }
-            foreach (Peer peer in peers)
+            if (peers != null)
             {
-                _peers[peer.ID] = peer;
+                foreach (Peer peer in peers)
+                {
+                    _peers[peer.ID] = peer;
+                    _client.ConnectPeer(peer);
+                }
             }
             Console.WriteLine("Starting chat...");
             StartChat();
@@ -289,27 +284,26 @@ namespace MindTris
 
         static void _client_StatusUpdated(byte update, Peer peer)
         {
-                        Thread t = new Thread(() =>
+                Thread t = new Thread(() =>
                 {
-            switch (update)
-            {
-                case 0x00:
-                    Console.WriteLine("[Server]: {0} has joined the lobby.", peer.DisplayName);
-                    _client.ConnectPeer(peer);
-                    break;
-                case 0x01:
-                    Console.WriteLine("[Server]: {0} has left the lobby.", peer.DisplayName);
-                    _peers.Remove(peer.ID);
-                    return;
-                case 0x02:
-                    Console.WriteLine("[Server]: {0} has been kicked from the lobby.");
-                    _peers.Remove(peer.ID);
-                    return;
-                default:
-                    throw new Exception("Ne devrait pas arriver, ;D");
-            }
-            _peers[peer.ID] = peer;
-                    });
+                    switch (update)
+                    {
+                        case 0x00:
+                            Console.WriteLine("[Server]: {0} has joined the lobby.", peer.DisplayName);
+                            break;
+                        case 0x01:
+                            Console.WriteLine("[Server]: {0} has left the lobby.", peer.DisplayName);
+                            _peers.Remove(peer.ID);
+                            return;
+                        case 0x02:
+                            Console.WriteLine("[Server]: {0} has been kicked from the lobby.");
+                            _peers.Remove(peer.ID);
+                            return;
+                        default:
+                            throw new Exception("Ne devrait pas arriver, ;D");
+                    }
+                    _peers[peer.ID] = peer;
+                });
             t.Start();
         }
     }

@@ -476,18 +476,18 @@ namespace MindTrisServer
                     return;
                 }
                 //User has the right password and there is room for him, go for it
-                LinkedList<Peer> peers = new LinkedList<Peer>();
+                LinkedList<PeerServer> peers = new LinkedList<PeerServer>();
                 foreach (PeerServer peer in lobby.Players) peers.AddLast(peer);
                 PeerServer player = new PeerServer(lobby, user, _logged_users[user].DisplayedName);
-                //Update peers
-                Response_UpdateClientLobbyStatus(user, player.ID, 0x00, player, lobby.Players);
-                //Player is added server side, after the response
-                lobby.Players.AddLast(player);
-                lobby.PlayerCount++;
                 //Update status
                 user.UserStatus.Lobby_id = lobby.ID;
                 user.UserStatus.Peer_id = player.ID;
                 user.UserStatus.Session_id = lobby.SessionID;
+                //Update peers
+                Response_UpdateClientLobbyStatus(user, player.ID, 0x00, player, peers);
+                //Player is added server side, after the response
+                lobby.Players.AddLast(player);
+                lobby.PlayerCount++;
                 //Send response
                 Response_JoinLobby(user, 0x00, lobby.ID, lobby, player.ID);
             }
@@ -767,7 +767,17 @@ namespace MindTrisServer
             User user = _users[socket];
             _users.Remove(socket);
             if (_logged_users.ContainsKey(user)) _logged_users.Remove(user);
-            if (user.UserStatus.Lobby_id != null)
+            if (user.UserStatus.Creator_lobby_id != null)
+            {
+                LobbyServer lobby = _lobbies[(uint)user.UserStatus.Lobby_id];
+                //[TOCHECK] Je sais plus le behavior de cette fonction lol, au pire c'est un peu overkill
+                foreach (PeerServer peerouze in lobby.Players)
+                {
+                    Response_UpdateClientLobbyStatus(peerouze.User, peerouze.ID, 0x02, peerouze, lobby.Players);
+                }
+                _lobbies[(uint)user.UserStatus.Lobby_id] = null;
+            }
+            else if (user.UserStatus.Lobby_id != null)
             {
                 LobbyServer lobby = _lobbies[(uint)user.UserStatus.Lobby_id];
                 PeerServer peer = null;
@@ -778,6 +788,7 @@ namespace MindTrisServer
                 lobby.Players.Remove(peer);
                 lobby.PlayerCount--;
             }
+            
             Console.WriteLine("{0}: Disconnected.", socket.RemoteEndPoint);
             try
             {

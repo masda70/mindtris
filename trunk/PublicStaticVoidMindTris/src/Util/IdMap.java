@@ -26,7 +26,7 @@ public class IdMap <O> implements Iterable<Map.Entry<Integer, O>> {
 			_m.put(id, o);
 			_size++;
 		} else {
-			throw new IllegalArgumentException("key already binded");
+			throw new IllegalArgumentException("key "+id+" already binded");
 		}
 	}
 	

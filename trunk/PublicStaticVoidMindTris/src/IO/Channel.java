@@ -77,7 +77,7 @@ public abstract class Channel {
 	}
 
 	public Ip getIp () {
-		return new Ip(_s.getLocalAddress().getAddress());
+		return new Ip(_s.getInetAddress().getAddress());
 	}
 
 	////// DEBUG //////

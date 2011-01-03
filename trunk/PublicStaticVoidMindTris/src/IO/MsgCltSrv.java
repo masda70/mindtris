@@ -12,6 +12,7 @@ public class MsgCltSrv extends Msg {
 		CREATE_LOBBY		= 0x03,
 		GET_LOBBY_LIST		= 0x04,
 		JOIN_LOBBY			= 0x05,
+		LEAVE_LOBBY			= 0x06,
 		START_GAME			= 0x10,
 		LOADED_GAME			= 0x11,
 		
@@ -26,6 +27,7 @@ public class MsgCltSrv extends Msg {
 		LOAD_GAME			= 0x91,
 		BEGIN_GAME			= 0x92,
 		
+		KEEP_ALIVE			= 0x7E,
 		UNDEFINED			= 0x7F;
 	public static final Msg KEEP_ALIVE_MSG = new KeepAliveMsg();
 

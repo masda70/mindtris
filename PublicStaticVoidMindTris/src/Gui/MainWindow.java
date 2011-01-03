@@ -1,10 +1,16 @@
 package Gui;
 
 import Client.*;
+import Server.Server;
+import Util.*;
+import Encodings.*;
+import Game.*;
 
 import java.awt.*;
 import java.awt.event.ActionEvent;
 import java.awt.event.ActionListener;
+import java.awt.event.KeyEvent;
+import java.awt.event.KeyListener;
 import java.awt.event.MouseEvent;
 import java.awt.event.MouseListener;
 import java.awt.event.WindowEvent;
@@ -14,10 +20,6 @@ import java.util.List;
 import java.util.Map.Entry;
 
 import javax.swing.*;
-
-import Server.Server;
-import Util.*;
-import Encodings.*;
 
 public class MainWindow extends JFrame {
 	////// STATIC FIELDS //////
@@ -31,8 +33,9 @@ public class MainWindow extends JFrame {
 	private JComponent _top,
 					   _center;
 	private GameLeft _left;
-	private Tetris _board;
 	private GameRight _right;
+	private TxtField _chatBar;
+	private Board _board;
 	
 	////// CONSTRUCTORS //////
 	public MainWindow ( Client c ) {
@@ -62,8 +65,8 @@ public class MainWindow extends JFrame {
 		final TxtField srvIp = new TxtField("localhost"),
 					   port = new TxtField((new Integer(_c._port)).toString());
 
-		ActionListener connectListener = new ActionListener() {
-			public void actionPerformed(ActionEvent ev) {
+		BtnListener connectListener = new BtnListener() {
+			public void action() {
 				try {
 					_c._port = new Short(port.getText());
 					_c.connectToSrv(srvIp.getText());
@@ -76,8 +79,8 @@ public class MainWindow extends JFrame {
 			}
 		};
 		
-		ActionListener createListener = new ActionListener() {
-			public void actionPerformed(ActionEvent ev) {
+		BtnListener createListener = new BtnListener() {
+			public void action() {
 				print("launch server");
 				
 				final Server srv = new Server();
@@ -89,9 +92,9 @@ public class MainWindow extends JFrame {
 		srvIp.addActionListener(connectListener);
 		port.addActionListener(connectListener);
 		Btn connect = new Btn("connect");
-		connect.addActionListener(connectListener);
+		connect.addBtnListener(connectListener);
 		Btn createServer = new Btn("Create a server");
-		createServer.addActionListener(createListener);
+		createServer.addBtnListener(createListener);
 		
 		p.setLayout(new BorderLayout());
 		_top = new JToolBar();
@@ -131,10 +134,12 @@ public class MainWindow extends JFrame {
 		final TxtField usr = new TxtField();
 		final PwdField pwd = new PwdField();
 		
-		ActionListener loginListener = new ActionListener () {
-			public void actionPerformed(ActionEvent ev) {
+		BtnListener loginListener = new BtnListener () {
+			public void action() {
 				try {
-					_c.login(usr.getUTxt(), pwd.getPwd());
+					UString u = usr.getUTxt();
+					AString p = pwd.getPwd();
+					if( u != null && p != null ) _c.login(u, p);
 				} catch (IOException e) {
 					printError("IO Exception : "+e.getMessage());
 				}
@@ -145,17 +150,17 @@ public class MainWindow extends JFrame {
 		pwd.addActionListener(loginListener);
 		
 		Btn login = new Btn("login");
-		login.addActionListener(loginListener);
+		login.addBtnListener(loginListener);
 		
 		final Btn createUser = new Btn("create user...");
 		
-		ActionListener createListener = new ActionListener () {
-			public void actionPerformed(ActionEvent arg0) {
+		BtnListener createListener = new BtnListener () {
+			public void action() {
 				paintCreateUsr();
 			}
 		};
 		
-		createUser.addActionListener(createListener);
+		createUser.addBtnListener(createListener);
 		
 		_top.removeAll();
 		_top.add(new Lbl("user : "));
@@ -168,6 +173,7 @@ public class MainWindow extends JFrame {
 		((JToolBar) _top).addSeparator();
 		_top.add(createUser);
 		
+		usr.requestFocusInWindow();
 		repaint();
 	}
 
@@ -178,8 +184,8 @@ public class MainWindow extends JFrame {
 		final PwdField pwd = new PwdField(15);
 		Btn create = new Btn("Create User");
 		
-		ActionListener listener = new ActionListener() {
-			public void actionPerformed(ActionEvent arg0) {
+		BtnListener listener = new BtnListener() {
+			public void action() {
 				try {
 					_c.createUser(usr.getUTxt(), displayName.getUTxt(), email.getATxt(), pwd.getPwd());
 				} catch (Exception e) {
@@ -188,7 +194,7 @@ public class MainWindow extends JFrame {
 			}
 		};
 
-		create.addActionListener(listener);
+		create.addBtnListener(listener);
 		
 		String[] lbls = new String[] {"User name :","Display name :", "Password :", "Email :"};
 		JTextField[] fields = new JTextField[]{usr, displayName, pwd, email};
@@ -217,6 +223,7 @@ public class MainWindow extends JFrame {
 		
 		_center.add(create, c);
 
+		fields[0].requestFocusInWindow();
 		_center.repaint();
 		_center.revalidate();
 	}
@@ -227,8 +234,8 @@ public class MainWindow extends JFrame {
 		final IntSpinner maxPlayers = new IntSpinner(10, 1, 10);
 		Btn create = new Btn("Create Lobby");
 		
-		ActionListener listener = new ActionListener() {
-			public void actionPerformed(ActionEvent arg0) {
+		BtnListener listener = new BtnListener() {
+			public void action() {
 				try {
 					_c.createLobby(name.getUTxt(), pwd.getPwd(), maxPlayers.getNb());
 				} catch (Exception e) {
@@ -239,7 +246,7 @@ public class MainWindow extends JFrame {
 
 		name.addActionListener(listener);
 		pwd.addActionListener(listener);
-		create.addActionListener(listener);
+		create.addBtnListener(listener);
 		
 		String[] lbls = new String[] {"Lobby name :", "Password (or empty) :", "Max player allowed :"};
 		JComponent[] fields = new JComponent[]{name, pwd, maxPlayers};
@@ -265,21 +272,22 @@ public class MainWindow extends JFrame {
 		}
 		
 		_center.add(create, c);
-
+		fields[0].requestFocusInWindow();
+		
 		_center.repaint();
 		_center.revalidate();
 	}
 	
 	public void paintLobbyList ( List<Lobby> list ) {
 		Btn create = new Btn("create lobby...");
-		create.addActionListener( new ActionListener() {
-			public void actionPerformed(ActionEvent arg0) {
+		create.addBtnListener( new BtnListener() {
+			public void action() {
 				paintCreateLobby();
 			}
 		});
 		Btn refresh = new Btn("refresh");
-		refresh.addActionListener(new ActionListener() {
-			public void actionPerformed(ActionEvent ev) {
+		refresh.addBtnListener(new BtnListener() {
+			public void action(){
 				try {
 					_c.getLobbyList();
 				} catch (IOException e) {
@@ -299,6 +307,7 @@ public class MainWindow extends JFrame {
 		_top.repaint();
 		
 		_center.removeAll();
+		_center.setLayout(new GridBagLayout());
 
 		GridBagConstraints c = new GridBagConstraints();
 		c.anchor = GridBagConstraints.CENTER;
@@ -372,19 +381,30 @@ public class MainWindow extends JFrame {
 		c.anchor = GridBagConstraints.CENTER;
 		c.insets = new Insets(10,0,10,0);
 		_center.add(create, c);
+		create.requestFocusInWindow();
 		
 		_center.repaint();
 		_center.revalidate();
 	}
 
 	public void printLobby ( Lobby l, final UString displayName, boolean isCreator ) {
+		Btn quit = new Btn("Quit");
+		quit.addBtnListener(new BtnListener() {
+			public void action() {
+				try {
+					_c.quitLobby();
+				} catch ( IOException e ) {
+					printError(e.getMessage());
+				}
+			}
+		});
 		Lbl name = new Lbl(l._name.v() + " (created by "+l.getCreatorName()+")");
 		Btn start = null;
 		
 		if( isCreator ) {
 			start = new Btn("Start");
-			start.addActionListener(new ActionListener() {
-				public void actionPerformed(ActionEvent ev) {
+			start.addBtnListener(new BtnListener() {
+				public void action() {
 					try {
 						_c.startGame();
 					} catch (IOException e) {
@@ -404,15 +424,15 @@ public class MainWindow extends JFrame {
 		}
 		
 		_text = new TxtArea();
-		final TxtField msg = new TxtField();
+		_chatBar = new TxtField();
 		
 		((TxtArea) _text).setEditable(false);
-		msg.addActionListener(new ActionListener() {
+		_chatBar.addActionListener(new ActionListener() {
 			public void actionPerformed(ActionEvent ev) {
 				try {
-					_c.sendChatMsg(msg.getUTxt());
-					((TxtArea) _text).append(displayName.v() + ": " + msg.getText() + "\n");
-					msg.setText("");
+					_c.sendChatMsg(_chatBar.getUTxt());
+					((TxtArea) _text).append(displayName.v() + ": " + _chatBar.getText() + "\n");
+					_chatBar.setText("");
 				} catch ( IOException e ) {
 					printError(e.getMessage());
 				}
@@ -420,6 +440,8 @@ public class MainWindow extends JFrame {
 		});
 		
 		_top.removeAll();
+		_top.add(quit);
+		((JToolBar) _top).addSeparator();
 		_top.add(name);
 		if( isCreator ) {
 			((JToolBar) _top).addSeparator();
@@ -432,8 +454,9 @@ public class MainWindow extends JFrame {
 
 		_center.add(connected, BorderLayout.NORTH);
 		_center.add(_text, BorderLayout.CENTER);
-		_center.add(msg, BorderLayout.SOUTH);
+		_center.add(_chatBar, BorderLayout.SOUTH);
 		
+		if( isCreator ) start.requestFocusInWindow();
 		_center.repaint();
 		_center.revalidate();
 	}
@@ -441,24 +464,51 @@ public class MainWindow extends JFrame {
 	public void loadGame () {
 		Game g = _c.getGame();
 		
-		_left = new GameLeft();
-		_left.setNextPieces(g.nextPieces());
-		_board = new Tetris();
-		_right = new GameRight();
+		_left = new GameLeft(g.nextPieces());
+		_board = new Board(g);
+		_right = new GameRight(_text, _chatBar);
 		
 		_center.removeAll();
-		_center.add(_left, BorderLayout.WEST);
-		_center.add(_board, BorderLayout.CENTER);
-		_center.add(_right, BorderLayout.EAST);
+		_center.setLayout(null);
+		
+		int w=_center.getWidth(), h=_center.getHeight(), w2=h*Game.W/Game.H;
+		
+		_left.setBounds(0, 0, 80, h);
+		_center.add(_left);
+		_board.setBounds(80, 0, w2, h);
+		_center.add(_board);
+		_right.setBounds(80+w2, 0, w-80-w2, h);
+		_center.add(_right);
 		
 		_center.repaint();
 		_center.revalidate();
 	}
 	
-	public void beginGame ( Piece p ) {
-		_board.initFall(p);
-		_board.repaint();
+	public void beginGame () {
+		_chatBar.addKeyListener(new KeyListener() {
+			public void keyTyped(KeyEvent e) {}
+			public void keyReleased(KeyEvent e) {}
+			public void keyPressed(KeyEvent e) {
+				switch( e.getKeyCode() ) {
+				case KeyEvent.VK_LEFT:
+					_c.getGame().leftMove();
+					break;
+				case KeyEvent.VK_UP:
+					_c.getGame().hardDrop();
+					break;
+				case KeyEvent.VK_RIGHT:
+					_c.getGame().rightMove();
+					break;
+				case KeyEvent.VK_DOWN:
+					_c.getGame().softDrop();
+					break;
+				}
+				
+				_board.repaint();
+			}
+		});
 		
+		actualize();
 	}
 	
 	////// PRINT //////	
@@ -475,6 +525,10 @@ public class MainWindow extends JFrame {
 	public void printNewPeer ( Peer p ) {
 		((TxtArea) _text).append(p._displayName.v() + " has join the lobby\n");
 	}
+
+	public void printPeerLeaving ( Peer p ) {
+		((TxtArea) _text).append(p._displayName.v() + " has leave the lobby\n");
+	}
 	
 	public void printError (String txt) {
 		_error.setForeground(Color.RED);
@@ -484,5 +538,10 @@ public class MainWindow extends JFrame {
 	public void printCenter(String txt) {
 		((Lbl) _text).setText(txt);
 		_center.repaint();		
+	}
+
+	public void actualize() {
+		_chatBar.requestFocusInWindow();
+		_board.repaint();
 	}
 }

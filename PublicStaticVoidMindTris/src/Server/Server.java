@@ -3,6 +3,7 @@ package Server;
 import Encodings.*;
 import IO.*;
 import Util.*;
+import Game.*;
 
 import java.io.*;
 import java.net.*;
@@ -123,11 +124,13 @@ public class Server extends Thread {
 			addHdl(MsgCltSrv.C_HELLO,			new HelloHdl());
 			addHdl(MsgCltSrv.CREATE_USER,		new UsrCreateHdl());
 			addHdl(MsgCltSrv.LOGIN,				new LoginHdl());
+			addHdl(MsgCltSrv.KEEP_ALIVE,		new KeepAliveHdl());
 			addHdl(MsgCltSrv.CREATE_LOBBY,		new LobbyCreateHdl());
 			addHdl(MsgCltSrv.GET_LOBBY_LIST,	new LobbyListHdl());
 			addHdl(MsgCltSrv.JOIN_LOBBY,		new LobbyJoinHdl());
 			addHdl(MsgCltSrv.START_GAME,		new StartHdl());
 			addHdl(MsgCltSrv.LOADED_GAME,		new LoadedHdl());
+			addHdl(MsgCltSrv.LEAVE_LOBBY,		new LeaveHdl());
 		}
 	}
 	
@@ -206,6 +209,12 @@ public class Server extends Thread {
 			} catch ( UserDoesntExists e ) {
 				ch.send(MsgCltSrv.LOGIN_REPLY, (byte)0x01);
 			}
+		}
+	}
+	
+	private class KeepAliveHdl implements Handler<ChCltSrv> {
+		public void handle(InData in, ChCltSrv ch) throws IOException {
+			// TODO
 		}
 	}
 	
@@ -327,6 +336,25 @@ public class Server extends Thread {
 		}
 	}
 	
+	private class LeaveHdl implements Handler<ChCltSrv> {
+		public void handle(InData in, ChCltSrv ch) throws IOException {
+			User usr = ch.getUsr();
+			Lobby l = _lobbies.get(usr.getLobbyId());
+			int peerId = usr.getPeerId();
+			
+			l._peers.rm(peerId);
+			
+			Msg m = new MsgCltSrv(MsgCltSrv.UPDATE_CLIENT, 4+1+1);
+			m._out.writeInt(l._id);
+			m._out.write(0x01);
+			m._out.write(peerId);
+			
+			for( Entry<Integer, Peer> o : l._peers ) {
+				o.getValue().getCh().send(m);
+			}
+		}
+	}
+	
 	private class StartHdl implements Handler<ChCltSrv> {
 		public void handle(InData _, ChCltSrv ch) throws IOException {
 			int lobbyCreatedId;
@@ -340,7 +368,7 @@ public class Server extends Thread {
 
 			Lobby l = _lobbies.get(lobbyCreatedId);
 			Game g = new Game(l);
-			Piece[] pieces = g.getNewPieces();
+			Piece[] pieces = Game.generateNewPieces();
 			
 			Msg loadMsg = new MsgCltSrv(MsgCltSrv.LOAD_GAME, 1+pieces.length);
 			loadMsg._out.write(pieces.length);

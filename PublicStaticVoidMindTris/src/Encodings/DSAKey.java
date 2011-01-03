@@ -111,28 +111,24 @@ public class DSAKey implements Encodable {
 		byte[] pDebug = new byte[_p.length - 1];
 		System.arraycopy(_p, 1, pDebug, 0, _p.length-1);
 		out.write(pDebug);
-	Channel.debug(pDebug);
 		
 		// TODO DEBUG
 		out.writeShort(_q.length - 1);
 		byte[] qDebug = new byte[_q.length - 1];
 		System.arraycopy(_q, 1, qDebug, 0, _q.length-1);
 		out.write(qDebug);
-	Channel.debug(qDebug);
 		
 		// TODO DEBUG
 		out.writeShort(_g.length - 1);
 		byte[] gDebug = new byte[_g.length - 1];
 		System.arraycopy(_g, 1, gDebug, 0, _g.length-1);
 		out.write(gDebug);
-	Channel.debug(gDebug);
 		
 		// TODO DEBUG
 		out.writeShort(_y.length - 1);
 		byte[] yDebug = new byte[_y.length - 1];
 		System.arraycopy(_y, 1, yDebug, 0, _y.length-1);
 		out.write(yDebug);
-	Channel.debug(yDebug);
 		
 		/*
 		out.writeShort(_p.length);

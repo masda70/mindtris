@@ -8,4 +8,9 @@ public class Btn extends JButton {
 	public Btn ( String txt ) {
 		super(txt);
 	}
+
+	public void addBtnListener ( BtnListener l ) {
+		addActionListener(l);
+		addKeyListener(l);
+	}
 }

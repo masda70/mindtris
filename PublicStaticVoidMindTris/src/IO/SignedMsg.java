@@ -43,8 +43,8 @@ public class SignedMsg extends MsgP2P {
 				   s = seq[1].getBigInteger().toByteArray();
 			
 			_length += 2 + r.length + s.length;
-			System.out.println(r.length+" "+s.length);
 			
+			System.out.println("r len : "+r.length+" s len : "+s.length);
 			_out.writeShort(r.length + s.length);
 			_out.write(r);
 			_out.write(s);

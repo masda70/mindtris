@@ -22,7 +22,7 @@ public class Lobby implements Encodable {
 	public Peer _creator;
 	
 	////// CONSTRUCTORS //////
-	public Lobby ( int id, UString name, byte[] sessionId, int nbPlayers, int maxPlayers, AString pwd, Peer creator) {
+	public Lobby ( int id, UString name, byte[] sessionId, int nbPlayers, int maxPlayers, AString pwd, Peer creator, int creatorId ) {
 		_id = id;
 		_name = name;
 		_sessionId = sessionId;
@@ -31,12 +31,25 @@ public class Lobby implements Encodable {
 		_pwd = pwd;
 		_peers = new IdMap<Peer>();
 		
-		int creatorId = _peers.getNextId();
 		_creator = creator;
 		_creator._id = creatorId;
 		_peers.add(creatorId, _creator);
 	}
-
+	
+	public Lobby(int id, UString name, byte[] sessionId, byte nbPlayers, int maxPlayers, AString pwd, Peer creator) {
+		_id = id;
+		_name = name;
+		_sessionId = sessionId;
+		_nbPlayers = nbPlayers;
+		_maxPlayers = maxPlayers;
+		_pwd = pwd;
+		_peers = new IdMap<Peer>();
+		_creator = creator;
+		
+		_creator._id = _peers.getNextId();
+		_peers.add(creator._id, _creator);
+	}
+	
 	public Lobby ( int id, InData in ) throws IOException {
 		_id = id;
 		int nameLen = in.readUnsignedByte();
@@ -56,7 +69,7 @@ public class Lobby implements Encodable {
 		
 		_creator = _peers.get(creatorPeerId);
 	}
-	
+
 	////// ENCODING //////
 	public void toBytes ( OutData out ) throws IOException {
 		out.writeByte(_name.len());
@@ -141,7 +154,7 @@ public class Lobby implements Encodable {
 			
 			AString pwd = hasPwd ? new AString("0") : null;
 			
-			list.add(new Lobby(id, name, null, nbPlayers, maxPlayers, pwd, creator));
+			list.add(new Lobby(id, name, null, nbPlayers, maxPlayers, pwd, creator, 0));
 		}
 		
 		return list;

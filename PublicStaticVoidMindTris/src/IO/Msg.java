@@ -42,7 +42,9 @@ public abstract class Msg {
 			in.readFully(data);
 	
 			_in = new InData(new ByteArrayInputStream(data));
-		} // else, this is just a keep alive msg
+		} else {
+			_type = MsgCltSrv.KEEP_ALIVE;
+		}
 	}
 	
 	protected Msg () {}

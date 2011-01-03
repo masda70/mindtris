@@ -4,6 +4,7 @@ import Gui.MainWindow;
 import Encodings.*;
 import IO.*;
 import Util.*;
+import Game.*;
 
 import java.io.*;
 import java.net.ServerSocket;
@@ -28,6 +29,7 @@ public class Client {
 	private MainWindow			_w;
 	private ChCltSrv			_srvCh;
 	private int					_srvPort;
+	private ServerSocket		_peerSrvSkt;
 	private Cipher				_srvCrypter;
 	private Signature			_signer;
 	private DSAKey				_publicKey;
@@ -111,7 +113,8 @@ public class Client {
 
 	public void createLobby ( UString name, AString pwd, int maxPlayers )
 	throws IOException, IllegalBlockSizeException {
-		_lobby = new Lobby(0, name, null, 1, maxPlayers, pwd, _me);
+		// /!\ temporary lobby
+		_lobby = new Lobby(0, name, null, 1, maxPlayers, pwd, _me, 0);
 		
 		int len = 1+name.len()+1+1+0+2+_publicKey.len();
 		boolean hasPwd = pwd != null;
@@ -159,6 +162,15 @@ public class Client {
 		_srvCh.sendMsg();
 	}
 
+	public void quitLobby() throws IOException {
+		_srvCh.send(MsgCltSrv.LEAVE_LOBBY);
+		_lobby = null;
+		_peerSrvSkt.close();
+		_peerSrvSkt = null;
+		
+		getLobbyList();
+	}
+	
 	public void startGame () throws IOException {
 		_srvCh.send(MsgCltSrv.START_GAME);
 	}
@@ -205,11 +217,11 @@ public class Client {
 		Thread listenPeers = new Thread() {
 			public void run() {
 				try {
-					ServerSocket srv = new ServerSocket(_port);
-					while( true ) {
+					_peerSrvSkt = new ServerSocket(_port);
+					while( !_peerSrvSkt.isClosed() ) {
 						Thread.sleep(10);
 						
-						Socket skt = srv.accept();
+						Socket skt = _peerSrvSkt.accept();
 						ChP2P peerCh = new ChP2P(skt);
 						PeerHandler hdl = new PeerHandler(peerCh);
 						hdl.start();
@@ -351,13 +363,13 @@ public class Client {
 			switch( in.readUnsignedByte() ) {
 			case 0x00:
 				int lobbyId = in.readInt();
-				_lobby._myPeerId = in.readUnsignedByte();
+				int myPeerId = in.readUnsignedByte();
 				byte[] sessionId = new byte[8];
 				in.readFully(sessionId);
 				
-				_lobby._id = lobbyId;
-				_lobby._sessionId = sessionId;
-				_lobby._creator._id = _lobby._myPeerId;
+
+				_lobby = new Lobby(lobbyId, _lobby._name, sessionId, _lobby._nbPlayers, _lobby._maxPlayers, _lobby._pwd, _me, myPeerId); 
+				_lobby._myPeerId = myPeerId;
 				
 				lobbyJoined(true);
 				break;
@@ -435,6 +447,12 @@ public class Client {
 				}
 				
 				break;
+			case 0x01:
+				int peerId = in.readUnsignedByte();
+				_w.printPeerLeaving(_lobby._peers.get(peerId));
+				
+				_lobby._peers.rm(peerId);
+				break;
 			default:
 				throw new NotImplementedException();
 			}
@@ -459,7 +477,7 @@ public class Client {
 			
 			int nbPieces = in.readUnsignedByte();
 			for( int i=0; i<nbPieces; i++ ) {
-				_game.addNewPiece( new Piece(in) );
+				_game.addNewPiece( new Piece(in.readUnsignedByte()) );
 			}
 			
 			_w.loadGame();
@@ -483,7 +501,7 @@ public class Client {
 	private class BeginGameHdl implements Handler<ChCltSrv> {
 		public void handle(InData in, ChCltSrv ch) throws IOException {
 			debug("Begin Game");
-			_w.beginGame(_game.start());
+			_game.start(_w);
 		}
 	}
 	

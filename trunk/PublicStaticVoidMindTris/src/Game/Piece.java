@@ -14,6 +14,7 @@ import IO.OutData;
 public class Piece implements Encodable {
 	////// STATIC //////
 	public static final int PIECES_NB = 7;
+	public static final int EMPTY = -1;
 	private static final long serialVersionUID = 1L;
 	private static final String[][] PIECES_STR = {
 		{"00000",
@@ -40,7 +41,7 @@ public class Piece implements Encodable {
 		 "011",
 		 "000"}
 	};
-	private static boolean[][][][] PIECES;	// [piece][rotation][row][col]
+	private static boolean[][][][] PIECES;	// [piece][rotation][col][row]
 	private static Color[] COLORS = {
 		Color.GREEN, Color.BLUE, Color.CYAN, Color.YELLOW, Color.MAGENTA, Color.PINK, Color.RED
 	};
@@ -58,10 +59,10 @@ public class Piece implements Encodable {
 				for( int c=0; c<len; c++ ) {
 					boolean b = PIECES_STR[p][r].charAt(c) == '1';
 
-					PIECES[p][0][r][c]				=
-					PIECES[p][1][c][len-r-1]		=
-					PIECES[p][2][len-r-1][len-c-1]	=
-					PIECES[p][3][len-c-1][r]		= b;
+					PIECES[p][0][c][r]				=
+					PIECES[p][1][len-r-1][c]		=
+					PIECES[p][2][len-c-1][len-r-1]	=
+					PIECES[p][3][r][len-c-1]		= b;
 				}
 			}
 		}	
@@ -86,25 +87,75 @@ public class Piece implements Encodable {
 	}
 	
 	////// PUBLIC MEHTODS //////
-	public void draw ( Graphics g, int size, int offsetX, int offsetY ) {
+	public void draw ( Graphics g, int size, int offsetX, int offsetY, boolean notGhost ) {
 		boolean[][] piece = PIECES[_code][_rotation]; 
 		int len = piece.length;
 		int sz = size;
 		
-		g.setColor(COLORS[_code]);
-		
-		for( int r=0; r<len; r++ ) {
-			for( int c=0; c<len; c++ ) {
-				if( piece[r][c] ) g.fillRect(offsetX + c*sz, offsetY + r*sz, sz-1, sz-1);
+		for( int c=0; c<len; c++ ) {
+			for( int r=0; r<len; r++ ) {
+				if( piece[c][r] )
+					drawSquare(g, _code, sz	, offsetX + c*sz, offsetY + r*sz, notGhost );
 			}
 		}
+	}
+
+	public int getRotation () {
+		return _rotation;
 	}
 	
 	public int offsetX () {
 		return ( _code == 0 ) ? -3 : -2;
 	}
-	
 	public int offsetY () {
 		return ( _code == 0 ) ? 1 : 0;
+	}
+
+	public int leftEdgeDist () {
+		return ( _code == 0 || _code == 3 ) ? 1 : 0;
+	}
+	public int rightEdgeDist () {
+		return ( _code == 0 ) ? 5 : 3;
+	}
+
+	public boolean collide ( int[][] board, int x, int y ) {
+		boolean[][] piece = PIECES[_code][_rotation];
+		int len = piece.length;
+		
+		for( int i=0; i<len; i++ ) {
+			for( int j=0; j<len; j++ ) {
+				if( piece[i][j]
+				 && ( x+i>=Game.W
+					|| y-j<0
+					|| ( y-j<Game.H && board[x+i][y-j] != EMPTY )
+					)
+				) {
+					return true;
+				}
+			}
+		}
+		
+		return false;
+	}
+
+	public void addToBoard ( int[][] board, int x, int y ) {
+		boolean[][] piece = PIECES[_code][_rotation];
+		int len = piece.length;
+		
+		for( int i=0; i<len; i++ )
+			for( int j=0; j<len; j++ )
+				if( piece[i][j] ) board[x+i][y-j] = _code;
+	}
+
+	public void setRotaion ( int r ) {
+		_rotation = r;
+	}
+	
+	////// STATIC //////
+	public static void drawSquare(Graphics g, int code, int sz, int x, int y, boolean notGhost) {
+		g.setColor(COLORS[code]);
+		
+		if( notGhost ) g.fillRect(x, y, sz-1, sz-1);  
+		else g.drawRect(x, y, sz-2, sz-2);
 	}
 }

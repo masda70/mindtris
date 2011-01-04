@@ -10,21 +10,32 @@ public class Game {
 	////// STATIC //////
 	public static final int W = 10,
 							H = 22;
-	private static Random rdm = new Random();
+	protected static Random rdm = new Random();
 	
 	////// FIELDS //////
-	private Queue<Piece> _pieces;
-	private int[][] _board;
-	private Piece _currentPiece;
-	private int _fallX, _fallY;
+	protected Queue<Piece> 	_pieces;
+	protected int[][]		_board;
+	protected int			_pieceNb;
+	protected Piece			_currentPiece;
+	protected MainWindow	_gui;
+
 	
 	////// CONSTRUCTORS //////
-	public Game ( Lobby l ) {
+	public Game () {
 		_pieces = new LinkedList<Piece>();
 		_board = new int[W][H];
+		
+		for( int i=0; i<W; i++ )
+			for( int j=0; j<H; j++ )
+				_board[i][j] = Piece.EMPTY;
 	}
 
 	////// PUBLIC METHODS //////
+	public void start( MainWindow gui ) {
+		_gui = gui;
+		_pieceNb = 0;
+	}
+	
 	public Queue<Piece> nextPieces() {
 		return _pieces;
 	}
@@ -32,39 +43,30 @@ public class Game {
 	public void addNewPiece ( Piece piece ) {
 		_pieces.offer(piece);
 	}
-
-	public void start( final MainWindow gui ) {
-		_currentPiece = _pieces.poll();
-
-		_fallY = Game.H + _currentPiece.offsetY();
-		_fallX = Game.W/2 + _currentPiece.offsetX();
-		
-		Thread fall = new Thread() {
-			public void run() {
-				try {
-					while( _currentPiece != null ) {
-						sleep(1000);
-						_fallY--;
-						gui.actualize();
-					}
-				} catch ( InterruptedException e ) {
-					e.printStackTrace();
-				}
-			}
-		};
-		fall.start();
-	}
 	
 	public Piece getFallingPiece () {
 		return _currentPiece;
 	}
-	
-	public int x () {
-		return _fallX;
+
+	public void addMoves ( List<Move> moves ) {
+		for( Move m : moves ) {
+			Piece p = getNextPiece();
+			p.setRotaion(m.pieceRotation);
+			p.addToBoard(_board, m.pieceX, m.pieceY);
+		}
+		
+		_gui.upPeerBoards();
+	}
+
+	////// PROTECTED //////
+	protected Piece getNextPiece () {
+		_pieceNb++;
+		return _pieces.poll();
 	}
 	
-	public int y () {
-		return _fallY;
+	////// GETTER //////
+	public int[][] board () {
+		return _board;
 	}
 	
 	////// STATIC FUNCTION //////
@@ -82,20 +84,4 @@ public class Game {
 		
 		return newPieces;
 	}
-
-	public void leftMove() {
-		_fallX--;
-	}
-
-	public void rightMove () {
-		_fallX++;
-	}
-
-	public void hardDrop() {
-	}
-
-	public void softDrop() {
-		
-	}
-
 }

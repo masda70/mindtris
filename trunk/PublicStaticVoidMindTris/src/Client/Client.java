@@ -17,6 +17,7 @@ import java.util.List;
 import java.util.Map.Entry;
 import javax.crypto.Cipher;
 import javax.crypto.IllegalBlockSizeException;
+import javax.swing.JComponent;
 
 import sun.reflect.generics.reflectiveObjects.NotImplementedException;
 
@@ -41,7 +42,9 @@ public class Client {
 	private IdMap<byte[][]>		_challengeCodes;	// [ initCode, lstnCode ]
 	private IdMap<ChP2P>		_waitingPeerCh;
 	private IdMap<InData>		_waitingAck;
-	private Game				_game;
+	private ActiveGame			_game;
+	private IdMap<Game>			_peerGames;
+	private List<Hash>			_hashes;
 
 	
 	////// CONSTRUCTORS //////
@@ -175,8 +178,12 @@ public class Client {
 		_srvCh.send(MsgCltSrv.START_GAME);
 	}
 	
-	public Game getGame () {
+	public ActiveGame getGame () {
 		return _game;
+	}
+
+	public IdMap<Game> getPeerGames() {
+		return _peerGames;
 	}
 	
 	public void sendChatMsg ( UString s ) throws IOException {
@@ -473,11 +480,18 @@ public class Client {
 	
 	private class GameLoadHdl implements Handler<ChCltSrv> {
 		public void handle(InData in, ChCltSrv ch) throws IOException {
-			_game = new Game(_lobby);
+			_game = new ActiveGame();
+			_hashes = new LinkedList<Hash>();
+			_peerGames = new IdMap<Game>();
+			for( int peerId : _lobby._peers.keys() ) {
+				if( peerId != _me._id ) _peerGames.add(peerId, new Game());
+			}
 			
 			int nbPieces = in.readUnsignedByte();
 			for( int i=0; i<nbPieces; i++ ) {
-				_game.addNewPiece( new Piece(in.readUnsignedByte()) );
+				Piece p = new Piece(in.readUnsignedByte());
+				_game.addNewPiece(p);
+				for( Game g : _peerGames.elements() ) g.addNewPiece(p);
 			}
 			
 			_w.loadGame();
@@ -502,6 +516,47 @@ public class Client {
 		public void handle(InData in, ChCltSrv ch) throws IOException {
 			debug("Begin Game");
 			_game.start(_w);
+			for( Game g : _peerGames.elements() ) g.start(_w);
+			_w.beginGame();
+			
+			Thread timer = new Thread() {
+				public void run () {
+					int roundNb = 0;
+					
+					try {
+						while( true ) {
+							sleep(100);
+							
+							List<Move> moves = _game.getMoves();
+							
+							SignedMsg msg = new SignedMsg(
+									MsgP2P.ROUND,
+									8+4+1+moves.size()*Move.encodingLen()+1+_hashes.size()*Hash.encodingLen(),
+									_signer);
+							msg._out.write(_lobby._sessionId);
+							msg._out.writeInt(roundNb);
+							msg._out.writeByte(moves.size());
+							for( Move mv : moves ) msg._out.write(mv);
+							msg._out.writeByte(_hashes.size());
+							for( Hash h : _hashes ) msg._out.write(h);
+							
+							for( Entry<Integer, Peer> o : _lobby._peers ) {
+								Peer p = o.getValue();
+								if( p._id != _me._id ) {
+									p.getCh().send(msg);
+								}
+							}
+							
+							roundNb++;
+						}
+					} catch ( InterruptedException e ) {
+						e.printStackTrace();
+					} catch ( IOException e ) {
+						_w.printError(e.getMessage());
+					}
+				}
+			};
+			timer.start();
 		}
 	}
 	
@@ -514,6 +569,7 @@ public class Client {
 			addHdl(MsgP2P.CONNEXION_ACCEPTED,	new ConnexionAcceptedHdl());
 			addHdl(MsgP2P.CONNEXION_ACK,		new ConnexionAck());
 			addHdl(MsgP2P.CHAT_SEND,			new ChatHdl());
+			addHdl(MsgP2P.ROUND, 				new RoundHdl());
 		}
 	}
 	
@@ -619,6 +675,29 @@ public class Client {
 			Peer sender = ch.getPeer();
 			_w.printChatMsg(sender, txt);
 		}
-		
+	}
+	
+	private class RoundHdl implements Handler<ChP2P> {
+		public void handle(InData in, ChP2P ch) throws IOException {
+			int peerId = ch.getPeer()._id;
+			
+			byte[] sessionId = new byte[8];
+			in.readFully(sessionId);
+			if( !Arrays.equals(sessionId, _lobby._sessionId) )
+				throw new IOException("session ids differs in game round packet");
+			
+			int roundNb = in.readInt();
+			int movesNb = in.readUnsignedByte();
+			List<Move> moves = new LinkedList<Move>();
+			for( int i=0; i<movesNb; i++ ) moves.add(new Move(in));
+			
+			int hashesNb = in.readUnsignedByte();
+			List<Hash> hashes = new LinkedList<Hash>();
+			for( int i=0; i<hashesNb; i++ ) hashes.add(new Hash(in));
+			
+			if( movesNb > 0 ) {
+				_peerGames.get(peerId).addMoves(moves);
+			}
+		}
 	}
 }

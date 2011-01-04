@@ -11,6 +11,7 @@ public class MsgP2P extends Msg {
 		CONNEXION_ACK			= 0x02,
 		
 		CHAT_SEND				= 0x10,
+		ROUND					= 0x11,
 		
 		UNDIFINED				= 0xFF;
 

@@ -42,7 +42,7 @@ public class GameLeft extends JPanel {
 			Iterator<Piece> iter = _nextPieces.iterator();
 			while( iter.hasNext() && y + 3*sz < this.getHeight() ) {
 				Piece p = iter.next();
-				p.draw(g, sz, x+sz*p.offsetX(), y-sz*p.offsetY());
+				p.draw(g, sz, x+sz*p.offsetX(), y-sz*p.offsetY(), true);
 				y += 3*sz;
 			}
 		}

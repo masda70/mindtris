@@ -27,11 +27,21 @@ public class Board extends JPanel {
 	}
 
 	////// PUBLIC METHODS //////
-	public void paint ( Graphics g ) {
-		super.paint(g);
+	public void paint ( Graphics gr ) {
+		super.paint(gr);
 		int sz = getHeight() / Game.H;
 		
-		if( _g.getFallingPiece() != null )
-			_g.getFallingPiece().draw(g, sz, sz  *_g.x(), sz*(Game.H - _g.y()));
+		for( int i=0; i<Game.W; i++ ) {
+			for( int j=0; j<Game.H; j++ ) {
+				int code = _g.board()[i][j];
+				if( code != Piece.EMPTY )
+					Piece.drawSquare(gr, code, sz, 2+sz*i, sz*(Game.H-j), true); 
+			}
+		}
+		if( _g.getFallingPiece() != null ) {
+			ActiveGame g = (ActiveGame)_g;
+			g.getFallingPiece().draw(gr, sz, 2+sz*g.x(), sz*(Game.H - g.y()), true);
+			g.getFallingPiece().draw(gr, sz, 2+sz*g.x(), sz*(Game.H - g.fallen()), false);
+		}
 	}
 }

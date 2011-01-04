@@ -367,7 +367,7 @@ public class Server extends Thread {
 			}
 
 			Lobby l = _lobbies.get(lobbyCreatedId);
-			Game g = new Game(l);
+			Game g = new Game();
 			Piece[] pieces = Game.generateNewPieces();
 			
 			Msg loadMsg = new MsgCltSrv(MsgCltSrv.LOAD_GAME, 1+pieces.length);

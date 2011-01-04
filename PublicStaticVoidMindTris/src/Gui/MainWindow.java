@@ -466,7 +466,7 @@ public class MainWindow extends JFrame {
 		
 		_left = new GameLeft(g.nextPieces());
 		_board = new Board(g);
-		_right = new GameRight(_text, _chatBar);
+		_right = new GameRight(_c.getPeerGames(), _text, _chatBar);
 		
 		_center.removeAll();
 		_center.setLayout(null);
@@ -485,7 +485,7 @@ public class MainWindow extends JFrame {
 	}
 	
 	public void beginGame () {
-		_chatBar.addKeyListener(new KeyListener() {
+		addKeyListener(new KeyListener() {
 			public void keyTyped(KeyEvent e) {}
 			public void keyReleased(KeyEvent e) {}
 			public void keyPressed(KeyEvent e) {
@@ -507,8 +507,9 @@ public class MainWindow extends JFrame {
 				_board.repaint();
 			}
 		});
-		
-		actualize();
+
+		requestFocusInWindow();
+		upBoard();
 	}
 	
 	////// PRINT //////	
@@ -540,8 +541,16 @@ public class MainWindow extends JFrame {
 		_center.repaint();		
 	}
 
-	public void actualize() {
-		_chatBar.requestFocusInWindow();
+	public void upBoard() {
+		requestFocusInWindow();
 		_board.repaint();
+	}
+
+	public void upNextPieces() {
+		_left.repaint();
+	}
+	
+	public void upPeerBoards () {
+		_right.upPeerBoards();
 	}
 }

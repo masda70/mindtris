@@ -15,6 +15,7 @@ public class MsgCltSrv extends Msg {
 		LEAVE_LOBBY			= 0x06,
 		START_GAME			= 0x10,
 		LOADED_GAME			= 0x11,
+		GIVE_NEW_PIECES		= 0x13,
 		
 		S_HELLO				= 0x80,
 		USR_CREATION		= 0x81,
@@ -26,6 +27,7 @@ public class MsgCltSrv extends Msg {
 		GAME_STARTING		= 0x90,
 		LOAD_GAME			= 0x91,
 		BEGIN_GAME			= 0x92,
+		NEW_PIECES			= 0x93,
 		
 		KEEP_ALIVE			= 0x7E,
 		UNDEFINED			= 0x7F;

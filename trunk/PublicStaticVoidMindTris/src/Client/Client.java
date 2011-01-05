@@ -17,7 +17,6 @@ import java.util.List;
 import java.util.Map.Entry;
 import javax.crypto.Cipher;
 import javax.crypto.IllegalBlockSizeException;
-import javax.swing.JComponent;
 
 import sun.reflect.generics.reflectiveObjects.NotImplementedException;
 
@@ -57,27 +56,19 @@ public class Client {
 		
 		try {
 			_rdmGen = SecureRandom.getInstance ("SHA1PRNG");
-			KeyPairGenerator gen = KeyPairGenerator.getInstance("DSA");
+			KeyPairGenerator gen = KeyPairGenerator.getInstance(SignedMsg.SIGN_ALGO);
 			gen.initialize(SignedMsg.KEY_LEN);
 			KeyPair keyPair = gen.generateKeyPair();
 			_publicKey = new DSAKey(keyPair.getPublic());
 			_signer = Signature.getInstance(SignedMsg.SIGN_SCHEME);
 			_signer.initSign(keyPair.getPrivate(), _rdmGen);
 		//	_signer.setParameter(SignedMsg.SIGN_SPEC);
-			
-	//		_decrypter = Cipher.getInstance(Crypted.CRYPT_SCHEME);
-	//		_decrypter.init(Cipher.DECRYPT_MODE, keyPair.getPrivate());
-			
 
 			_me = new Peer(0, null, null, _port, _publicKey);
 		} catch (NoSuchAlgorithmException e) {
 			e.printStackTrace();
-	//	} catch (InvalidAlgorithmParameterException e) {
-	//		e.printStackTrace();
 		} catch (InvalidKeyException e) {
 			e.printStackTrace();
-	//	} catch (NoSuchPaddingException e) {
-	//		e.printStackTrace();
 		}
 	}
 
@@ -199,6 +190,13 @@ public class Client {
 			}
 		}
 	}
+	
+	public void askForNewPieces () throws IOException {
+		_srvCh.createMsg(MsgCltSrv.GIVE_NEW_PIECES, 4+1);
+		_srvCh.msg().writeInt(_game.pieceNb());
+		_srvCh.msg().writeByte(10);
+		_srvCh.sendMsg();
+	}
 
 	////// PRIVATE METHODS //////
 	private void keepAlive () {
@@ -298,6 +296,7 @@ public class Client {
 			addHdl(MsgCltSrv.GAME_STARTING,		new GameStartedHdl());
 			addHdl(MsgCltSrv.LOAD_GAME,			new GameLoadHdl());
 			addHdl(MsgCltSrv.BEGIN_GAME,		new BeginGameHdl());
+			addHdl(MsgCltSrv.NEW_PIECES,		new NewPiecesHdl());
 		}
 	}
 	
@@ -480,7 +479,7 @@ public class Client {
 	
 	private class GameLoadHdl implements Handler<ChCltSrv> {
 		public void handle(InData in, ChCltSrv ch) throws IOException {
-			_game = new ActiveGame();
+			_game = new ActiveGame(Client.this);
 			_hashes = new LinkedList<Hash>();
 			_peerGames = new IdMap<Game>();
 			for( int peerId : _lobby._peers.keys() ) {
@@ -490,8 +489,8 @@ public class Client {
 			int nbPieces = in.readUnsignedByte();
 			for( int i=0; i<nbPieces; i++ ) {
 				Piece p = new Piece(in.readUnsignedByte());
-				_game.addNewPiece(p);
-				for( Game g : _peerGames.elements() ) g.addNewPiece(p);
+				_game.addNewPiece(p, 0);
+				for( Game g : _peerGames.elements() ) g.addNewPiece(p, 0);
 			}
 			
 			_w.loadGame();
@@ -557,6 +556,21 @@ public class Client {
 				}
 			};
 			timer.start();
+		}
+	}
+	
+	private class NewPiecesHdl implements Handler<ChCltSrv> {
+		public void handle(InData in, ChCltSrv ch) throws IOException {
+			int pieceOffset = in.readInt();
+			int nbPieces = in.readUnsignedByte();
+
+			for( int i=0; i<nbPieces; i++ ) {
+				Piece p = new Piece(in.readUnsignedByte());
+				_game.addNewPiece(p, pieceOffset);
+				for( Game g : _peerGames.elements() ) g.addNewPiece(p, pieceOffset);
+			}
+			
+			_w.upNextPieces();
 		}
 	}
 	

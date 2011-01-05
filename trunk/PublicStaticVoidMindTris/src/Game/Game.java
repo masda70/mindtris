@@ -1,5 +1,6 @@
 package Game;
 
+import java.io.IOException;
 import java.util.*;
 
 import Gui.Board;
@@ -31,7 +32,7 @@ public class Game {
 	}
 
 	////// PUBLIC METHODS //////
-	public void start( MainWindow gui ) {
+	public void start( MainWindow gui ) throws IOException {
 		_gui = gui;
 		_pieceNb = 0;
 	}
@@ -39,16 +40,24 @@ public class Game {
 	public Queue<Piece> nextPieces() {
 		return _pieces;
 	}
+
+	public int pieceNb() {
+		return _pieceNb;
+	}
 	
-	public void addNewPiece ( Piece piece ) {
-		_pieces.offer(piece);
+	public void addNewPiece ( Piece piece, int pieceOffset ) {
+		synchronized (_pieces) {
+			_pieces.offer(piece);
+			// !!!!! TODO offset
+				
+		}
 	}
 	
 	public Piece getFallingPiece () {
 		return _currentPiece;
 	}
 
-	public void addMoves ( List<Move> moves ) {
+	public void addMoves ( List<Move> moves ) throws IOException {
 		for( Move m : moves ) {
 			Piece p = getNextPiece();
 			p.setRotaion(m.pieceRotation);
@@ -59,9 +68,12 @@ public class Game {
 	}
 
 	////// PROTECTED //////
-	protected Piece getNextPiece () {
+	protected Piece getNextPiece () throws IOException {
 		_pieceNb++;
-		return _pieces.poll();
+
+		synchronized (_pieces) {
+			return _pieces.poll();
+		}
 	}
 	
 	////// GETTER //////
@@ -83,5 +95,10 @@ public class Game {
 		}
 		
 		return newPieces;
+	}
+
+	public static Piece[] generateNewPieces ( int nbPieces ) {
+		// !!!! TODO
+		return generateNewPieces();
 	}
 }

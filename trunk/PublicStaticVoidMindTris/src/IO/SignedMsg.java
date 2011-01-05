@@ -6,11 +6,14 @@ import java.security.SignatureException;
 import java.security.spec.AlgorithmParameterSpec;
 import java.security.spec.PSSParameterSpec;
 
+import Encodings.BigInt;
+
 import sun.security.util.DerInputStream;
 import sun.security.util.DerValue;
 
 public class SignedMsg extends MsgP2P {
 	////// STATIC //////
+	public static final String SIGN_ALGO = "DSA";
 	public static final String SIGN_SCHEME = "SHA1withDSA";
 	public static final PSSParameterSpec SIGN_SPEC = new PSSParameterSpec(28);
 	public static final int KEY_LEN = 1024;
@@ -39,13 +42,12 @@ public class SignedMsg extends MsgP2P {
 
 			DerInputStream derIS = new DerInputStream(derSign);
 			DerValue[] seq = derIS.getSequence(0);
-			byte[] r = seq[0].getBigInteger().toByteArray(),
-				   s = seq[1].getBigInteger().toByteArray();
+			BigInt r = new BigInt(seq[0].getBigInteger()),
+				   	s = new BigInt(seq[1].getBigInteger());
 			
-			_length += 2 + r.length + s.length;
+			_length += 2 + r.len() + s.len();
 			
-			System.out.println("r len : "+r.length+" s len : "+s.length);
-			_out.writeShort(r.length + s.length);
+			_out.writeShort(r.len() + s.len());
 			_out.write(r);
 			_out.write(s);
 		} catch ( SignatureException e ) {

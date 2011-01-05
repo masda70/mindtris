@@ -56,15 +56,14 @@ public class Game {
 	public Piece getFallingPiece () {
 		return _currentPiece;
 	}
-
+	
 	public void addMoves ( List<Move> moves ) throws IOException {
 		for( Move m : moves ) {
 			Piece p = getNextPiece();
 			p.setRotaion(m.pieceRotation);
 			p.addToBoard(_board, m.pieceX, m.pieceY);
+			checkLines(m.pieceY);
 		}
-		
-		_gui.upPeerBoards();
 	}
 
 	////// PROTECTED //////
@@ -74,6 +73,30 @@ public class Game {
 		synchronized (_pieces) {
 			return _pieces.poll();
 		}
+	}
+	
+	protected void checkLines ( int yHigh ) {
+		int nbLines = 0;
+		int yLow = yHigh-5;
+		if( yLow < 0 ) yLow = 0;
+		
+		for( int y=yLow; y<=yHigh; y++ ) {
+			boolean line = true;
+			
+			for( int x=0; x<Game.W; x++ )
+				if( _board[x][y] == Piece.EMPTY ) line = false;
+			
+			if( line ) {
+				for( int i=0; i<Game.W; i++ ) {
+					for( int j=y; j<Game.H-1; j++ )
+						_board[i][j] = _board[i][j+1];
+					_board[i][Game.H-1] = Piece.EMPTY;
+				}
+				nbLines ++;
+			}
+		}
+		
+		if( nbLines > 0 ) _gui.addScore(nbLines);
 	}
 	
 	////// GETTER //////

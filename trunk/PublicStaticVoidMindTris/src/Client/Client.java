@@ -176,6 +176,10 @@ public class Client {
 	public IdMap<Game> getPeerGames() {
 		return _peerGames;
 	}
+
+	public IdMap<Peer> getPeers() {
+		return _lobby._peers;
+	}
 	
 	public void sendChatMsg ( UString s ) throws IOException {
 		Msg m = new SignedMsg(MsgP2P.CHAT_SEND, 8+2+s.len(), _signer);
@@ -711,6 +715,7 @@ public class Client {
 			
 			if( movesNb > 0 ) {
 				_peerGames.get(peerId).addMoves(moves);
+				_w.upPeerBoards(peerId);
 			}
 		}
 	}

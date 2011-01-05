@@ -158,15 +158,11 @@ public class Piece implements Encodable {
 		int rot2 = (_rotation+1) % 4;
 		int[][] kick1 = KICKS[_code][_rotation],
 				kick2 = KICKS[_code][rot2];
-		
-		System.out.println("kick "+_code+" (r="+_rotation+" x="+x+" y="+y+")");
-		
+				
 		for( int k=0; k<kick1.length; k++ ) {
 			int i = kick1[k][0] - kick2[k][0],
 				j = kick1[k][1] - kick2[k][1];
 			
-			System.out.println( kick1[k][0] + "," + kick1[k][1]+" - "+ kick2[k][0] + "," + kick2[k][1]
-			                 + " -> " + i + "," + j);
 			if( !computeCollision(_code, rot2, board, x+i, y+j) ) {
 				_rotation = rot2;
 				return new Kick(i, j);
@@ -178,6 +174,8 @@ public class Piece implements Encodable {
 	
 	////// STATIC //////
 	public static void drawSquare(Graphics g, int code, int sz, int x, int y, boolean notGhost) {
+		if( y < 0 ) return;
+		
 		g.setColor(COLORS[code]);
 		
 		if( notGhost ) g.fillRect(x, y, sz-1, sz-1);  

@@ -13,17 +13,27 @@ public class GameLeft extends JPanel {
 	private static final long serialVersionUID = 1L;
 	private NextLabel _nextLabel;
 	private Queue<Piece> _nextPieces;
+	private Lbl _scoreLbl;
+	private int _score;
 	
 	public GameLeft ( Queue<Piece> nextPieces ) {
 		_nextPieces = nextPieces;
 		_nextLabel = new NextLabel();
+		_scoreLbl = new Lbl("0");
+		_score = 0;
 		
 		setBackground(Color.BLACK);
 		setLayout(new BoxLayout(this, BoxLayout.Y_AXIS));
 
 		add(new Lbl("Score"));
+		add(_scoreLbl);
 		add(new Lbl("Next Pieces "));
 		add(_nextLabel);
+	}
+
+	public void addScore ( int nbLines ) {
+		_score += nbLines;
+		_scoreLbl.setText(Integer.toString(_score));
 	}
 	
 	private class NextLabel extends JPanel {

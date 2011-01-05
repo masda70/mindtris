@@ -131,6 +131,8 @@ public class ActiveGame extends Game {
 	
 	private void placeCurrent ( int x, int y ) throws IOException {
 		_currentPiece.addToBoard(_board, x, y);
+		checkLines(y);
+		
 		// TODO check
 		int time = (int) System.currentTimeMillis();
 		_moves.add(new Move(time, _pieceNb, _currentPiece.getRotation(), x, y));

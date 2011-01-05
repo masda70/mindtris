@@ -27,21 +27,51 @@ public class MainWindow extends JFrame {
 	private static final Color bg = new Color(30, 30, 30); // kikoo style
 	
 	////// FIELDS //////
-	private Client _c;
-	private TxtField _error = new TxtField();
-	private JComponent _text = new Lbl("PublicStaticVoidMindTris");
-	private JComponent _top,
-					   _center;
-	private GameLeft _left;
-	private GameRight _right;
-	private TxtField _chatBar;
-	private Board _board;
+	private Client		_c;
+	private TxtField	_error = new TxtField();
+	private JComponent	_text = new Lbl("PublicStaticVoidMindTris");
+	private JComponent	_top,
+					  	_center;
+	private GameLeft	_left;
+	private GameRight	_right;
+	private TxtField	_chatBar;
+	private Board		_board;
+	private KeyListener _keyListener;
 	
 	////// CONSTRUCTORS //////
 	public MainWindow ( Client c ) {
 		super("MindTris");
 
 		_c = c;
+		_keyListener = new KeyListener() {
+			public void keyTyped(KeyEvent ev) {}
+			public void keyReleased(KeyEvent ev) {}
+			public void keyPressed(KeyEvent ev) {
+				try {
+					switch( ev.getKeyCode() ) {
+					case KeyEvent.VK_LEFT:
+						_c.getGame().leftMove();
+						break;
+					case KeyEvent.VK_UP:
+						_c.getGame().rotate();
+						break;
+					case KeyEvent.VK_RIGHT:
+						_c.getGame().rightMove();
+						break;
+					case KeyEvent.VK_DOWN:
+						_c.getGame().softDrop();
+						break;
+					case KeyEvent.VK_SPACE:
+						_c.getGame().hardDrop();
+						break;
+					}
+					
+					_board.repaint();
+				} catch ( IOException e ) {
+					e.printStackTrace();
+				}
+			}
+		};
 		
 		this.addWindowListener(new java.awt.event.WindowAdapter() {
 			public void windowClosing(WindowEvent ev) {
@@ -392,6 +422,7 @@ public class MainWindow extends JFrame {
 		quit.addBtnListener(new BtnListener() {
 			public void action() {
 				try {
+					removeKeyListener(_keyListener);
 					_c.quitLobby();
 				} catch ( IOException e ) {
 					printError(e.getMessage());
@@ -466,12 +497,14 @@ public class MainWindow extends JFrame {
 		
 		_left = new GameLeft(g.nextPieces());
 		_board = new Board(g);
-		_right = new GameRight(_c.getPeerGames(), _text, _chatBar);
+		_right = new GameRight(_c.getPeerGames(), _c.getPeers(), _text, _chatBar);
 		
 		_center.removeAll();
 		_center.setLayout(null);
 		
-		int w=_center.getWidth(), h=_center.getHeight(), w2=h*Game.W/Game.H;
+		int w=_center.getWidth(),
+			h=2*Board.BORDER_SZ + ((_center.getHeight()-2*Board.BORDER_SZ)/Game.H) * Game.H,
+			w2=2*Board.BORDER_SZ + ((h-2*Board.BORDER_SZ)/Game.H) * Game.W;
 		
 		_left.setBounds(0, 0, 80, h);
 		_center.add(_left);
@@ -485,35 +518,7 @@ public class MainWindow extends JFrame {
 	}
 	
 	public void beginGame () {
-		addKeyListener(new KeyListener() {
-			public void keyTyped(KeyEvent ev) {}
-			public void keyReleased(KeyEvent ev) {}
-			public void keyPressed(KeyEvent ev) {
-				try {
-					switch( ev.getKeyCode() ) {
-					case KeyEvent.VK_LEFT:
-						_c.getGame().leftMove();
-						break;
-					case KeyEvent.VK_UP:
-						_c.getGame().rotate();
-						break;
-					case KeyEvent.VK_RIGHT:
-						_c.getGame().rightMove();
-						break;
-					case KeyEvent.VK_DOWN:
-						_c.getGame().softDrop();
-						break;
-					case KeyEvent.VK_SPACE:
-						_c.getGame().hardDrop();
-						break;
-					}
-					
-					_board.repaint();
-				} catch ( IOException e ) {
-					e.printStackTrace();
-				}
-			}
-		});
+		addKeyListener(_keyListener);
 
 		requestFocusInWindow();
 		upBoard();
@@ -557,7 +562,11 @@ public class MainWindow extends JFrame {
 		_left.repaint();
 	}
 	
-	public void upPeerBoards () {
-		_right.upPeerBoards();
+	public void upPeerBoards ( int peerId ) {
+		_right.upPeerBoards(peerId);
+	}
+
+	public void addScore ( int nbLines ) {
+		_left.addScore(nbLines);
 	}
 }

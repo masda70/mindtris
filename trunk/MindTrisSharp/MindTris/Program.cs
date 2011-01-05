@@ -68,8 +68,8 @@ namespace MindTris
 
             _ip_server = "138.231.142.111";
 
-            IPAddress address = Dns.GetHostAddresses("m70.crans.org")[0];
-            _ip_server = address.ToString();
+            //IPAddress address = Dns.GetHostAddresses("m70.crans.org")[0];
+            //_ip_server = address.ToString();
             //*/
             _peers = new Dictionary<byte, Peer>();
             _client = new Client(_ip_server);

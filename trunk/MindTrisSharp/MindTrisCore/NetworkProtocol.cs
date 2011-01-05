@@ -94,6 +94,9 @@ namespace MindTrisCore
             GetLobbyList = 0x04,
             JoinLobby = 0x05,
             LeaveLobby = 0x06,
+            StartGame = 0x10,
+            LoadedGame = 0x11,
+            GiveNewPieces = 0x13,
 
             HelloFromServer = 0x80,
             UserCreation = 0x81,
@@ -101,8 +104,14 @@ namespace MindTrisCore
             LobbyCreation = 0x83,
             LobbyList = 0x84,
             JoinedLobby = 0x85,
+            
 
-            UpdateClientStatus = 0x88
+            UpdateClientStatus = 0x88,
+
+            GameStarting = 0x90,
+            LoadGame = 0x91,
+            BeginGame = 0x92,
+            NewPieces = 0x93
             //...
         }
 
@@ -111,7 +120,8 @@ namespace MindTrisCore
             ConnectionRequest = (byte)0x00,
             ConnectionAccepted = 0x01,
             ConnectionAcknowledged = 0x02,
-            ChatSend = 0x10
+            ChatSend = 0x10,
+            Round = 0x11
         }
     }
 

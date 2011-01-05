@@ -33,6 +33,7 @@ namespace MindTris
         Socket _socket_server;
         string _server_public_key;
         RSACryptoServiceProvider _rsa_server;
+        DateTime _lastTimeSeen;
 
 
         //Socket listening to peer connections
@@ -56,10 +57,15 @@ namespace MindTris
         Dictionary<byte, Peer> _remaining_unseen_peers;
         Dictionary<User, PeerPlayer> _players;
 
+        SHA1CryptoServiceProvider _sha;
+        const int EXPECTED_HASH_SIZE = 20;
+        byte[] _roundDataHash;
+
         //Lag timings
         const int WELCOMING_LAG = 200;
         const int LISTENING_LAG = 50;
         const int CHECKING_ALIVE_LAG = 90000;
+        const int SEND_KEEP_ALIVE_LAG = 30000;
 
         //Server side scalability
         int _connection_count;
@@ -79,10 +85,13 @@ namespace MindTris
             _rsa_server = new RSACryptoServiceProvider();
             _dsa_client = new DSACryptoServiceProvider();
             _dsa_peer = new DSACryptoServiceProvider();
+            _sha = new SHA1CryptoServiceProvider();
+            Debug.Assert(_sha.HashSize == EXPECTED_HASH_SIZE);
             _rand = new Random();
             string lol = _dsa_client.ToXmlString(false);
             lol.ToString();
             _status = new ClientStatus();
+            _lastTimeSeen = DateTime.Now;
         }
 
         public Client(string IP)
@@ -164,6 +173,22 @@ namespace MindTris
             }
         }
 
+        public void RequestNewPieces(uint offset, byte count)
+        {
+            if (_status.Am_playing)
+            {
+                Send_RequestNewPieces(offset, count);
+            }
+        }
+
+        public void SignalGameLoaded(bool error, ICollection<Peer> not_connected)
+        {
+            if (_status.Connected && _status.Lobby_id != null)
+            {
+                Send_LoadedGame(error, not_connected);
+            }
+        }
+
         public delegate void VoidFunction();
         public delegate void ConnectedFunction(string motd);
         public event ConnectedFunction Connected;
@@ -180,11 +205,19 @@ namespace MindTris
         public event VoidFunction LobbyLeft;
         public delegate void UpdateFunction(byte update, Peer peer);
         public event UpdateFunction StatusUpdated;
+        public event ConfirmationFunction GameStarting;
+        public delegate void ReceivingNewPieces(uint offset, byte[] pieces);
+        public event ReceivingNewPieces GameLoaded;
+        public event VoidFunction BeginGame;
+        public event ReceivingNewPieces NewPiecesIncoming;
+        public delegate void MoveFunction(uint roundNumber, Move[] moves);
+        public event MoveFunction MoveMade;
 
         public delegate void MessageReceivedFunction(Peer peer, string message);
         public event MessageReceivedFunction MessageReceived;
         public delegate void PeerHandshakenFunction(Peer peer);
         public event PeerHandshakenFunction PeerHandshaken;
+        
 
 
 
@@ -318,6 +351,63 @@ namespace MindTris
             Console.WriteLine("Sent.");
         }
 
+        void Send_KeepAlive()
+        {
+            byte[] packet = Dgmt.ForgeNewPacket();
+            int length = Dgmt.FinalizePacket(packet, 0);
+
+            ServerResponse response = new ServerResponse(_socket_server, packet, length);
+            QueueResponse(response);
+        }
+
+        void Send_StartGame()
+        {
+            byte[] packet = Dgmt.ForgeNewPacket();
+            packet[Dgmt.HEADER_LENGTH] = (byte)Dgmt.PacketID.StartGame;
+            int length = Dgmt.FinalizePacket(packet, 1);
+
+            ServerResponse response = new ServerResponse(_socket_server, packet, length);
+            QueueResponse(response);
+        }
+
+        void Send_RequestNewPieces(uint offset, byte count)
+        {
+            byte[] packet = Dgmt.ForgeNewPacket();
+            int i = Dgmt.HEADER_LENGTH;
+            BigE.WritePacketID(packet, ref i, Dgmt.PacketID.GiveNewPieces);
+            BigE.WriteInt32(packet, ref i, offset);
+            BigE.WriteByte(packet, ref i, count);
+
+            int length = Dgmt.FinalizePacket(packet, i - Dgmt.HEADER_LENGTH);
+
+            //Send to server
+            ServerResponse response = new ServerResponse(_socket_server, packet, length);
+            QueueResponse(response);
+        }
+
+        void Send_LoadedGame(bool error, ICollection<Peer> not_connected)
+        {
+            byte[] packet = Dgmt.ForgeNewPacket();
+            int i = Dgmt.HEADER_LENGTH;
+            BigE.WritePacketID(packet, ref i, Dgmt.PacketID.LoadedGame);
+            if (error && not_connected != null)
+            {
+                BigE.WriteByte(packet, ref i, 0x01);
+                BigE.WriteByte(packet, ref i, (byte)not_connected.Count);
+                foreach (Peer peer in not_connected)
+                {
+                    BigE.WriteByte(packet, ref i, peer.ID);
+                }
+            }
+            else BigE.WriteByte(packet, ref i, 0x00);
+
+            int length = Dgmt.FinalizePacket(packet, i - Dgmt.HEADER_LENGTH);
+
+            //Send to server
+            ServerResponse response = new ServerResponse(_socket_server, packet, length);
+            QueueResponse(response);
+        }
+
         byte[] Encrypt(byte[] rgb)
         {
             return _rsa_server.Encrypt(rgb, true);
@@ -326,6 +416,7 @@ namespace MindTris
         //Client side
         public void ConnectPeer(Peer peer)
         {
+            //[TODO] Retirer le thread ici
             Thread t = new Thread(() =>
                 {
                     Socket client = new Socket(AddressFamily.InterNetwork, SocketType.Stream, ProtocolType.Tcp);
@@ -379,20 +470,20 @@ namespace MindTris
         
         public void SendMessage(string message)
         {
-            Thread t = new Thread(() =>
-                {
-                    IEnumerable<User> list = null;
-                    lock (_users)
-                    {
-                        list = _users.Values.Where(x => { return true; });
-                    }
-                    foreach (User user in list)
-                    {
-                        Send_ChatSend(user, message);
-                    }
-                }
-            );
-            t.Start();
+            IEnumerable<User> list = null;
+            lock (_users)
+            {
+                list = _users.Values.Where(x => { return true; });
+            }
+            foreach (User user in list)
+            {
+                Send_ChatSend(user, message);
+            }
+        }
+
+        public void SendRoundPacket(uint roundNumber, ICollection<Move> moves)
+        {
+
         }
 
         //Server side
@@ -477,6 +568,12 @@ namespace MindTris
                     ProcessPackets();
                     //Send responses
                     SendResponses();
+                    //Keep yourself alive
+                    if (DateTime.Now.Subtract(_lastTimeSeen).TotalMilliseconds > SEND_KEEP_ALIVE_LAG)
+                    {
+                        _lastTimeSeen = DateTime.Now;
+                        Send_KeepAlive();
+                    }
                     //[TODO] Check alive clients
                     //CheckAliveUsers();
                 }
@@ -592,6 +689,9 @@ namespace MindTris
                         case Dgmt.PacketP2PID.ChatSend:
                             Process_ChatSend(user, content_length);
                             break;
+                        case Dgmt.PacketP2PID.Round:
+                            Process_Round(user, content_length);
+                            break;
                         default:
                             throw new NotImplementedException("Unknown message type, or the feature is not implemented yet.");
                     }
@@ -653,6 +753,18 @@ namespace MindTris
                             break;
                         case Dgmt.PacketID.UpdateClientStatus:
                             Process_UpdateClientStatus(user, content_length);
+                            break;
+                        case Dgmt.PacketID.GameStarting:
+                            Process_GameStarting(user, content_length);
+                            break;
+                        case Dgmt.PacketID.LoadGame:
+                            Process_LoadGame(user, content_length);
+                            break;
+                        case Dgmt.PacketID.BeginGame:
+                            Process_BeginGame(user, content_length);
+                            break;
+                        case Dgmt.PacketID.NewPieces:
+                            Process_NewPieces(user, content_length);
                             break;
                         default:
                             throw new NotImplementedException("Unknown message type, or the feature is not implemented yet.");
@@ -728,179 +840,6 @@ namespace MindTris
             lock (_requests_to_grant)
             {
                 _requests_to_grant.AddLast(request);
-            }
-        }
-
-
-        //Process Packets from peers
-        void Process_ConnectionRequest(User user, int content_length)
-        {
-            if (!user.UserStatus.Logged_on)
-            {
-                Console.WriteLine("{0}: Handshaking.", user.Socket.RemoteEndPoint);
-                int i = Dgmt.HEADER_P2P_LENGTH;
-                byte[] packet = user.Buffer.GetSubbufferCopy(i, content_length);
-                //Skip the type
-                i = 1;
-                uint lobbyID = BigE.ReadInt32(packet, ref i);
-                byte peerID = BigE.ReadByte(packet, ref i);
-                byte listeningPeerID = BigE.ReadByte(packet, ref i);
-                ulong challengeNumber = BigE.ReadInt64(packet, ref i);
-                //Check lobby
-                if (_lobby.ID != lobbyID) return;
-                //Check destination
-                if (_status.Peer_id != listeningPeerID) return;
-                if (!_remaining_unseen_peers.ContainsKey(peerID)) return;
-                Peer matching_peer = _remaining_unseen_peers[peerID];
-                user.Port = matching_peer.Port;
-                user.PublicKey = matching_peer.PublicKey;
-                PeerPlayer player = new PeerPlayer(matching_peer, user);
-                lock (_players) { _players.Add(user, player); }
-                lock (_remaining_unseen_peers) { _remaining_unseen_peers.Remove(peerID); }
-                //On update l'user status
-                user.UserStatus.Logged_on = true;
-                user.UserStatus.Peer_id = peerID;
-                user.UserStatus.Lobby_id = lobbyID;
-
-                //Send the ConnectionAccepted packet : 2nd step of the 3-way handshake
-                Send_ConnectionAccepted(user, challengeNumber);
-            }
-        }
-
-        void Process_ConnectionAccepted(User user, int content_length)
-        {
-            if (user.UserStatus.Logged_on)
-            {
-                Console.WriteLine("{0}: is accepting the connection.", user.Socket.RemoteEndPoint);
-                int i = Dgmt.HEADER_P2P_LENGTH;
-                byte[] packet = user.Buffer.GetSubbufferCopy(i, content_length);
-                //Skip the type
-                i = 1;
-                //Find the matching request in the registered requests
-                ClientRequestConnectionRequest request = null;
-                foreach (ClientRequest request2 in _requests_to_grant)
-                {
-                    if (request2 is ClientRequestConnectionRequest)
-                    {
-                        request = (ClientRequestConnectionRequest)request2;
-                        break;
-                    }
-                }
-                if (request == null)
-                {
-                    //If a JoinLobby request has never been sent, just skip this
-                    return;
-                }
-                else _requests_to_grant.Remove(request);
-                int j = i;
-                
-                uint lobbyID = BigE.ReadInt32(packet, ref i);
-                byte peerID = BigE.ReadByte(packet, ref i);
-                byte listeningPeerID = BigE.ReadByte(packet, ref i);
-                ulong challengeNumber = BigE.ReadInt64(packet, ref i);
-                ulong listeningChallengeNumber = BigE.ReadInt64(packet, ref i);
-                //On copie pour vérifier la signature
-                byte[] to_sign = new byte[i - j];
-                Array.Copy(packet, j, to_sign, 0, i - j);
-                byte[] signatureDSA = BigE.ReadSizePrefixedRawBytes(packet, ref i, 2);
-
-                //Là faire des tests
-                if (lobbyID == request.LobbyID &&
-                    peerID == request.PeerID &&
-                    listeningPeerID == request.ListeningPeerID &&
-                    challengeNumber == request.ChallengeNumber)
-                {
-                    _dsa_peer.FromXmlString(user.PublicKey);
-                    if (!_dsa_peer.VerifyData(to_sign, signatureDSA)) Console.WriteLine("{0}: bad DSA signature.", user.Socket.RemoteEndPoint);
-                    //Tout est bon, dans le cochon
-                    Peer peer = _players[user];
-                        
-                    //Proceed to the last step of the 3-way handshake
-                    Send_ConnectionAcknowledged(user, challengeNumber, listeningChallengeNumber);
-
-                    if (PeerHandshaken != null) PeerHandshaken(peer);
-                    return;
-                }
-                DisconnectUser(user.Socket);
-            }
-        }
-
-        void Process_ConnectionAcknowledged(User user, int content_length)
-        {
-            if (user.UserStatus.Logged_on)
-            {
-                Console.WriteLine("{0}: is acknowledging your accepting the connection.", user.Socket.RemoteEndPoint);
-                int i = Dgmt.HEADER_P2P_LENGTH;
-                byte[] packet = user.Buffer.GetSubbufferCopy(i, content_length);
-                //Skip the type
-                i = 1;
-                //Find the matching request in the registered requests
-                ClientRequestConnectionAccepted request = null;
-                foreach (ClientRequest request2 in _requests_to_grant)
-                {
-                    if (request2 is ClientRequestConnectionAccepted)
-                    {
-                        request = (ClientRequestConnectionAccepted)request2;
-                        break;
-                    }
-                }
-                if (request == null)
-                {
-                    //If a JoinLobby request has never been sent, just skip this
-                    return;
-                }
-                else _requests_to_grant.Remove(request);
-                int j = i;
-
-                uint lobbyID = BigE.ReadInt32(packet, ref i);
-                byte peerID = BigE.ReadByte(packet, ref i);
-                byte listeningPeerID = BigE.ReadByte(packet, ref i);
-                ulong challengeNumber = BigE.ReadInt64(packet, ref i);
-                ulong listeningChallengeNumber = BigE.ReadInt64(packet, ref i);
-                //On copie pour vérifier la signature
-                byte[] to_sign = new byte[i - j];
-                Array.Copy(packet, j, to_sign, 0, i - j);
-                byte[] signatureDSA = BigE.ReadSizePrefixedRawBytes(packet, ref i, 2);
-
-                //Là faire des tests
-                if (lobbyID == request.LobbyID &&
-                    peerID == request.PeerID &&
-                    listeningPeerID == request.ListeningPeerID &&
-                    challengeNumber == request.ChallengeNumber)
-                {
-                    _dsa_peer.FromXmlString(user.PublicKey);
-                    if (!_dsa_peer.VerifyData(to_sign, signatureDSA)) Console.WriteLine("{0}: bad DSA signature.", user.Socket.RemoteEndPoint);
-                    //Tout est bon, dans le cochon
-                    Peer peer = _players[user];
-                    if (PeerHandshaken != null) PeerHandshaken(peer);
-                    return;
-                }
-                DisconnectUser(user.Socket);
-            }
-        }
-
-        void Process_ChatSend(User user, int content_length)
-        {
-            if (user.UserStatus.Logged_on)
-            {
-                int i = Dgmt.HEADER_P2P_LENGTH;
-                byte[] packet = user.Buffer.GetSubbufferCopy(i, content_length);
-                //Skip the type
-                i = 1;
-                int j = i;
-                ulong sessionID = BigE.ReadInt64(packet, ref i);
-                string message = BigE.ReadSizePrefixedUTF8(packet, ref i, 2);
-                //On copie le bordel dont on doit vérifier la signature
-                byte[] to_sign = new byte[i - j];
-                Array.Copy(packet, j, to_sign, 0, i - j);
-                byte[] signature = BigE.ReadSizePrefixedRawBytes(packet, ref i, 2);
-
-                _dsa_peer.FromXmlString(user.PublicKey);
-                if (!_dsa_peer.VerifyData(to_sign, signature)) Console.WriteLine("{0}: Bad signature on sent message.", user.Socket.RemoteEndPoint);
-
-                Console.WriteLine("{0} says: {1}", user.Socket.RemoteEndPoint, message);
-
-                if (MessageReceived != null) MessageReceived(_players[user], message);
             }
         }
 
@@ -1107,6 +1046,275 @@ namespace MindTris
             }
         }
 
+        void Process_GameStarting(User user, int content_length)
+        {
+            int i = Dgmt.HEADER_LENGTH;
+            byte[] response = user.Buffer.GetSubbufferCopy(i, content_length);
+            i = 1;
+            byte answer = BigE.ReadByte(response, ref i);
+            if (answer == 0x00)
+            {
+                if (GameStarting != null) GameStarting(answer);
+            }
+        }
+
+        void Process_LoadGame(User user, int content_length)
+        {
+            int i = Dgmt.HEADER_LENGTH;
+            byte[] response = user.Buffer.GetSubbufferCopy(i, content_length);
+            i = 1;
+            byte count = BigE.ReadByte(response, ref i);
+            byte[] pieces = new byte[count];
+            for (int j = 0; j < count; j++)
+            {
+                BigE.ReadByte(response, ref i);
+            }
+            if (GameLoaded != null) GameLoaded(0, pieces);
+        }
+
+        void Process_BeginGame(User user, int content_length)
+        {
+            int i = Dgmt.HEADER_LENGTH;
+            byte[] response = user.Buffer.GetSubbufferCopy(i, content_length);
+            i = 1;
+            _status.Am_playing = true;
+            if (BeginGame != null) BeginGame();
+        }
+
+        void Process_NewPieces(User user, int content_length)
+        {
+            int i = Dgmt.HEADER_LENGTH;
+            byte[] response = user.Buffer.GetSubbufferCopy(i, content_length);
+            i = 1;
+            uint offset = BigE.ReadInt32(response, ref i);
+            byte[] pieces = BigE.ReadSizePrefixedRawBytes(response, ref i, 1);
+
+            if (NewPiecesIncoming != null) NewPiecesIncoming(offset, pieces);
+        }
+
+        //Process Packets from peers
+        void Process_ConnectionRequest(User user, int content_length)
+        {
+            if (!user.UserStatus.Logged_on)
+            {
+                Console.WriteLine("{0}: Handshaking.", user.Socket.RemoteEndPoint);
+                int i = Dgmt.HEADER_P2P_LENGTH;
+                byte[] packet = user.Buffer.GetSubbufferCopy(i, content_length);
+                //Skip the type
+                i = 1;
+                uint lobbyID = BigE.ReadInt32(packet, ref i);
+                byte peerID = BigE.ReadByte(packet, ref i);
+                byte listeningPeerID = BigE.ReadByte(packet, ref i);
+                ulong challengeNumber = BigE.ReadInt64(packet, ref i);
+                //Check lobby
+                if (_lobby.ID != lobbyID) return;
+                //Check destination
+                if (_status.Peer_id != listeningPeerID) return;
+                if (!_remaining_unseen_peers.ContainsKey(peerID)) return;
+                Peer matching_peer = _remaining_unseen_peers[peerID];
+                user.Port = matching_peer.Port;
+                user.PublicKey = matching_peer.PublicKey;
+                PeerPlayer player = new PeerPlayer(matching_peer, user);
+                lock (_players) { _players.Add(user, player); }
+                lock (_remaining_unseen_peers) { _remaining_unseen_peers.Remove(peerID); }
+                //On update l'user status
+                user.UserStatus.Logged_on = true;
+                user.UserStatus.Peer_id = peerID;
+                user.UserStatus.Lobby_id = lobbyID;
+
+                //Send the ConnectionAccepted packet : 2nd step of the 3-way handshake
+                Send_ConnectionAccepted(user, challengeNumber);
+            }
+        }
+
+        void Process_ConnectionAccepted(User user, int content_length)
+        {
+            if (user.UserStatus.Logged_on)
+            {
+                Console.WriteLine("{0}: is accepting the connection.", user.Socket.RemoteEndPoint);
+                int i = Dgmt.HEADER_P2P_LENGTH;
+                byte[] packet = user.Buffer.GetSubbufferCopy(i, content_length);
+                //Skip the type
+                i = 1;
+                //Find the matching request in the registered requests
+                ClientRequestConnectionRequest request = null;
+                foreach (ClientRequest request2 in _requests_to_grant)
+                {
+                    if (request2 is ClientRequestConnectionRequest)
+                    {
+                        request = (ClientRequestConnectionRequest)request2;
+                        break;
+                    }
+                }
+                if (request == null)
+                {
+                    //If a JoinLobby request has never been sent, just skip this
+                    return;
+                }
+                else _requests_to_grant.Remove(request);
+                int j = i;
+
+                uint lobbyID = BigE.ReadInt32(packet, ref i);
+                byte peerID = BigE.ReadByte(packet, ref i);
+                byte listeningPeerID = BigE.ReadByte(packet, ref i);
+                ulong challengeNumber = BigE.ReadInt64(packet, ref i);
+                ulong listeningChallengeNumber = BigE.ReadInt64(packet, ref i);
+                //On copie pour vérifier la signature
+                byte[] to_sign = new byte[i - j];
+                Array.Copy(packet, j, to_sign, 0, i - j);
+                byte[] signatureDSA = BigE.ReadSizePrefixedRawBytes(packet, ref i, 2);
+
+                //Là faire des tests
+                if (lobbyID == request.LobbyID &&
+                    peerID == request.PeerID &&
+                    listeningPeerID == request.ListeningPeerID &&
+                    challengeNumber == request.ChallengeNumber)
+                {
+                    _dsa_peer.FromXmlString(user.PublicKey);
+                    if (!_dsa_peer.VerifyData(to_sign, signatureDSA)) Console.WriteLine("{0}: bad DSA signature.", user.Socket.RemoteEndPoint);
+                    //Tout est bon, dans le cochon
+                    Peer peer = _players[user];
+
+                    //Proceed to the last step of the 3-way handshake
+                    Send_ConnectionAcknowledged(user, challengeNumber, listeningChallengeNumber);
+
+                    if (PeerHandshaken != null) PeerHandshaken(peer);
+                    return;
+                }
+                DisconnectUser(user.Socket);
+            }
+        }
+
+        void Process_ConnectionAcknowledged(User user, int content_length)
+        {
+            if (user.UserStatus.Logged_on)
+            {
+                Console.WriteLine("{0}: is acknowledging your accepting the connection.", user.Socket.RemoteEndPoint);
+                int i = Dgmt.HEADER_P2P_LENGTH;
+                byte[] packet = user.Buffer.GetSubbufferCopy(i, content_length);
+                //Skip the type
+                i = 1;
+                //Find the matching request in the registered requests
+                ClientRequestConnectionAccepted request = null;
+                foreach (ClientRequest request2 in _requests_to_grant)
+                {
+                    if (request2 is ClientRequestConnectionAccepted)
+                    {
+                        request = (ClientRequestConnectionAccepted)request2;
+                        break;
+                    }
+                }
+                if (request == null)
+                {
+                    //If a JoinLobby request has never been sent, just skip this
+                    return;
+                }
+                else _requests_to_grant.Remove(request);
+                int j = i;
+
+                uint lobbyID = BigE.ReadInt32(packet, ref i);
+                byte peerID = BigE.ReadByte(packet, ref i);
+                byte listeningPeerID = BigE.ReadByte(packet, ref i);
+                ulong challengeNumber = BigE.ReadInt64(packet, ref i);
+                ulong listeningChallengeNumber = BigE.ReadInt64(packet, ref i);
+                //On copie pour vérifier la signature
+                byte[] to_sign = new byte[i - j];
+                Array.Copy(packet, j, to_sign, 0, i - j);
+                byte[] signatureDSA = BigE.ReadSizePrefixedRawBytes(packet, ref i, 2);
+
+                //Là faire des tests
+                if (lobbyID == request.LobbyID &&
+                    peerID == request.PeerID &&
+                    listeningPeerID == request.ListeningPeerID &&
+                    challengeNumber == request.ChallengeNumber)
+                {
+                    _dsa_peer.FromXmlString(user.PublicKey);
+                    if (!_dsa_peer.VerifyData(to_sign, signatureDSA)) Console.WriteLine("{0}: bad DSA signature.", user.Socket.RemoteEndPoint);
+                    //Tout est bon, dans le cochon
+                    Peer peer = _players[user];
+                    if (PeerHandshaken != null) PeerHandshaken(peer);
+                    return;
+                }
+                DisconnectUser(user.Socket);
+            }
+        }
+
+        void Process_ChatSend(User user, int content_length)
+        {
+            if (user.UserStatus.Logged_on)
+            {
+                int i = Dgmt.HEADER_P2P_LENGTH;
+                byte[] packet = user.Buffer.GetSubbufferCopy(i, content_length);
+                //Skip the type
+                i = 1;
+                int j = i;
+                ulong sessionID = BigE.ReadInt64(packet, ref i);
+                string message = BigE.ReadSizePrefixedUTF8(packet, ref i, 2);
+                //On copie le bordel dont on doit vérifier la signature
+                byte[] to_sign = new byte[i - j];
+                Array.Copy(packet, j, to_sign, 0, i - j);
+                byte[] signature = BigE.ReadSizePrefixedRawBytes(packet, ref i, 2);
+
+                _dsa_peer.FromXmlString(user.PublicKey);
+                if (!_dsa_peer.VerifyData(to_sign, signature)) Console.WriteLine("{0}: Bad signature on sent message.", user.Socket.RemoteEndPoint);
+
+                if (MessageReceived != null) MessageReceived(_players[user], message);
+            }
+        }
+
+        void Process_Round(User user, int content_length)
+        {
+            if (user.UserStatus.Am_playing)
+            {
+                int i = Dgmt.HEADER_P2P_LENGTH;
+                byte[] packet = user.Buffer.GetSubbufferCopy(i, content_length);
+                //Skip the type
+                i = 1;
+                int j = i;
+                ulong sessionID = BigE.ReadInt64(packet, ref i);
+                uint roundNumber = BigE.ReadInt32(packet, ref i);
+                byte move_size = BigE.ReadByte(packet, ref i);
+                Move[] moves = new Move[move_size];
+                for (int k = 0; k < move_size; k++)
+                {
+                    uint moveTimeStamp = BigE.ReadInt32(packet, ref i);
+                    uint pieceNumber = BigE.ReadInt32(packet, ref i);
+                    byte orientation = BigE.ReadByte(packet, ref i);
+                    byte x = BigE.ReadByte(packet, ref i);
+                    byte y = BigE.ReadByte(packet, ref i);
+                    moves[k] = new Move(moveTimeStamp, pieceNumber, orientation, x, y);
+                }
+                //Round hash
+                byte hash_size = BigE.ReadByte(packet, ref i);
+                for (int k = 0; k < hash_size; k++)
+                {
+                    byte id = BigE.ReadByte(packet, ref i);
+                    byte[] hash = BigE.ReadRawBytes(packet, ref i, EXPECTED_HASH_SIZE);
+                    if (id != _status.Peer_id)
+                    {
+                        User userouze = UserFromPeerID(id);
+                        PeerPlayer player = _players[userouze];
+                        player.RoundDataHash = hash;
+                    }
+                }
+
+                //Signature
+                //On copie le bordel dont on doit vérifier la signature
+                byte[] to_sign = new byte[i - j];
+                Array.Copy(packet, j, to_sign, 0, i - j);
+                byte[] signature = BigE.ReadSizePrefixedRawBytes(packet, ref i, 2);
+
+                _dsa_peer.FromXmlString(user.PublicKey);
+                if (!_dsa_peer.VerifyData(to_sign, signature)) Console.WriteLine("{0}: Bad signature on round packet message.", user.Socket.RemoteEndPoint);
+
+                //Send to UI, if a move happened
+                if (move_size > 0)
+                {
+                    if (MoveMade != null) MoveMade(roundNumber, moves);
+                }
+            }
+        }
+
         //Send Packets to peers
         void Send_ConnectionRequest(User user)
         {
@@ -1198,6 +1406,66 @@ namespace MindTris
             //Send
             ServerResponse response = new ServerResponse(user.Socket, packet, length);
             QueueResponse(response);
+        }
+
+        void Send_Round(uint roundNumber, ICollection<Move> moves)
+        {
+            byte[] packet = Dgmt.ForgeNewPacket();
+            int i = Dgmt.HEADER_P2P_LENGTH;
+            BigE.WritePacketIDP2P(packet, ref i, Dgmt.PacketP2PID.Round);
+
+            int j = i;
+            BigE.WriteInt64(packet, ref i, (ulong)_status.Session_id);
+            BigE.WriteInt32(packet, ref i, roundNumber);
+            BigE.WriteByte(packet, ref i, (byte)moves.Count);
+            foreach (Move move in moves)
+            {
+                BigE.WriteInt32(packet, ref i, move.MoveTimeStamp);
+                BigE.WriteInt32(packet, ref i, move.PieceNumber);
+                BigE.WriteByte(packet, ref i, move.Orientation);
+                BigE.WriteByte(packet, ref i, move.X);
+                BigE.WriteByte(packet, ref i, move.Y);
+            }
+            //Players
+            BigE.WriteByte(packet, ref i, (byte)(_players.Count + 1));
+            //Me
+            BigE.WriteByte(packet, ref i, (byte)_status.Peer_id);
+            BigE.WriteRawBytes(packet, ref i, _roundDataHash);
+            //The others
+            foreach (PeerPlayer player in _players.Values)
+            {
+                BigE.WriteByte(packet, ref i, player.ID);
+                BigE.WriteRawBytes(packet, ref i, player.RoundDataHash);
+            }
+
+            //Signature
+            string public_key = _dsa_client.ToXmlString(false);
+            byte[] sign = _dsa_client.SignData(packet, j, i - j);
+            //Hash
+            _roundDataHash = _sha.ComputeHash(packet, j, i - j);
+            
+            BigE.WriteSizePrefixed(packet, ref i, 2, sign);
+
+            int length = Dgmt.FinalizePacketP2P(packet, i - Dgmt.HEADER_P2P_LENGTH);
+            
+            //Send to everyone
+            foreach (User user in _players.Keys)
+            {
+                //Send
+                ServerResponse response = new ServerResponse(user.Socket, packet, length);
+                QueueResponse(response);
+            }
+        }
+
+
+        User UserFromPeerID(byte peerID)
+        {
+            User user = null;
+            foreach (User userouze in _players.Keys)
+            {
+                if (userouze.UserStatus.Peer_id == peerID) user = userouze;
+            }
+            return user;
         }
     }
 }

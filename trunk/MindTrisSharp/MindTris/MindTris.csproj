@@ -83,6 +83,7 @@
     <Compile Include="Client.cs" />
     <Compile Include="ClientRequest.cs" />
     <Compile Include="ConsoleMenu.cs" />
+    <Compile Include="Move.cs" />
     <Compile Include="PeerPlayer.cs" />
     <Compile Include="Program.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />

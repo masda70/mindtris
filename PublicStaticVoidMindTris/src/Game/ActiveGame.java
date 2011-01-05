@@ -1,27 +1,31 @@
 package Game;
 
+import java.io.IOException;
 import java.util.LinkedList;
 import java.util.List;
 
+import Client.Client;
 import Gui.MainWindow;
 
 public class ActiveGame extends Game {
 
 	////// FIELDS //////
+	private Client 			_c;
 	private int				_fallX,
 							_fallY,
 							_fallenY;
 	private List<Move>		_moves;
 	
 	////// CONSTRUCTORS //////
-	public ActiveGame () {
+	public ActiveGame ( Client c ) {
 		super();
 		
+		_c = c;
 		_moves = new LinkedList<Move>();
 	}
 	
 	////// PUBLIC METHODS //////
-	public void start( MainWindow gui ) {
+	public void start( MainWindow gui ) throws IOException {
 		super.start(gui);
 		
 		nextFall();
@@ -40,6 +44,8 @@ public class ActiveGame extends Game {
 					}
 				} catch ( InterruptedException e ) {
 					e.printStackTrace();
+				} catch (IOException e) {
+					e.printStackTrace();
 				}
 			}
 		};
@@ -47,26 +53,33 @@ public class ActiveGame extends Game {
 	}
 	
 	public void leftMove() {
-		if( _fallX + _currentPiece.leftEdgeDist() > 0
-		 && !_currentPiece.collide(_board, _fallX-1, _fallY) ) {
+		if( !_currentPiece.collide(_board, _fallX-1, _fallY) ) {
 			_fallX--;
 			computeFall();
 		}
 	}
 
 	public void rightMove () {
-		if( _fallX + _currentPiece.rightEdgeDist() < W
-		 && !_currentPiece.collide(_board, _fallX+1, _fallY) ) {
+		if( !_currentPiece.collide(_board, _fallX+1, _fallY) ) {
 			_fallX++;
 			computeFall();
 		}
 	}
 
-	public void hardDrop() {
+	public void rotate() {
+		Kick k = _currentPiece.rotate(_board, _fallX, _fallY);
+		if( k != null ) {
+			_fallX += k._i;
+			_fallY += k._j;
+			computeFall();	
+		}
+	}
+	
+	public void hardDrop() throws IOException {
 		placeCurrent(_fallX, _fallenY);
 	}
 
-	public void softDrop() {
+	public void softDrop() throws IOException {
 		if( _currentPiece.collide(_board, _fallX, _fallY-1) ) placeCurrent(_fallX, _fallY);
 		else _fallY--;
 	}
@@ -93,6 +106,11 @@ public class ActiveGame extends Game {
 
 	
 	////// PRIVATE METHODS //////
+	protected Piece getNextPiece () throws IOException {
+		if( _pieces.size() <= 2 ) _c.askForNewPieces();
+		
+		return super.getNextPiece();
+	}
 	private void computeFall () {
 		_fallenY = _fallY;
 		
@@ -100,7 +118,7 @@ public class ActiveGame extends Game {
 			_fallenY--;
 	}
 	
-	private void nextFall () {
+	private void nextFall () throws IOException {
 		_currentPiece = getNextPiece();
 		
 		_fallY = Game.H + _currentPiece.offsetY();
@@ -111,7 +129,7 @@ public class ActiveGame extends Game {
 		computeFall();
 	}
 	
-	private void placeCurrent ( int x, int y ) {
+	private void placeCurrent ( int x, int y ) throws IOException {
 		_currentPiece.addToBoard(_board, x, y);
 		// TODO check
 		int time = (int) System.currentTimeMillis();

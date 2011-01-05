@@ -16,7 +16,7 @@ import IO.OutData;
 public class DSAKey implements Encodable {
 	////// FIELDS //////
 	private PublicKey _k;
-	private byte[] _p, _q, _g, _y;
+	private BigInt _p, _q, _g, _y;
 	
 	////// CONSTRUCTORS //////
 	public DSAKey ( PublicKey k ) {
@@ -25,10 +25,10 @@ public class DSAKey implements Encodable {
 		try {
 			KeyFactory fact = KeyFactory.getInstance("DSA");
 			DSAPublicKeySpec spec = fact.getKeySpec(_k, DSAPublicKeySpec.class);
-			_p = spec.getP().toByteArray();
-			_q = spec.getQ().toByteArray();
-			_g = spec.getG().toByteArray();
-			_y = spec.getY().toByteArray();
+			_p = new BigInt(spec.getP());
+			_q = new BigInt(spec.getQ());
+			_g = new BigInt(spec.getG());
+			_y = new BigInt(spec.getY());
 		} catch ( NoSuchAlgorithmException e ) {
 			e.printStackTrace();
 		} catch (InvalidKeySpecException e) {
@@ -38,6 +38,7 @@ public class DSAKey implements Encodable {
 	
 	public DSAKey ( InData in ) throws IOException {
 		try {
+			/*
 			int pLen = in.readUnsignedShort();
 			// TODO DEBUG
 			byte[] debugP = new byte[pLen];
@@ -70,29 +71,27 @@ public class DSAKey implements Encodable {
 			_y[0] = 0x00;
 			System.arraycopy(debugY, 0, _y, 1, yLen);
 			
-			/*
+			/* */
+			
 			int pLen = in.readUnsignedShort();
-			_p = new byte[pLen];
-			in.readFully(_p);
+			_p = new BigInt(in, pLen);
 
 			int qLen = in.readUnsignedShort();
-			_q = new byte[qLen];
-			in.readFully(_q);
+			_q = new BigInt(in, qLen);
 			
 			int gLen = in.readUnsignedShort();
-			_g = new byte[gLen];
-			in.readFully(_g);
+			_g = new BigInt(in, gLen);
 			
 			int yLen = in.readUnsignedShort();
-			_y = new byte[yLen];
-			in.readFully(_y);
-			*/
+			_y = new BigInt(in, yLen);
+			
+			/* */
 			
 			DSAPublicKeySpec spec = new DSAPublicKeySpec(
-					new BigInteger(_y),
-					new BigInteger(_p),
-					new BigInteger(_q),
-					new BigInteger(_g));
+					_y.toBigInteger(),
+					_p.toBigInteger(),
+					_q.toBigInteger(),
+					_g.toBigInteger());
 			
 			KeyFactory fact = KeyFactory.getInstance("DSA");
 			_k = fact.generatePublic(spec);
@@ -105,7 +104,7 @@ public class DSAKey implements Encodable {
 
 	////// ENCODINGS //////
 	public void toBytes(OutData out) throws IOException {
-
+		/*
 		// TODO DEBUG
 		out.writeShort(_p.length - 1);
 		byte[] pDebug = new byte[_p.length - 1];
@@ -130,21 +129,23 @@ public class DSAKey implements Encodable {
 		System.arraycopy(_y, 1, yDebug, 0, _y.length-1);
 		out.write(yDebug);
 		
-		/*
-		out.writeShort(_p.length);
+		/* */
+		
+		out.writeShort(_p.len());
 		out.write(_p);
-		out.writeShort(_q.length);
+		out.writeShort(_q.len());
 		out.write(_q);
-		out.writeShort(_g.length);
+		out.writeShort(_g.len());
 		out.write(_g);
-		out.writeShort(_y.length);
+		out.writeShort(_y.len());
 		out.write(_y);
-		*/
+		
+		/* */
 	}
 
 	public int len() {
 		// TODO DEBUG
-		return 2 + _p.length -1 + 2 + _q.length -1 + 2 + _g.length -1 + 2 + _y.length -1;
+		return 2+_p.len() + 2+_q.len() + 2+_g.len() + 2+_y.len();
 	}
 
 	////// PUBLIC METHODS //////

@@ -39,11 +39,13 @@ public class GameLeft extends JPanel {
 			
 			int sz=(this.getWidth() - 10) / 5, x=this.getWidth()/2, y=5;
 			
-			Iterator<Piece> iter = _nextPieces.iterator();
-			while( iter.hasNext() && y + 3*sz < this.getHeight() ) {
-				Piece p = iter.next();
-				p.draw(g, sz, x+sz*p.offsetX(), y-sz*p.offsetY(), true);
-				y += 3*sz;
+			synchronized( _nextPieces ) {
+				Iterator<Piece> iter = _nextPieces.iterator();
+				while( iter.hasNext() && y + 3*sz < this.getHeight() ) {
+					Piece p = iter.next();
+					p.draw(g, sz, x+sz*p.offsetX(), y-sz*p.offsetY(), true);
+					y += 3*sz;
+				}
 			}
 		}
 	}

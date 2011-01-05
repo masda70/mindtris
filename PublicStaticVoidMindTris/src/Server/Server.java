@@ -128,9 +128,10 @@ public class Server extends Thread {
 			addHdl(MsgCltSrv.CREATE_LOBBY,		new LobbyCreateHdl());
 			addHdl(MsgCltSrv.GET_LOBBY_LIST,	new LobbyListHdl());
 			addHdl(MsgCltSrv.JOIN_LOBBY,		new LobbyJoinHdl());
+			addHdl(MsgCltSrv.LEAVE_LOBBY,		new LeaveHdl());
 			addHdl(MsgCltSrv.START_GAME,		new StartHdl());
 			addHdl(MsgCltSrv.LOADED_GAME,		new LoadedHdl());
-			addHdl(MsgCltSrv.LEAVE_LOBBY,		new LeaveHdl());
+			addHdl(MsgCltSrv.GIVE_NEW_PIECES,	new GiveNewPiecesHdl());
 		}
 	}
 	
@@ -398,6 +399,26 @@ public class Server extends Thread {
 				throw new NotImplementedException();
 			}
 		}
-		
+	}
+	
+	private class GiveNewPiecesHdl implements Handler<ChCltSrv> {
+		public void handle(InData in, ChCltSrv ch) throws IOException {
+			// !!!! TODO offset
+			Lobby l = _lobbies.get(ch.getUsr().getLobbyId());
+			
+			int pieceOffset = in.readInt();
+			int nbPieces = in.readUnsignedByte();
+
+			Piece[] pieces = Game.generateNewPieces(nbPieces);
+			
+			Msg msg = new MsgCltSrv(MsgCltSrv.NEW_PIECES, 4+1+pieces.length);
+			msg._out.writeInt(pieceOffset);
+			msg._out.write(pieces.length);
+			
+			for( Piece p : pieces ) msg._out.write(p);
+			
+			for( Map.Entry<Integer, Peer> o : l._peers )
+				o.getValue().getCh().send(msg);
+		}
 	}
 }

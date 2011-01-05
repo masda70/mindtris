@@ -486,25 +486,32 @@ public class MainWindow extends JFrame {
 	
 	public void beginGame () {
 		addKeyListener(new KeyListener() {
-			public void keyTyped(KeyEvent e) {}
-			public void keyReleased(KeyEvent e) {}
-			public void keyPressed(KeyEvent e) {
-				switch( e.getKeyCode() ) {
-				case KeyEvent.VK_LEFT:
-					_c.getGame().leftMove();
-					break;
-				case KeyEvent.VK_UP:
-					_c.getGame().hardDrop();
-					break;
-				case KeyEvent.VK_RIGHT:
-					_c.getGame().rightMove();
-					break;
-				case KeyEvent.VK_DOWN:
-					_c.getGame().softDrop();
-					break;
+			public void keyTyped(KeyEvent ev) {}
+			public void keyReleased(KeyEvent ev) {}
+			public void keyPressed(KeyEvent ev) {
+				try {
+					switch( ev.getKeyCode() ) {
+					case KeyEvent.VK_LEFT:
+						_c.getGame().leftMove();
+						break;
+					case KeyEvent.VK_UP:
+						_c.getGame().rotate();
+						break;
+					case KeyEvent.VK_RIGHT:
+						_c.getGame().rightMove();
+						break;
+					case KeyEvent.VK_DOWN:
+						_c.getGame().softDrop();
+						break;
+					case KeyEvent.VK_SPACE:
+						_c.getGame().hardDrop();
+						break;
+					}
+					
+					_board.repaint();
+				} catch ( IOException e ) {
+					e.printStackTrace();
 				}
-				
-				_board.repaint();
 			}
 		});
 

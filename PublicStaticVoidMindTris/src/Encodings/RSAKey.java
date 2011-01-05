@@ -18,8 +18,8 @@ public class RSAKey implements Serializable, Encodable {
 	
 	////// FIELDS //////
 	private PublicKey _k;
-	private byte[] _mod;
-	private byte[] _exp;
+	private BigInt _mod;
+	private BigInt _exp;
 	
 	////// CONSTRUCTORS //////
 	public RSAKey ( PublicKey k ) {
@@ -29,8 +29,8 @@ public class RSAKey implements Serializable, Encodable {
 			KeyFactory fact = KeyFactory.getInstance("RSA");
 			RSAPublicKeySpec spec = fact.getKeySpec(_k, RSAPublicKeySpec.class);
 			
-			_mod = spec.getModulus().toByteArray();
-			_exp = spec.getPublicExponent().toByteArray();
+			_mod = new BigInt(spec.getModulus());
+			_exp = new BigInt(spec.getPublicExponent());
 		} catch ( NoSuchAlgorithmException e ) {
 			e.printStackTrace();
 		} catch (InvalidKeySpecException e) {
@@ -41,20 +41,14 @@ public class RSAKey implements Serializable, Encodable {
 	public RSAKey ( InData in ) throws IOException {
 		try {
 			int modLen = in.readUnsignedShort();
-			// TODO DEBUG
-			byte[] debugMod = new byte[modLen];
-			in.readFully(debugMod);
-			_mod = new byte[1+modLen];
-			_mod[0] = 0x00;
-			System.arraycopy(debugMod, 0, _mod, 1, modLen);
+			_mod = new BigInt(in, modLen);
 			
 			int expLen = in.readUnsignedByte();
-			_exp = new byte[expLen];
-			in.readFully(_exp);
+			_exp = new BigInt(in, expLen);
 			
 			RSAPublicKeySpec spec = new RSAPublicKeySpec(
-					new BigInteger(_mod),
-					new BigInteger(_exp));
+					_mod.toBigInteger(),
+					_exp.toBigInteger());
 			
 			KeyFactory fact = KeyFactory.getInstance("RSA");
 			_k = fact.generatePublic(spec);
@@ -66,24 +60,20 @@ public class RSAKey implements Serializable, Encodable {
 	}
 
 	private RSAKey () {
-		_mod = new byte[0];
-		_exp = new byte[0];
+		_mod = null;
+		_exp = null;
 	}
 	
 	////// ENCODING //////
 	public void toBytes ( OutData out ) throws IOException {
-		out.writeShort(_mod.length - 1);
-		// TODO DEBUG
-		byte[] modDebug = new byte[_mod.length - 1];
-		System.arraycopy(_mod, 1, modDebug, 0, _mod.length-1);
-		out.write(modDebug);
-		out.writeByte(_exp.length);
+		out.writeShort(_mod.len());
+		out.write(_mod);
+		out.writeByte(_exp.len());
 		out.write(_exp);
 	}
 
 	public int len () {
-		// TODO DEBUG
-		return 2 + _mod.length -1 + 1 + _exp.length;
+		return 2+_mod.len() + 1+_exp.len();
 	}
 
 	////// PUBLIC METHODS //////

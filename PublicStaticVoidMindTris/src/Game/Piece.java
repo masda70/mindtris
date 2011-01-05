@@ -41,13 +41,33 @@ public class Piece implements Encodable {
 		 "011",
 		 "000"}
 	};
+	private static final int[][][] KICKS_0 = {
+		{{0,0}, {-1,0},	{2,0},	{-1,0},	{2,0}},
+		{{-1,0},{0,0},	{0,0},	{0,1},	{0,-2}},
+		{{-1,1},{1,1},	{-2,1},	{1,0},	{-2,0}},
+		{{0,1}, {0,1},	{0,1},	{0,-1},	{0,2}}
+	};
+	private static final int[][][] KICKS_12456 = {
+		{{0,0},	{0,0},	{0,0},	{0,0},	{0,0}},
+		{{0,0},	{1,0},	{1,-1},	{0,2},	{1,2}},
+		{{0,0},	{0,0},	{0,0},	{0,0},	{0,0}},
+		{{0,0},	{-1,0},	{-1,-1},{0,2},	{-1,2}}
+	};
+	private static final int [][][] KICKS_3 = {
+		 {{0,0}},
+		 {{0,-1}},
+		 {{-1,-1}},
+		 {{-1, 0}}
+	};
+	
 	private static boolean[][][][] PIECES;	// [piece][rotation][col][row]
+	private static int[][][][] KICKS;		// [piece][rotation][offsetNb](i,j)
 	private static Color[] COLORS = {
 		Color.GREEN, Color.BLUE, Color.CYAN, Color.YELLOW, Color.MAGENTA, Color.PINK, Color.RED
 	};
 	
-	// compute rotations
 	static {
+		// compute rotations
 		PIECES = new boolean[PIECES_NB][][][];
 		
 		for( int p=0; p<PIECES_NB; p++ ) {
@@ -65,7 +85,13 @@ public class Piece implements Encodable {
 					PIECES[p][3][r][len-c-1]		= b;
 				}
 			}
-		}	
+		}
+		
+		// set kicks
+		KICKS = new int[PIECES_NB][][][];
+		KICKS[0] = KICKS_0;
+		KICKS[1] = KICKS[2] = KICKS[4] = KICKS[5] = KICKS[6] = KICKS_12456;
+		KICKS[3] = KICKS_3;
 	}
 	
 	////// FIELDS //////
@@ -88,7 +114,7 @@ public class Piece implements Encodable {
 	
 	////// PUBLIC MEHTODS //////
 	public void draw ( Graphics g, int size, int offsetX, int offsetY, boolean notGhost ) {
-		boolean[][] piece = PIECES[_code][_rotation]; 
+		boolean[][] piece = PIECES[_code][_rotation];
 		int len = piece.length;
 		int sz = size;
 		
@@ -111,31 +137,8 @@ public class Piece implements Encodable {
 		return ( _code == 0 ) ? 1 : 0;
 	}
 
-	public int leftEdgeDist () {
-		return ( _code == 0 || _code == 3 ) ? 1 : 0;
-	}
-	public int rightEdgeDist () {
-		return ( _code == 0 ) ? 5 : 3;
-	}
-
 	public boolean collide ( int[][] board, int x, int y ) {
-		boolean[][] piece = PIECES[_code][_rotation];
-		int len = piece.length;
-		
-		for( int i=0; i<len; i++ ) {
-			for( int j=0; j<len; j++ ) {
-				if( piece[i][j]
-				 && ( x+i>=Game.W
-					|| y-j<0
-					|| ( y-j<Game.H && board[x+i][y-j] != EMPTY )
-					)
-				) {
-					return true;
-				}
-			}
-		}
-		
-		return false;
+		return computeCollision(_code, _rotation, board, x, y);
 	}
 
 	public void addToBoard ( int[][] board, int x, int y ) {
@@ -150,6 +153,28 @@ public class Piece implements Encodable {
 	public void setRotaion ( int r ) {
 		_rotation = r;
 	}
+
+	public Kick rotate ( int[][] board, int x, int y ) {
+		int rot2 = (_rotation+1) % 4;
+		int[][] kick1 = KICKS[_code][_rotation],
+				kick2 = KICKS[_code][rot2];
+		
+		System.out.println("kick "+_code+" (r="+_rotation+" x="+x+" y="+y+")");
+		
+		for( int k=0; k<kick1.length; k++ ) {
+			int i = kick1[k][0] - kick2[k][0],
+				j = kick1[k][1] - kick2[k][1];
+			
+			System.out.println( kick1[k][0] + "," + kick1[k][1]+" - "+ kick2[k][0] + "," + kick2[k][1]
+			                 + " -> " + i + "," + j);
+			if( !computeCollision(_code, rot2, board, x+i, y+j) ) {
+				_rotation = rot2;
+				return new Kick(i, j);
+			}
+		}
+		
+		return null;
+	}
 	
 	////// STATIC //////
 	public static void drawSquare(Graphics g, int code, int sz, int x, int y, boolean notGhost) {
@@ -157,5 +182,26 @@ public class Piece implements Encodable {
 		
 		if( notGhost ) g.fillRect(x, y, sz-1, sz-1);  
 		else g.drawRect(x, y, sz-2, sz-2);
+	}
+	
+	public static boolean computeCollision ( int code, int rotation, int[][] board, int x, int y ) {
+		boolean[][] piece = PIECES[code][rotation];
+		int len = piece.length;
+		
+		for( int i=0; i<len; i++ ) {
+			for( int j=0; j<len; j++ ) {
+				if( piece[i][j]
+				 && ( x+i>=Game.W
+					|| x+i<0
+					|| y-j<0
+					|| ( y-j<Game.H && board[x+i][y-j] != EMPTY )
+					)
+				) {
+					return true;
+				}
+			}
+		}
+		
+		return false;
 	}
 }

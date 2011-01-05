@@ -11,6 +11,7 @@ namespace MindTrisServer
         public User UserCreator { get; set; }
         public string Password { get; set; }
         public ulong SessionID { get; set; }
+        public RandomGenerator Generator { get; set; }
 
         public byte GeneratePlayerID()
         {
@@ -24,6 +25,24 @@ namespace MindTrisServer
             return id;
             throw new Exception("Should not be thrown, use GeneratePlayerID only if there is enough room for another player in the lobby.");
         }
+
+        PeerServer GetPeerServerFromUser(User user)
+        {
+            PeerServer peer = null;
+            foreach (PeerServer peerouze in Players)
+            {
+                if (Object.ReferenceEquals(peerouze.User, user)) peer = peerouze;
+            }
+            return peer;
+        }
+
         public LinkedList<PeerServer> Players { get; set; }
+        public PeerServer this[User user]
+        {
+            get
+            {
+                return GetPeerServerFromUser(user);
+            }
+        }
     }
 }

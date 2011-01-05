@@ -17,8 +17,10 @@ namespace MindTrisServer
             Port = user.Port;
             PublicKey = user.PublicKey;
             User = user;
+            IsGameLoaded = false;
         }
 
         public User User { get; set; }
+        public bool IsGameLoaded { get; set; }
     }
 }

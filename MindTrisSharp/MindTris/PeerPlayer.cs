@@ -21,5 +21,6 @@ namespace MindTris
         public User User { get; set; }
         public ulong InitiatingChallengeCode { get; set; }
         public ulong ListeningChallengeCode { get; set; }
+        public byte[] RoundDataHash { get; set; }
     }
 }

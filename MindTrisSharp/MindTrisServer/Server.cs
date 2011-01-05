@@ -46,6 +46,11 @@ namespace MindTrisServer
         const int MAX_CONNECTION_COUNT = 1000;
         const int MAX_LOBBIES_COUNT = 1000;
 
+        //Game mechanics
+        RandomGenerator _generator;
+        const byte PIECES_INITIAL_COUNT = 10;
+        const byte PIECES_UPDATE_COUNT = 10;
+
         public Server(string name, IPAddress address, int port)
         {
             _name = name;
@@ -260,6 +265,15 @@ namespace MindTrisServer
                             break;
                         case Dgmt.PacketID.LeaveLobby:
                             Process_LeaveLobby(user, content_length);
+                            break;
+                        case Dgmt.PacketID.StartGame:
+                            Process_StartGame(user, content_length);
+                            break;
+                        case Dgmt.PacketID.LoadedGame:
+                            Process_LoadedGame(user, content_length);
+                            break;
+                        case Dgmt.PacketID.GiveNewPieces:
+                            Process_GiveNewPieces(user, content_length);
                             break;
                         default:
                             throw new NotImplementedException("Unknown message type, or the feature is not implemented yet.");
@@ -523,6 +537,87 @@ namespace MindTrisServer
             }
         }
 
+        void Process_StartGame(User user, int content_length)
+        {
+            if (user.UserStatus.Creator_lobby_id != null)
+            {
+                Console.WriteLine("{0}: Starting game.", user.Socket.RemoteEndPoint);
+                int i = Dgmt.HEADER_LENGTH;
+                byte[] packet = user.Buffer.GetSubbufferCopy(i, content_length);
+                //Skip the type
+                i = 1;
+                uint lobby_id = (uint)user.UserStatus.Creator_lobby_id;
+                LobbyServer lobby = _lobbies[lobby_id];
+
+                //Send response
+                Response_GameStarting(user, 0x00);
+
+                //Tirer les premières pièces
+                lobby.Generator = new RandomGenerator(_rand.Next());
+                byte[] pieces = lobby.Generator.Next(PIECES_INITIAL_COUNT);
+
+                //Notify every player in the lobby to load the game
+                foreach (PeerServer peer in _lobbies[lobby_id].Players)
+                {
+                    Response_LoadGame(peer.User, pieces);
+                }
+            }
+        }
+
+        void Process_LoadedGame(User user, int content_length)
+        {
+            if (user.UserStatus.Connected && user.UserStatus.Lobby_id != null)
+            {
+                Console.WriteLine("{0}: Loaded game.", user.Socket.RemoteEndPoint);
+                int i = Dgmt.HEADER_LENGTH;
+                byte[] packet = user.Buffer.GetSubbufferCopy(i, content_length);
+                //Skip the type
+                i = 1;
+                byte answer = BigE.ReadByte(packet, ref i);
+                if (answer != 0x00)
+                {
+                    //[TODO] Gérer le cas où il y a une erreur, lol
+                }
+                else
+                {
+                    LobbyServer lobby = _lobbies[(uint)user.UserStatus.Lobby_id];
+                    PeerServer peer = lobby[user];
+                    peer.IsGameLoaded = true;
+                    //If all peers have loaded the game, send BeginGame
+                    bool all_loaded = true;
+                    foreach (PeerServer peerouze in lobby.Players)
+                    {
+                        all_loaded = all_loaded && peerouze.IsGameLoaded;
+                    }
+                    if (all_loaded)
+                    {
+                        foreach (PeerServer peerouze in lobby.Players)
+                        {
+                            peerouze.User.UserStatus.Am_playing = true;
+                            Response_BeginGame(peerouze.User);
+                        }
+                    }
+                }
+            }
+        }
+
+        void Process_GiveNewPieces(User user, int content_length)
+        {
+            if (user.UserStatus.Am_playing && user.UserStatus.Lobby_id != null)
+            {
+                Console.WriteLine("{0}: Requiring new pieces.", user.Socket.RemoteEndPoint);
+                int i = Dgmt.HEADER_LENGTH;
+                byte[] packet = user.Buffer.GetSubbufferCopy(i, content_length);
+                //Skip the type
+                i = 1;
+                uint offset = BigE.ReadInt32(packet, ref i);
+                byte count = BigE.ReadByte(packet, ref i);
+                LobbyServer lobby = _lobbies[(uint)user.UserStatus.Lobby_id];
+
+                Response_NewPieces(user, lobby, offset, count);
+            }
+        }
+
         /*
         void ReceiveFromSingleClient(IAsyncResult res)
         {
@@ -746,6 +841,65 @@ namespace MindTrisServer
                 ServerResponse res = new ServerResponse(peerless.User.Socket, packet, length);
                 QueueResponse(res);
             }
+        }
+
+        void Response_GameStarting(User user, byte response)
+        {
+            byte[] packet = Dgmt.ForgeNewPacket();
+            int i = Dgmt.HEADER_LENGTH;
+            BigE.WritePacketID(packet, ref i, Dgmt.PacketID.GameStarting);
+            BigE.WriteByte(packet, ref i, response);
+
+            int length = Dgmt.FinalizePacket(packet, i - Dgmt.HEADER_LENGTH);
+            //Send the shit
+            ServerResponse res = new ServerResponse(user.Socket, packet, length);
+            QueueResponse(res);
+        }
+
+        void Response_LoadGame(User user, byte[] pieces)
+        {
+            byte[] packet = Dgmt.ForgeNewPacket();
+            int i = Dgmt.HEADER_LENGTH;
+            BigE.WritePacketID(packet, ref i, Dgmt.PacketID.LoadGame);
+            BigE.WriteByte(packet, ref i, (byte)pieces.Length);
+            for (int j = 0; j < pieces.Length; j++)
+            {
+                BigE.WriteByte(packet, ref i, pieces[j]);
+            }
+
+            int length = Dgmt.FinalizePacket(packet, i - Dgmt.HEADER_LENGTH);
+            //Send the shit
+            ServerResponse res = new ServerResponse(user.Socket, packet, length);
+            QueueResponse(res);
+        }
+
+        void Response_BeginGame(User user)
+        {
+            byte[] packet = Dgmt.ForgeNewPacket();
+            int i = Dgmt.HEADER_LENGTH;
+            BigE.WritePacketID(packet, ref i, Dgmt.PacketID.BeginGame);
+
+            int length = Dgmt.FinalizePacket(packet, i - Dgmt.HEADER_LENGTH);
+            //Send the shit
+            ServerResponse res = new ServerResponse(user.Socket, packet, length);
+            QueueResponse(res);
+        }
+
+        void Response_NewPieces(User user, LobbyServer lobby, uint offset, byte count)
+        {
+            byte[] packet = Dgmt.ForgeNewPacket();
+            int i = Dgmt.HEADER_LENGTH;
+            
+            BigE.WritePacketID(packet, ref i, Dgmt.PacketID.NewPieces);
+            BigE.WriteInt32(packet, ref i, offset);
+            count = (count == 0) ? PIECES_UPDATE_COUNT : count;
+            byte[] pieces = lobby.Generator.Next(offset, count);
+            BigE.WriteByte(packet, ref i, count);
+            BigE.WriteRawBytes(packet, ref i, pieces);
+            int length = Dgmt.FinalizePacket(packet, i - Dgmt.HEADER_LENGTH);
+            //Send the shit
+            ServerResponse res = new ServerResponse(user.Socket, packet, length);
+            QueueResponse(res);
         }
 
         void CheckAliveUsers()

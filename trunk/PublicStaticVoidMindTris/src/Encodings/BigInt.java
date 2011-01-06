@@ -17,9 +17,6 @@ public class BigInt implements Encodable {
 		_encoding = new byte[len];
 		in.readFully(_encoding);
 		
-	System.out.print("bigint debug (len "+_encoding.length+") : ");
-	Channel.debug(_encoding);
-		
 		// to two's complement
 		int i = 0;
 		while (i < len && _encoding[i] == 0) i++;
@@ -28,8 +25,6 @@ public class BigInt implements Encodable {
 		byte[] r = new byte[len-i+extraByte];
 		
 		System.arraycopy(_encoding, i, r, extraByte, len-i);
-		
-	Channel.debug(_encoding);
 		
 		_i = new BigInteger(r);
 	}

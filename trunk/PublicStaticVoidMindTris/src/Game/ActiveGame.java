@@ -121,8 +121,8 @@ public class ActiveGame extends Game {
 	private void nextFall () throws IOException {
 		_currentPiece = getNextPiece();
 		
-		_fallY = Game.H + _currentPiece.offsetY();
-		_fallX = Game.W/2 + _currentPiece.offsetX();
+		_fallY = Game.H + _currentPiece.spawnY();
+		_fallX = Game.W/2 + _currentPiece.spawnX();
 		
 		_gui.upNextPieces();
 		_gui.upBoard();
@@ -135,7 +135,8 @@ public class ActiveGame extends Game {
 		
 		// TODO check
 		int time = (int) System.currentTimeMillis();
-		_moves.add(new Move(time, _pieceNb, _currentPiece.getRotation(), x, y));
+		_moves.add(new Move(time, _pieceNb, _currentPiece.getRotation(),
+							x+_currentPiece.offsetX(), y+_currentPiece.offsetY()));
 		nextFall();
 	}
 }

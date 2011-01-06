@@ -125,6 +125,7 @@ public class Piece implements Encodable {
 	////// CONSTRUCTORS //////
 	public Piece ( int code ) {
 		_code = code;
+		_rotation = 0;
 	}
 	
 	////// ENCODINGS //////

@@ -30,6 +30,7 @@ public class Server extends Thread {
 	private UsrDataBase		_db;
 	private IdMap<Lobby>	_lobbies;
 	private Random			_rdmGen;
+	private int				_piecesOffset;
 	
 	////// CONSTRUCTORS //////
 	public Server () {
@@ -370,6 +371,7 @@ public class Server extends Thread {
 			Lobby l = _lobbies.get(lobbyCreatedId);
 			Game g = new Game();
 			Piece[] pieces = Game.generateNewPieces();
+			_piecesOffset = pieces.length-1;
 			
 			Msg loadMsg = new MsgCltSrv(MsgCltSrv.LOAD_GAME, 1+pieces.length);
 			loadMsg._out.write(pieces.length);
@@ -409,16 +411,21 @@ public class Server extends Thread {
 			int pieceOffset = in.readInt();
 			int nbPieces = in.readUnsignedByte();
 
-			Piece[] pieces = Game.generateNewPieces(nbPieces);
-			
-			Msg msg = new MsgCltSrv(MsgCltSrv.NEW_PIECES, 4+1+pieces.length);
-			msg._out.writeInt(pieceOffset);
-			msg._out.write(pieces.length);
-			
-			for( Piece p : pieces ) msg._out.write(p);
-			
-			for( Map.Entry<Integer, Peer> o : l._peers )
-				o.getValue().getCh().send(msg);
+			if( pieceOffset > _piecesOffset ) {
+				Piece[] pieces = Game.generateNewPieces(nbPieces);
+				_piecesOffset += pieces.length; 
+					
+				Msg msg = new MsgCltSrv(MsgCltSrv.NEW_PIECES, 4+1+pieces.length);
+				msg._out.writeInt(pieceOffset);
+				msg._out.write(pieces.length);
+				
+				for( Piece p : pieces ) msg._out.write(p);
+				
+				for( Map.Entry<Integer, Peer> o : l._peers )
+					o.getValue().getCh().send(msg);
+			} else {
+				debug("receive a demand of new pieces "+pieceOffset+"<="+_piecesOffset);
+			}
 		}
 	}
 }

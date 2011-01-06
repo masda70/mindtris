@@ -519,7 +519,7 @@ public class Client {
 		public void handle(InData in, ChCltSrv ch) throws IOException {
 			debug("Begin Game");
 			_game.start(_w);
-			for( Game g : _peerGames.elements() ) g.start(_w);
+			for( Game g : _peerGames.elements() ) g.start(null);
 			_w.beginGame();
 			
 			Thread timer = new Thread() {
@@ -569,9 +569,9 @@ public class Client {
 			int nbPieces = in.readUnsignedByte();
 
 			for( int i=0; i<nbPieces; i++ ) {
-				Piece p = new Piece(in.readUnsignedByte());
-				_game.addNewPiece(p, pieceOffset);
-				for( Game g : _peerGames.elements() ) g.addNewPiece(p, pieceOffset);
+				_game.addNewPiece(new Piece(in.readUnsignedByte()), pieceOffset);
+				for( Game g : _peerGames.elements() )
+					g.addNewPiece(new Piece(in.readUnsignedByte()), pieceOffset);
 			}
 			
 			_w.upNextPieces();

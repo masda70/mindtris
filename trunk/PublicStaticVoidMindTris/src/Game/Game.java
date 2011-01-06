@@ -19,12 +19,14 @@ public class Game {
 	protected int			_pieceNb;
 	protected Piece			_currentPiece;
 	protected MainWindow	_gui;
+	protected boolean		_stop;
 
 	
 	////// CONSTRUCTORS //////
 	public Game () {
 		_pieces = new LinkedList<Piece>();
 		_board = new int[W][H];
+		_stop = false;
 		
 		for( int i=0; i<W; i++ )
 			for( int j=0; j<H; j++ )
@@ -42,7 +44,7 @@ public class Game {
 	}
 
 	public int pieceNb() {
-		return _pieceNb;
+		return _pieceNb+_pieces.size()+1;
 	}
 	
 	public void addNewPiece ( Piece piece, int pieceOffset ) {
@@ -51,10 +53,6 @@ public class Game {
 			// !!!!! TODO offset
 				
 		}
-	}
-	
-	public Piece getFallingPiece () {
-		return _currentPiece;
 	}
 	
 	public void addMoves ( List<Move> moves ) throws IOException {
@@ -66,7 +64,16 @@ public class Game {
 			checkLines(m.pieceY);
 		}
 	}
+	
+	public Piece getFallingPiece () {
+		return _currentPiece;
+	}
 
+	
+	////// GETTER //////
+	public int[][] board () {
+		return _board;
+	}
 	////// PROTECTED //////
 	protected Piece getNextPiece () throws IOException {
 		_pieceNb++;
@@ -97,12 +104,13 @@ public class Game {
 			}
 		}
 		
-		if( nbLines > 0 ) _gui.addScore(nbLines);
+		if( _gui != null && nbLines > 0 ) _gui.addScore(nbLines);
 	}
 	
-	////// GETTER //////
-	public int[][] board () {
-		return _board;
+	protected void gameOver () {
+		_stop = true;
+		
+		if( _gui != null ) _gui.gameOver();
 	}
 	
 	////// STATIC FUNCTION //////

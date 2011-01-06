@@ -33,7 +33,7 @@ public class ActiveGame extends Game {
 		Thread timer = new Thread() {
 			public void run() {
 				try {
-					while( _currentPiece != null ) {
+					while( !_stop ) {
 						sleep(1000);
 						if( _currentPiece.collide(_board, _fallX, _fallY-1) ) {
 							placeCurrent(_fallX, _fallY);
@@ -130,6 +130,11 @@ public class ActiveGame extends Game {
 	}
 	
 	private void placeCurrent ( int x, int y ) throws IOException {
+		if( y >= H ) {
+			gameOver();
+			return;
+		}
+		
 		_currentPiece.addToBoard(_board, x, y);
 		checkLines(y);
 		

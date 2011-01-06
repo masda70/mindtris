@@ -34,7 +34,7 @@ public class Game {
 	////// PUBLIC METHODS //////
 	public void start( MainWindow gui ) throws IOException {
 		_gui = gui;
-		_pieceNb = 0;
+		_pieceNb = -1;
 	}
 	
 	public Queue<Piece> nextPieces() {
@@ -61,7 +61,8 @@ public class Game {
 		for( Move m : moves ) {
 			Piece p = getNextPiece();
 			p.setRotation(m.pieceRotation);
-			p.addToBoard(_board, m.pieceX, m.pieceY);
+			p.addToBoard(_board, m.pieceX-p.offsetX(), m.pieceY+p.offsetY());
+
 			checkLines(m.pieceY);
 		}
 	}
@@ -84,11 +85,11 @@ public class Game {
 			boolean line = true;
 			
 			for( int x=0; x<Game.W; x++ )
-				if( _board[x][y] == Piece.EMPTY ) line = false;
+				if( _board[x][y-nbLines] == Piece.EMPTY ) line = false;
 			
 			if( line ) {
 				for( int i=0; i<Game.W; i++ ) {
-					for( int j=y; j<Game.H-1; j++ )
+					for( int j=y-nbLines; j<Game.H-1; j++ )
 						_board[i][j] = _board[i][j+1];
 					_board[i][Game.H-1] = Piece.EMPTY;
 				}

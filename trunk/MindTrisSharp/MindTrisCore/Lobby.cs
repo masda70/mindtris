@@ -5,7 +5,7 @@ using System.Text;
 
 namespace MindTrisCore
 {
-    class Lobby
+    public class Lobby
     {
         public uint ID { get; set; }
         public string Creator { get; set; }

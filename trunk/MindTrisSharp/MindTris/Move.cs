@@ -5,7 +5,7 @@ using System.Text;
 
 namespace MindTris
 {
-    class Move
+    public class Move
     {
         uint _moveTimeStamp;
         uint _pieceNumber;

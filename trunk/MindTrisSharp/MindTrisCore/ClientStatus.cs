@@ -26,6 +26,5 @@ namespace MindTrisCore
         public uint? Creator_lobby_id { get; set; }
         public ulong? Session_id { get; set; }
         public bool Am_playing { get; set; }
-        //Il faudra inclure le client public key
     }
 }

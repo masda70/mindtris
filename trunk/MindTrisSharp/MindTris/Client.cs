@@ -14,7 +14,7 @@ using System.Diagnostics;
 
 namespace MindTris
 {
-    class Client
+    public class Client
     {
         string _login;
         string _email;
@@ -24,8 +24,6 @@ namespace MindTris
         int _server_port;
 
         ClientStatus _status;
-
-
 
         //Core
 
@@ -54,7 +52,8 @@ namespace MindTris
 
         //Lobby
         Lobby _lobby;
-        Dictionary<byte, Peer> _remaining_unseen_peers;
+        Dictionary<byte, Peer> _remaining_unconnected_peers;
+        Dictionary<byte, PeerPlayer> _remaining_untrusted_peers;
         Dictionary<User, PeerPlayer> _players;
 
         SHA1CryptoServiceProvider _sha;
@@ -71,6 +70,9 @@ namespace MindTris
         int _connection_count;
         const int MAX_CONNECTION_COUNT = 1000;
 
+        //Game Mechanics
+        public const int ROUND_DELAY_MILLISECONDS = 100;
+
         public Client(string serverIP, int serverPort)
         {
             _server_address = IPAddress.Parse(serverIP);
@@ -81,12 +83,13 @@ namespace MindTris
             _listener.Blocking = false;
             _users = new Dictionary<Socket, User>(20);
             _players = new Dictionary<User, PeerPlayer>(20);
-            _remaining_unseen_peers = new Dictionary<byte, Peer>();
+            _remaining_unconnected_peers = new Dictionary<byte, Peer>();
+            _remaining_untrusted_peers = new Dictionary<byte, PeerPlayer>();
             _rsa_server = new RSACryptoServiceProvider();
             _dsa_client = new DSACryptoServiceProvider();
             _dsa_peer = new DSACryptoServiceProvider();
             _sha = new SHA1CryptoServiceProvider();
-            Debug.Assert(_sha.HashSize == EXPECTED_HASH_SIZE);
+            Debug.Assert(_sha.HashSize / 8 == EXPECTED_HASH_SIZE);
             _rand = new Random();
             string lol = _dsa_client.ToXmlString(false);
             lol.ToString();
@@ -173,6 +176,14 @@ namespace MindTris
             }
         }
 
+        public void StartGame()
+        {
+            if (_status.Creator_lobby_id == _lobby.ID)
+            {
+                Send_StartGame();
+            }
+        }
+
         public void RequestNewPieces(uint offset, byte count)
         {
             if (_status.Am_playing)
@@ -205,12 +216,12 @@ namespace MindTris
         public event VoidFunction LobbyLeft;
         public delegate void UpdateFunction(byte update, Peer peer);
         public event UpdateFunction StatusUpdated;
-        public event ConfirmationFunction GameStarting;
         public delegate void ReceivingNewPieces(uint offset, byte[] pieces);
+        public event ConfirmationFunction GameStarting;
         public event ReceivingNewPieces GameLoaded;
         public event VoidFunction BeginGame;
         public event ReceivingNewPieces NewPiecesIncoming;
-        public delegate void MoveFunction(uint roundNumber, Move[] moves);
+        public delegate void MoveFunction(Peer peer, uint roundNumber, Move[] moves);
         public event MoveFunction MoveMade;
 
         public delegate void MessageReceivedFunction(Peer peer, string message);
@@ -483,7 +494,14 @@ namespace MindTris
 
         public void SendRoundPacket(uint roundNumber, ICollection<Move> moves)
         {
-
+            if (_status.Am_playing)
+            {
+                if (moves != null)
+                {
+                    Send_Round(roundNumber, moves);
+                }
+                else Send_Round(roundNumber, new List<Move>());
+            }
         }
 
         //Server side
@@ -595,9 +613,10 @@ namespace MindTris
                 {
                     int qte = socket.Receive(user.Buffer.BufferRaw,
                         user.Buffer.BufferPosition,
-                        Math.Max(socket.Available, Math.Max(
+                        Math.Min(socket.Available, Math.Max(
                             user.Buffer.WindowStart - user.Buffer.BufferPosition,
-                            user.Buffer.Length - user.Buffer.BufferPosition)),
+                            user.Buffer.Length - user.Buffer.BufferPosition
+                            )),
                         SocketFlags.None
                         );
                     user.Buffer.WindowLength += qte;
@@ -606,7 +625,7 @@ namespace MindTris
                     {
                         qte = socket.Receive(user.Buffer.BufferRaw,
                             user.Buffer.BufferPosition,
-                            Math.Max(socket.Available, user.Buffer.WindowStart - user.Buffer.BufferPosition),
+                            Math.Min(socket.Available, user.Buffer.WindowStart - user.Buffer.BufferPosition),
                             SocketFlags.None
                             );
                         user.Buffer.WindowLength += qte;
@@ -697,7 +716,7 @@ namespace MindTris
                     }
                 }
                 //Update the window
-                user.Buffer.WindowStart += packet_length;
+                user.Buffer.WindowStart = (user.Buffer.WindowStart + packet_length) % user.Buffer.Length;
                 user.Buffer.WindowLength -= packet_length;
             }
             else
@@ -771,7 +790,7 @@ namespace MindTris
                     }
                 }
                 //Update the window
-                user.Buffer.WindowStart += packet_length;
+                user.Buffer.WindowStart = (user.Buffer.WindowStart + packet_length) % user.Buffer.Length;
                 user.Buffer.WindowLength -= packet_length;
             }
             else
@@ -801,17 +820,20 @@ namespace MindTris
 
         void DisconnectUser(Socket socket)
         {
-            User user = _users[socket];
-            _users.Remove(socket);
-            if (_players.ContainsKey(user)) _players.Remove(user);
-            Console.WriteLine("{0}: Disconnected.", socket.RemoteEndPoint);
-            try
+            if (_users.ContainsKey(socket))
             {
-                socket.Shutdown(SocketShutdown.Both);
-            }
-            finally
-            {
-                socket.Close();
+                User user = _users[socket];
+                _users.Remove(socket);
+                if (_players.ContainsKey(user)) _players.Remove(user);
+                Console.WriteLine("{0}: Disconnected.", socket.RemoteEndPoint);
+                try
+                {
+                    socket.Shutdown(SocketShutdown.Both);
+                }
+                finally
+                {
+                    socket.Close();
+                }
             }
         }
 
@@ -1026,18 +1048,44 @@ namespace MindTris
             int i = Dgmt.HEADER_LENGTH;
             byte[] response = user.Buffer.GetSubbufferCopy(i, content_length);
             i = 1;
-            Peer peer = new Peer();
             uint lobbyID = BigE.ReadInt32(response, ref i);
             byte answer = BigE.ReadByte(response, ref i);
-            peer.ID = BigE.ReadByte(response, ref i);
+            byte peerID = BigE.ReadByte(response, ref i);
+            Peer peer = null;
             if (answer == 0x00)
             {
-                peer.DisplayName = BigE.ReadSizePrefixedUTF8(response, ref i, 1);
-                peer.IpAddress = BigE.ReadIPAddress(response, ref i);
-                peer.Port = BigE.ReadInt16(response, ref i);
-                peer.PublicKey = BigE.ReadDSAPublicKey(response, ref i);
-                _remaining_unseen_peers.Add(peer.ID, peer);
+                string displayName = BigE.ReadSizePrefixedUTF8(response, ref i, 1);
+                IPAddress address = BigE.ReadIPAddress(response, ref i);
+                ushort port = BigE.ReadInt16(response, ref i);
+                string public_key = BigE.ReadDSAPublicKey(response, ref i);
+                if (_remaining_untrusted_peers.ContainsKey(peerID))
+                {
+                    peer = _remaining_untrusted_peers[peerID];
+                    //On complète les infos de l'user
+                    User userouze = UserFromPeerID(peerID);
+                    userouze.Port = port;
+                    userouze.PublicKey = public_key;
+                    userouze.UserStatus.User = displayName;
+                    _remaining_untrusted_peers.Remove(peerID);
+                }
+                else
+                {
+                    peer = new Peer();
+                    _remaining_unconnected_peers[peerID] = peer;
+                }
+                peer.DisplayName = displayName;
+                peer.ID = peerID;
+                peer.IpAddress = address;
+                peer.Port = port;
+                peer.PublicKey = public_key;
             }
+            else
+            {
+                User userouze = UserFromPeerID(peerID);
+                if (userouze == null) return;
+                //peer = _players[user];
+            }
+
             if (StatusUpdated != null) StatusUpdated(answer, peer);
             if (peer.ID == _status.Peer_id)
             {
@@ -1067,7 +1115,7 @@ namespace MindTris
             byte[] pieces = new byte[count];
             for (int j = 0; j < count; j++)
             {
-                BigE.ReadByte(response, ref i);
+                pieces[j] = BigE.ReadByte(response, ref i);
             }
             if (GameLoaded != null) GameLoaded(0, pieces);
         }
@@ -1078,6 +1126,10 @@ namespace MindTris
             byte[] response = user.Buffer.GetSubbufferCopy(i, content_length);
             i = 1;
             _status.Am_playing = true;
+            foreach (User userouze in _players.Keys)
+            {
+                userouze.UserStatus.Am_playing = true;
+            }
             if (BeginGame != null) BeginGame();
         }
 
@@ -1110,13 +1162,22 @@ namespace MindTris
                 if (_lobby.ID != lobbyID) return;
                 //Check destination
                 if (_status.Peer_id != listeningPeerID) return;
-                if (!_remaining_unseen_peers.ContainsKey(peerID)) return;
-                Peer matching_peer = _remaining_unseen_peers[peerID];
-                user.Port = matching_peer.Port;
-                user.PublicKey = matching_peer.PublicKey;
-                PeerPlayer player = new PeerPlayer(matching_peer, user);
+                PeerPlayer player;
+                if (_remaining_unconnected_peers.ContainsKey(peerID))
+                {
+                    Peer matching_peer = _remaining_unconnected_peers[peerID];
+                    user.Port = matching_peer.Port;
+                    user.PublicKey = matching_peer.PublicKey;
+                    player = new PeerPlayer(matching_peer, user);
+                    lock (_remaining_unconnected_peers) { _remaining_unconnected_peers.Remove(peerID); }
+                }
+                else
+                {
+                    //We never saw him coming
+                    player = new PeerPlayer(peerID, user);
+                    _remaining_untrusted_peers[peerID] = player;
+                }
                 lock (_players) { _players.Add(user, player); }
-                lock (_remaining_unseen_peers) { _remaining_unseen_peers.Remove(peerID); }
                 //On update l'user status
                 user.UserStatus.Logged_on = true;
                 user.UserStatus.Peer_id = peerID;
@@ -1171,7 +1232,14 @@ namespace MindTris
                     challengeNumber == request.ChallengeNumber)
                 {
                     _dsa_peer.FromXmlString(user.PublicKey);
-                    if (!_dsa_peer.VerifyData(to_sign, signatureDSA)) Console.WriteLine("{0}: bad DSA signature.", user.Socket.RemoteEndPoint);
+                    try
+                    {
+                        if (!_dsa_peer.VerifyData(to_sign, signatureDSA)) Console.WriteLine("{0}: Bad signature on round packet message.", user.Socket.RemoteEndPoint);
+                    }
+                    catch (CryptographicException e)
+                    {
+                        Console.WriteLine("{0}: Bad signature on round packet message + Exception", user.Socket.RemoteEndPoint);
+                    }
                     //Tout est bon, dans le cochon
                     Peer peer = _players[user];
 
@@ -1229,7 +1297,14 @@ namespace MindTris
                     challengeNumber == request.ChallengeNumber)
                 {
                     _dsa_peer.FromXmlString(user.PublicKey);
-                    if (!_dsa_peer.VerifyData(to_sign, signatureDSA)) Console.WriteLine("{0}: bad DSA signature.", user.Socket.RemoteEndPoint);
+                    try
+                    {
+                        if (!_dsa_peer.VerifyData(to_sign, signatureDSA)) Console.WriteLine("{0}: Bad signature on round packet message.", user.Socket.RemoteEndPoint);
+                    }
+                    catch (CryptographicException e)
+                    {
+                        Console.WriteLine("{0}: Bad signature on round packet message + Exception", user.Socket.RemoteEndPoint);
+                    }
                     //Tout est bon, dans le cochon
                     Peer peer = _players[user];
                     if (PeerHandshaken != null) PeerHandshaken(peer);
@@ -1305,12 +1380,19 @@ namespace MindTris
                 byte[] signature = BigE.ReadSizePrefixedRawBytes(packet, ref i, 2);
 
                 _dsa_peer.FromXmlString(user.PublicKey);
-                if (!_dsa_peer.VerifyData(to_sign, signature)) Console.WriteLine("{0}: Bad signature on round packet message.", user.Socket.RemoteEndPoint);
+                try
+                {
+                    if (!_dsa_peer.VerifyData(to_sign, signature)) Console.WriteLine("{0}: Bad signature on round packet message.", user.Socket.RemoteEndPoint);
+                }
+                catch (CryptographicException e)
+                {
+                    Console.WriteLine("{0}: Bad signature on round packet message + Exception", user.Socket.RemoteEndPoint);
+                }
 
                 //Send to UI, if a move happened
                 if (move_size > 0)
                 {
-                    if (MoveMade != null) MoveMade(roundNumber, moves);
+                    if (MoveMade != null) MoveMade(_players[user], roundNumber, moves);
                 }
             }
         }
@@ -1430,12 +1512,21 @@ namespace MindTris
             BigE.WriteByte(packet, ref i, (byte)(_players.Count + 1));
             //Me
             BigE.WriteByte(packet, ref i, (byte)_status.Peer_id);
-            BigE.WriteRawBytes(packet, ref i, _roundDataHash);
+            byte[] dummy = new byte[EXPECTED_HASH_SIZE];
+            for (int k = 0; k < EXPECTED_HASH_SIZE; k++) dummy[k] = 0;
+            if (_roundDataHash != null)
+            {
+                BigE.WriteRawBytes(packet, ref i, _roundDataHash);
+            }
+            else
+            {
+                BigE.WriteRawBytes(packet, ref i, dummy);
+            }
             //The others
             foreach (PeerPlayer player in _players.Values)
             {
                 BigE.WriteByte(packet, ref i, player.ID);
-                BigE.WriteRawBytes(packet, ref i, player.RoundDataHash);
+                BigE.WriteRawBytes(packet, ref i, player.RoundDataHash != null ? player.RoundDataHash : dummy);
             }
 
             //Signature
@@ -1467,5 +1558,8 @@ namespace MindTris
             }
             return user;
         }
+
+        public string Name { get { return _login; } }
+        //public ClientStatus UserStatus { get { return _status; } }
     }
 }

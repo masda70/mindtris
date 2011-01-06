@@ -3,12 +3,8 @@ package Game;
 import java.awt.Color;
 import java.awt.Graphics;
 import java.io.IOException;
-import java.util.Random;
-
-import javax.swing.JComponent;
 
 import Encodings.Encodable;
-import IO.InData;
 import IO.OutData;
 
 public class Piece implements Encodable {

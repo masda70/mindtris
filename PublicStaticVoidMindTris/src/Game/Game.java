@@ -60,7 +60,7 @@ public class Game {
 	public void addMoves ( List<Move> moves ) throws IOException {
 		for( Move m : moves ) {
 			Piece p = getNextPiece();
-			p.setRotaion(m.pieceRotation);
+			p.setRotation(m.pieceRotation);
 			p.addToBoard(_board, m.pieceX, m.pieceY);
 			checkLines(m.pieceY);
 		}

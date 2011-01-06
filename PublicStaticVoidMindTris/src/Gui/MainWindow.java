@@ -21,6 +21,7 @@ import java.util.Map.Entry;
 
 import javax.swing.*;
 
+
 public class MainWindow extends JFrame {
 	////// STATIC FIELDS //////
 	private static final long serialVersionUID = 1L;
@@ -29,7 +30,7 @@ public class MainWindow extends JFrame {
 	////// FIELDS //////
 	private Client		_c;
 	private TxtField	_error = new TxtField();
-	private JComponent	_text = new Lbl("PublicStaticVoidMindTris");
+	private JComponent	_text = new JLabel(new ImageIcon("logo.png"));
 	private JComponent	_top,
 					  	_center;
 	private GameLeft	_left;
@@ -64,6 +65,10 @@ public class MainWindow extends JFrame {
 					case KeyEvent.VK_SPACE:
 						_c.getGame().hardDrop();
 						break;
+					default:
+						_chatBar.requestFocusInWindow();
+						_chatBar.setText(KeyEvent.getKeyText(ev.getKeyCode()).toLowerCase());
+						_chatBar.setCaretPosition(1);
 					}
 					
 					_board.repaint();
@@ -78,7 +83,7 @@ public class MainWindow extends JFrame {
 				System.exit(0);
 		    }
 		});
-
+		
 		this.getContentPane().setBackground(bg);
 		this.setSize(800,600);
 		
@@ -117,7 +122,6 @@ public class MainWindow extends JFrame {
 				srv.start();
 			}
 		};
-		
 		
 		srvIp.addActionListener(connectListener);
 		port.addActionListener(connectListener);
@@ -464,6 +468,7 @@ public class MainWindow extends JFrame {
 					_c.sendChatMsg(_chatBar.getUTxt());
 					((TxtArea) _text).append(displayName.v() + ": " + _chatBar.getText() + "\n");
 					_chatBar.setText("");
+					requestFocusInWindow();
 				} catch ( IOException e ) {
 					printError(e.getMessage());
 				}
@@ -549,12 +554,13 @@ public class MainWindow extends JFrame {
 	}
 	
 	public void printCenter(String txt) {
-		((Lbl) _text).setText(txt);
+		if( _text instanceof Lbl ) ((Lbl) _text).setText(txt);
+		else _text = new Lbl(txt);
+		
 		_center.repaint();		
 	}
 
 	public void upBoard() {
-		requestFocusInWindow();
 		_board.repaint();
 	}
 

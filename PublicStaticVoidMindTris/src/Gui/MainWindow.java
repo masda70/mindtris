@@ -474,6 +474,16 @@ public class MainWindow extends JFrame {
 				}
 			}
 		});
+		_chatBar.addKeyListener(new KeyListener() {
+			public void keyTyped(KeyEvent e) {}
+			public void keyReleased(KeyEvent e) {}
+			public void keyPressed(KeyEvent e) {
+				if( e.getKeyCode() == KeyEvent.VK_ESCAPE) {
+					_chatBar.setText("");
+					requestFocusInWindow();
+				}
+			}
+		});
 		
 		_top.removeAll();
 		_top.add(quit);
@@ -511,11 +521,11 @@ public class MainWindow extends JFrame {
 			h=2*Board.BORDER_SZ + ((_center.getHeight()-2*Board.BORDER_SZ)/Game.H) * Game.H,
 			w2=2*Board.BORDER_SZ + ((h-2*Board.BORDER_SZ)/Game.H) * Game.W;
 		
-		_left.setBounds(0, 0, 80, h);
+		_left.setBounds(0, 0, 100, h);
 		_center.add(_left);
-		_board.setBounds(80, 0, w2, h);
+		_board.setBounds(100, 0, w2, h);
 		_center.add(_board);
-		_right.setBounds(80+w2, 0, w-80-w2, h);
+		_right.setBounds(100+w2, 0, w-80-w2, h);
 		_center.add(_right);
 		
 		_center.repaint();
@@ -527,6 +537,27 @@ public class MainWindow extends JFrame {
 
 		requestFocusInWindow();
 		upBoard();
+	}
+
+	public void gameOver() {
+		// TODO Auto-generated method stub
+		class GameOver extends JLabel {
+
+			private static final long serialVersionUID = 1L;
+
+			public void paint ( Graphics g ) {
+				super.paint(g);
+				System.out.println("paint");
+				g.setColor(Color.WHITE);
+	              setFont(new Font("arial, helvetica",Font.BOLD, 10));
+				g.drawString("Game Over", 50, 50);
+			}
+		}
+
+		JComponent lbl = new GameOver();
+		lbl.setBounds(40, 40, 200, 400);
+		_center.add(lbl);
+		_center.repaint();
 	}
 	
 	////// PRINT //////	

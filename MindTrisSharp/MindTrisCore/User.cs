@@ -31,6 +31,5 @@ namespace MindTrisCore
 
         public ushort Port { get; set; }
         public string PublicKey { get; set; }
-        public RSACryptoServiceProvider RSACrypto { get; set; }
     }
 }

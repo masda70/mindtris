@@ -11,6 +11,7 @@ using System.Diagnostics;
 
 namespace MindTris
 {
+    /*
     class LobbyListItem
     {
         public uint _0_lobbyID;
@@ -27,6 +28,7 @@ namespace MindTris
         public byte _2_list_size;
         public LobbyListItem[] _3_lobbyList;
     }
+    //*/
 
     class Program
     {
@@ -248,10 +250,16 @@ namespace MindTris
                     _client.ConnectPeer(peer);
                 }
             }
+            _client.GameLoaded += new Client.ReceivingNewPieces(_client_GameLoaded);
             Console.WriteLine("Starting chat...");
             StartChat();
                     });
             t.Start();
+        }
+
+        static void _client_GameLoaded(uint offset, byte[] pieces)
+        {
+            throw new NotImplementedException();
         }
 
         private static void StartChat()

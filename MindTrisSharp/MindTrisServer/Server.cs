@@ -166,7 +166,7 @@ namespace MindTrisServer
                 {
                     int qte = socket.Receive(user.Buffer.BufferRaw,
                         user.Buffer.BufferPosition,
-                        Math.Max(socket.Available, Math.Max(
+                        Math.Min(socket.Available, Math.Max(
                             user.Buffer.WindowStart - user.Buffer.BufferPosition,
                             user.Buffer.Length - user.Buffer.BufferPosition)),
                         SocketFlags.None
@@ -177,7 +177,7 @@ namespace MindTrisServer
                     {
                         qte = socket.Receive(user.Buffer.BufferRaw,
                             user.Buffer.BufferPosition,
-                            Math.Max(socket.Available, user.Buffer.WindowStart - user.Buffer.BufferPosition),
+                            Math.Min(socket.Available, user.Buffer.WindowStart - user.Buffer.BufferPosition),
                             SocketFlags.None
                             );
                         user.Buffer.WindowLength += qte;
@@ -241,9 +241,9 @@ namespace MindTrisServer
                 else
                 {
                     //Grab the message type
-                    byte id = user.Buffer[Dgmt.PROTOCOL_ID_LENGTH + Dgmt.PACKET_LENGTH_LENGTH];
+                    Dgmt.PacketID id = (Dgmt.PacketID)user.Buffer[Dgmt.PROTOCOL_ID_LENGTH + Dgmt.PACKET_LENGTH_LENGTH];
                     //Process accordingly
-                    switch ((Dgmt.PacketID)id)
+                    switch (id)
                     {
                         case Dgmt.PacketID.HelloFromClient:
                             Process_HelloFromClient(user, content_length);
@@ -280,7 +280,7 @@ namespace MindTrisServer
                     }
                 }
                 //Update the window
-                user.Buffer.WindowStart += packet_length;
+                user.Buffer.WindowStart = (user.Buffer.WindowStart + packet_length) % user.Buffer.Length;
                 user.Buffer.WindowLength -= packet_length;
             }
             else
@@ -614,7 +614,10 @@ namespace MindTrisServer
                 byte count = BigE.ReadByte(packet, ref i);
                 LobbyServer lobby = _lobbies[(uint)user.UserStatus.Lobby_id];
 
-                Response_NewPieces(user, lobby, offset, count);
+                foreach (PeerServer peer in lobby.Players)
+                {
+                    Response_NewPieces(peer.User, lobby, offset, count);
+                }
             }
         }
 
@@ -938,12 +941,15 @@ namespace MindTrisServer
             {
                 LobbyServer lobby = _lobbies[(uint)user.UserStatus.Lobby_id];
                 PeerServer peer = null;
-                foreach (PeerServer peerouze in lobby.Players)
+                if (lobby != null && lobby.Players != null)
                 {
-                    if (Object.ReferenceEquals(peerouze.User, user)) peer = peerouze;
+                    foreach (PeerServer peerouze in lobby.Players)
+                    {
+                        if (Object.ReferenceEquals(peerouze.User, user)) peer = peerouze;
+                    }
+                    lobby.Players.Remove(peer);
+                    lobby.PlayerCount--;
                 }
-                lobby.Players.Remove(peer);
-                lobby.PlayerCount--;
             }
             
             Console.WriteLine("{0}: Disconnected.", socket.RemoteEndPoint);

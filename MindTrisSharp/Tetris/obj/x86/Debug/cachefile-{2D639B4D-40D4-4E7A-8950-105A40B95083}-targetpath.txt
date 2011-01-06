@@ -1,0 +1,4 @@
+ContentTetris\background.xnb
+ContentTetris\score.xnb
+ContentTetris\tetris.xnb
+ContentTetris\Original Tetris theme (Tetris Soundtrack).xnb

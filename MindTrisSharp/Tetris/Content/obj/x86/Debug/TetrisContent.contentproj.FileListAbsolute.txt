@@ -1,0 +1,2 @@
+C:\Tetris\Tetris\Content\obj\x86\Debug\ResolveAssemblyReference.cache
+C:\mindtris\MindTrisSharp\Tetris\Content\obj\x86\Debug\ResolveAssemblyReference.cache

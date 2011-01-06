@@ -6,7 +6,7 @@ using System.Net;
 
 namespace MindTrisCore
 {
-    class Peer
+    public class Peer
     {
         public byte ID { get; set; }
         public string DisplayName { get; set; }

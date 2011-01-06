@@ -18,6 +18,12 @@ namespace MindTris
             User = user;
         }
 
+        public PeerPlayer(byte peerID, User user)
+        {
+            ID = peerID;
+            User = user;
+        }
+
         public User User { get; set; }
         public ulong InitiatingChallengeCode { get; set; }
         public ulong ListeningChallengeCode { get; set; }

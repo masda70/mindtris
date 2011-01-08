@@ -569,9 +569,9 @@ public class Client {
 			int nbPieces = in.readUnsignedByte();
 
 			for( int i=0; i<nbPieces; i++ ) {
-				_game.addNewPiece(new Piece(in.readUnsignedByte()), pieceOffset);
-				for( Game g : _peerGames.elements() )
-					g.addNewPiece(new Piece(in.readUnsignedByte()), pieceOffset);
+				int code = in.readUnsignedByte();
+				_game.addNewPiece(new Piece(code), pieceOffset);
+				for( Game g : _peerGames.elements() ) g.addNewPiece(new Piece(code), pieceOffset);
 			}
 			
 			_w.upNextPieces();

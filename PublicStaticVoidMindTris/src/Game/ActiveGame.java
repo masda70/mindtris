@@ -107,7 +107,7 @@ public class ActiveGame extends Game {
 	
 	////// PRIVATE METHODS //////
 	protected Piece getNextPiece () throws IOException {
-		if( _pieces.size() <= 2 ) _c.askForNewPieces();
+		if( _pieces.size() <= 7 ) _c.askForNewPieces();
 		
 		return super.getNextPiece();
 	}

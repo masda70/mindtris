@@ -1,7 +1,6 @@
 package IO;
 
 import java.io.*;
-import java.security.SignatureException;
 import java.util.Arrays;
 
 public abstract class Msg {

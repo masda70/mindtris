@@ -2,31 +2,17 @@ package Gui;
 
 import java.awt.BorderLayout;
 import java.awt.Color;
-import java.awt.Component;
-import java.awt.Dimension;
-import java.awt.Graphics;
 import java.awt.GridLayout;
-import java.awt.Insets;
-import java.awt.LayoutManager;
-import java.util.Iterator;
-import java.util.LinkedList;
-import java.util.List;
 import java.util.Map;
 
-import javax.swing.BorderFactory;
 import javax.swing.BoxLayout;
 import javax.swing.JComponent;
-import javax.swing.JLabel;
 import javax.swing.JPanel;
-import javax.swing.border.Border;
 
-import Encodings.UString;
 import Game.Game;
 import Util.IdMap;
 import Util.Peer;
 
-
-import sun.awt.VerticalBagLayout;
 
 public class GameRight extends JPanel {
 	private static final long serialVersionUID = 1L;

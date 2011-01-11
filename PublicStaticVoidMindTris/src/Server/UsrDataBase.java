@@ -2,7 +2,6 @@ package Server;
 
 import java.io.*;
 import java.util.HashMap;
-import java.util.Map;
 
 import Encodings.*;
 import Util.*;
@@ -10,6 +9,7 @@ import Util.*;
 public class UsrDataBase {
 	private HashMap<UString, User> _db;
     
+	@SuppressWarnings("unchecked")
 	public UsrDataBase () {
 		try {
 	    	ObjectInputStream ois = new ObjectInputStream(

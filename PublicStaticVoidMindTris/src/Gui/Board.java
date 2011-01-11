@@ -3,7 +3,7 @@ package Gui;
 import Game.*;
 
 import java.awt.Color;
-import java.awt.Component;
+import java.awt.Font;
 import java.awt.Graphics;
 
 import javax.swing.BorderFactory;
@@ -17,12 +17,14 @@ public class Board extends JPanel {
 
 	////// FIELDS //////
 	private Game _g;
+	private boolean _gameOver;
 	
 	////// CONSTRUCTORS //////
 	public Board ( Game g ) {
 		super();
 		
 		_g = g;
+		_gameOver = false;
 		setBackground(Color.DARK_GRAY);
 		setBorder(BorderFactory.createLineBorder(Color.GRAY, BORDER_SZ-2));
 	}
@@ -44,5 +46,16 @@ public class Board extends JPanel {
 			g.getFallingPiece().draw(gr, sz, BORDER_SZ+sz*g.x(), BORDER_SZ+sz*(Game.H-g.y()-1), true);
 			g.getFallingPiece().draw(gr, sz, BORDER_SZ+sz*g.x(), BORDER_SZ+sz*(Game.H-g.fallen()-1), false);
 		}
+		
+		if( _gameOver ) {
+			gr.setColor(Color.GRAY);
+            gr.setFont(new Font("arial, helvetica",Font.BOLD, getWidth()/4));
+			gr.drawString("GAME", 10, getHeight()/3);
+			gr.drawString("OVER", 10, getHeight()/2);
+		}
+	}
+
+	public void drawGameOver () {
+		_gameOver = true;
 	}
 }

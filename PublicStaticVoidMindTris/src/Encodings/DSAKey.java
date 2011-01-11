@@ -1,15 +1,12 @@
 package Encodings;
 
 import java.io.IOException;
-import java.math.BigInteger;
 import java.security.KeyFactory;
 import java.security.NoSuchAlgorithmException;
 import java.security.PublicKey;
 import java.security.spec.DSAPublicKeySpec;
 import java.security.spec.InvalidKeySpecException;
-import java.security.spec.RSAPublicKeySpec;
 
-import IO.Channel;
 import IO.InData;
 import IO.OutData;
 

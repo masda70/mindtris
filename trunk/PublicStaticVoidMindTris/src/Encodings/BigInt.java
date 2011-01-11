@@ -3,7 +3,6 @@ package Encodings;
 import java.io.IOException;
 import java.math.BigInteger;
 
-import IO.Channel;
 import IO.InData;
 import IO.OutData;
 

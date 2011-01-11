@@ -3,9 +3,7 @@ package Game;
 import java.io.IOException;
 import java.util.*;
 
-import Gui.Board;
 import Gui.MainWindow;
-import Util.*;
 
 public class Game {
 	////// STATIC //////
@@ -61,7 +59,7 @@ public class Game {
 			p.setRotation(m.pieceRotation);
 			p.addToBoard(_board, m.pieceX-p.offsetX(), m.pieceY+p.offsetY());
 
-			checkLines(m.pieceY);
+			checkLines(m.pieceY+5);
 		}
 	}
 	

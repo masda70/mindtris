@@ -2,7 +2,6 @@ package Encodings;
 
 import java.io.IOException;
 import java.io.Serializable;
-import java.math.BigInteger;
 import java.security.KeyFactory;
 import java.security.NoSuchAlgorithmException;
 import java.security.PublicKey;

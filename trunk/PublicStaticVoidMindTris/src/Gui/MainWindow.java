@@ -540,24 +540,9 @@ public class MainWindow extends JFrame {
 	}
 
 	public void gameOver() {
-		// TODO Auto-generated method stub
-		class GameOver extends JLabel {
-
-			private static final long serialVersionUID = 1L;
-
-			public void paint ( Graphics g ) {
-				super.paint(g);
-				System.out.println("paint");
-				g.setColor(Color.WHITE);
-	              setFont(new Font("arial, helvetica",Font.BOLD, 10));
-				g.drawString("Game Over", 50, 50);
-			}
-		}
-
-		JComponent lbl = new GameOver();
-		lbl.setBounds(40, 40, 200, 400);
-		_center.add(lbl);
-		_center.repaint();
+		_board.drawGameOver();
+		
+		removeKeyListener(_keyListener);
 	}
 	
 	////// PRINT //////	

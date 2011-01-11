@@ -44,6 +44,7 @@ public class Client {
 	private ActiveGame			_game;
 	private IdMap<Game>			_peerGames;
 	private List<Hash>			_hashes;
+	private int					_roundNb;
 
 	
 	////// CONSTRUCTORS //////
@@ -439,6 +440,11 @@ public class Client {
 		public void handle(InData in, ChCltSrv ch) throws IOException {
 			int lobbyId = in.readInt();
 			
+			if( lobbyId != _lobby._id ) {
+				debug("update client with another lobby id : "+lobbyId+" instead of "+_lobby._id);
+				return;
+			}
+			
 			switch( in.readUnsignedByte() ) {
 			case 0x00:
 				Peer p = new Peer(in);
@@ -492,9 +498,9 @@ public class Client {
 			
 			int nbPieces = in.readUnsignedByte();
 			for( int i=0; i<nbPieces; i++ ) {
-				Piece p = new Piece(in.readUnsignedByte());
-				_game.addNewPiece(p, 0);
-				for( Game g : _peerGames.elements() ) g.addNewPiece(p, 0);
+				int code = in.readUnsignedByte();
+				_game.addNewPiece(new Piece(code), 0);
+				for( Game g : _peerGames.elements() ) g.addNewPiece(new Piece(code), 0);
 			}
 			
 			_w.loadGame();
@@ -524,7 +530,7 @@ public class Client {
 			
 			Thread timer = new Thread() {
 				public void run () {
-					int roundNb = 0;
+					_roundNb = 0;
 					
 					try {
 						while( true ) {
@@ -537,7 +543,7 @@ public class Client {
 									8+4+1+moves.size()*Move.encodingLen()+1+_hashes.size()*Hash.encodingLen(),
 									_signer);
 							msg._out.write(_lobby._sessionId);
-							msg._out.writeInt(roundNb);
+							msg._out.writeInt(_roundNb);
 							msg._out.writeByte(moves.size());
 							for( Move mv : moves ) msg._out.write(mv);
 							msg._out.writeByte(_hashes.size());
@@ -550,7 +556,7 @@ public class Client {
 								}
 							}
 							
-							roundNb++;
+							_roundNb++;
 						}
 					} catch ( InterruptedException e ) {
 						e.printStackTrace();
@@ -707,9 +713,18 @@ public class Client {
 			int roundNb = in.readInt();
 			int movesNb = in.readUnsignedByte();
 			List<Move> moves = new LinkedList<Move>();
-			for( int i=0; i<movesNb; i++ ) moves.add(new Move(in));
+			for( int i=0; i<movesNb; i++ ) {
+				Move m = new Move(in);
+				debug("adv nb:"+m.pieceNb+" x:"+m.pieceX+" y:"+m.pieceY+" r:"+m.pieceRotation);
+				moves.add(m);
+			}
 			
 			int hashesNb = in.readUnsignedByte();
+			
+			if( roundNb != _roundNb ) {
+				//debug("Wrong round nb : "+roundNb+" instead of "+_roundNb);
+			}
+			
 			List<Hash> hashes = new LinkedList<Hash>();
 			for( int i=0; i<hashesNb; i++ ) hashes.add(new Hash(in));
 			

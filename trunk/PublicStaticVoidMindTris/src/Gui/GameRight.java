@@ -8,6 +8,7 @@ import java.util.Map;
 import javax.swing.BoxLayout;
 import javax.swing.JComponent;
 import javax.swing.JPanel;
+import javax.swing.JScrollPane;
 
 import Game.Game;
 import Util.IdMap;
@@ -53,7 +54,7 @@ public class GameRight extends JPanel {
 		
 		JPanel chat = new JPanel(new BorderLayout());
 		chat.setBackground(Color.BLACK);
-		chat.add(textBox, BorderLayout.CENTER);
+		chat.add(new JScrollPane(textBox), BorderLayout.CENTER);
 		chat.add(chatBar, BorderLayout.SOUTH);
 		
 		add(chat);

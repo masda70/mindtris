@@ -190,6 +190,8 @@ public class Client {
 		
 		for( Entry<Integer, Peer> o : _lobby._peers ) {
 			Peer p = o.getValue();
+			System.out.println("PEER "+p._id+" : "+p._displayName.v());
+			
 			if( p._id != _me._id ) {
 				p.getCh().send(m);
 			}
@@ -282,7 +284,7 @@ public class Client {
 		_w.printNewPeer(p);
 	}
 	
-	private void debug ( String m ) {
+	public static void debug ( String m ) {
 		if( DEBUG ) System.out.println(m);
 	}
 	
@@ -380,7 +382,7 @@ public class Client {
 				
 
 				_lobby = new Lobby(lobbyId, _lobby._name, sessionId, _lobby._nbPlayers, _lobby._maxPlayers, _lobby._pwd, _me, myPeerId); 
-				_lobby._myPeerId = myPeerId;
+				_me._id = _lobby._myPeerId = myPeerId;
 				
 				lobbyJoined(true);
 				break;
@@ -405,6 +407,7 @@ public class Client {
 			switch( in.readUnsignedByte() ) {
 			case 0x00:
 				_lobby = new Lobby(lobbyId, in);
+				_me._id = _lobby._myPeerId;
 				
 				for( Entry<Integer, Peer> o : _lobby._peers ) {
 					Peer p = o.getValue();
@@ -715,7 +718,6 @@ public class Client {
 			List<Move> moves = new LinkedList<Move>();
 			for( int i=0; i<movesNb; i++ ) {
 				Move m = new Move(in);
-				debug("adv nb:"+m.pieceNb+" x:"+m.pieceX+" y:"+m.pieceY+" r:"+m.pieceRotation);
 				moves.add(m);
 			}
 			

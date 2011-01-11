@@ -367,7 +367,7 @@ public class Server extends Thread {
 			}
 
 			Lobby l = _lobbies.get(lobbyCreatedId);
-			Game g = new Game();
+			//Game g = new Game();
 			Piece[] pieces = Game.generateNewPieces();
 			_piecesOffset = pieces.length-1;
 			

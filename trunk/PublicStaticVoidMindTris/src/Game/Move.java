@@ -8,11 +8,10 @@ import IO.OutData;
 
 public class Move implements Encodable {
 	////// FIELDS //////
-	public final int time, pieceNb, pieceRotation, pieceX, pieceY;
+	public final int pieceNb, pieceRotation, pieceX, pieceY;
 
 	////// CONSTRUCTORS //////
-	public Move ( int t, int nb, int rot, int x, int y ) {
-		time = t;
+	public Move ( int nb, int rot, int x, int y ) {
 		pieceNb = nb;
 		pieceRotation = rot;
 		pieceX = x;
@@ -20,7 +19,6 @@ public class Move implements Encodable {
 	}
 	
 	public Move ( InData in ) throws IOException {
-		time = in.readInt();
 		pieceNb = in.readInt();
 		pieceRotation = in.readUnsignedByte();
 		pieceX = in.readUnsignedByte();
@@ -29,7 +27,6 @@ public class Move implements Encodable {
 
 	////// ENCODINGS //////
 	public void toBytes(OutData out) throws IOException {
-		out.writeInt(time);
 		out.writeInt(pieceNb);
 		out.writeByte(pieceRotation);
 		out.writeByte(pieceX);
@@ -42,7 +39,7 @@ public class Move implements Encodable {
 	
 	////// STATIC //////
 	public static int encodingLen() {
-		return 4+4+1+1+1;
+		return 4+1+1+1;
 	}
 
 }

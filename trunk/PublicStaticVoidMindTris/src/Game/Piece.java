@@ -197,9 +197,14 @@ public class Piece implements Encodable {
 		boolean[][] piece = PIECES[_code][_rotation];
 		int len = piece.length;
 		
-		for( int i=0; i<len; i++ )
-			for( int j=0; j<len; j++ )
-				if( piece[i][j] ) board[x+i][y-j] = _code;
+		try {
+			for( int i=0; i<len; i++ )
+				for( int j=0; j<len; j++ )
+					if( piece[i][j] ) board[x+i][y-j] = _code;
+		} catch ( IndexOutOfBoundsException e ) {
+			System.out.println("DŽbordement : p:"+_code+" x:"+x+" y:"+y);
+			throw e;
+		}
 	
 	}
 
@@ -223,6 +228,10 @@ public class Piece implements Encodable {
 		}
 		
 		return null;
+	}
+	
+	public String toString () {
+		return Integer.toString(_code);
 	}
 	
 	////// STATIC //////

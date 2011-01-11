@@ -139,8 +139,7 @@ public class ActiveGame extends Game {
 		checkLines(y);
 		
 		// TODO check
-		int time = (int) System.currentTimeMillis();
-		_moves.add(new Move(time, _pieceNb, _currentPiece.getRotation(),
+		_moves.add(new Move(_pieceNb, _currentPiece.getRotation(),
 							x+_currentPiece.offsetX(), y-_currentPiece.offsetY()));
 
 		nextFall();

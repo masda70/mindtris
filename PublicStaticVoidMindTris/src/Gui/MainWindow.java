@@ -38,6 +38,7 @@ public class MainWindow extends JFrame {
 	private TxtField	_chatBar;
 	private Board		_board;
 	private KeyListener _keyListener;
+	private boolean		_inGame;
 	
 	////// CONSTRUCTORS //////
 	public MainWindow ( Client c ) {
@@ -422,6 +423,8 @@ public class MainWindow extends JFrame {
 	}
 
 	public void printLobby ( Lobby l, final UString displayName, boolean isCreator ) {
+		_inGame = false;
+		
 		Btn quit = new Btn("Quit");
 		quit.addBtnListener(new BtnListener() {
 			public void action() {
@@ -468,7 +471,7 @@ public class MainWindow extends JFrame {
 					_c.sendChatMsg(_chatBar.getUTxt());
 					((TxtArea) _text).append(displayName.v() + ": " + _chatBar.getText() + "\n");
 					_chatBar.setText("");
-					requestFocusInWindow();
+					if( _inGame ) requestFocusInWindow();
 				} catch ( IOException e ) {
 					printError(e.getMessage());
 				}
@@ -499,7 +502,7 @@ public class MainWindow extends JFrame {
 		_center.setLayout(new BorderLayout());
 
 		_center.add(connected, BorderLayout.NORTH);
-		_center.add(_text, BorderLayout.CENTER);
+		_center.add(new JScrollPane(_text), BorderLayout.CENTER);
 		_center.add(_chatBar, BorderLayout.SOUTH);
 		
 		if( isCreator ) start.requestFocusInWindow();
@@ -533,6 +536,7 @@ public class MainWindow extends JFrame {
 	}
 	
 	public void beginGame () {
+		_inGame = true;
 		addKeyListener(_keyListener);
 
 		requestFocusInWindow();
@@ -540,6 +544,7 @@ public class MainWindow extends JFrame {
 	}
 
 	public void gameOver() {
+		_inGame = false;
 		_board.drawGameOver();
 		
 		removeKeyListener(_keyListener);

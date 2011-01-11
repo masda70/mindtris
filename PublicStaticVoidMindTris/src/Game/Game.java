@@ -57,6 +57,7 @@ public class Game {
 		for( Move m : moves ) {
 			Piece p = getNextPiece();
 			p.setRotation(m.pieceRotation);
+			System.out.println("adv nb:"+m.pieceNb+" ("+p+") x:"+m.pieceX+" y:"+m.pieceY+" r:"+m.pieceRotation);
 			p.addToBoard(_board, m.pieceX-p.offsetX(), m.pieceY+p.offsetY());
 
 			checkLines(m.pieceY+5);

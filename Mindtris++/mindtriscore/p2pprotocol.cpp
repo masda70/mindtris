@@ -1,175 +1,204 @@
 
 #include "includes.h"
 #include "util.h"
+#include "bytearray.h"
+#include "bytebuffer.h"
+#include "commprotocol.h"
 #include "p2pprotocol.h"
+
+const ByteArray & DGMTP2PProtocol::GetProtocolIdentifier() const{
+	static ByteArray s_protocolidentifier = ByteArray(DGMTP2P_PROTOCOLIDENTIFIER);
+	return s_protocolidentifier;
+};
+
+const bool DGMTP2PProtocol::IsBigEndian() const{
+	static bool s_isbigendian = true;
+	return s_isbigendian;
+}
+
+DGMTP2PProtocol::DGMTP2PProtocol(): m_parser(IsBigEndian()){}
 
 ///////////////////////
 // SEND FUNCTIONS    //
 ///////////////////////
 
 
-BYTEARRAY DGMTP2PProtocol::SEND_KEEPALIVE()
-{
-	BYTEARRAY packet;
-	AppendHeader( packet );			        	// DGMT header constant
-
-	AssignLength( packet );
-	return packet;
+ByteArray DGMTP2PProtocol::SEND_KEEPALIVE(){
+	return ByteArray();
 }
 
-BYTEARRAY DGMTP2PProtocol::SEND_CHATSEND(string signature, string message)
+ByteArray DGMTP2PProtocol::SEND_CHATSEND(uint64_t sessionid,string message, const unique_ptr <CryptoPP::DSA::Signer> & signer)
 {
-	BYTEARRAY packet;
-	AppendHeader( packet );			        	// DGMT header constant
+	MessageBuilder builder(IsBigEndian());
 
-	packet.push_back( DGMTP2P_CHATSEND);			// DGMTP2P_CHATSEND
-	
-	UTIL_AppendByteArray(packet, (uint16_t) signature.length(), m_isBigEndian);
-	UTIL_AppendByteArray(packet, signature, false);
+	builder.append_BYTE((byte_t) TYPE_CHATSEND);			// DGMTP2P_CHATSEND
 
-	UTIL_AppendByteArray(packet, (uint16_t) message.length(), m_isBigEndian);
-	UTIL_AppendByteArray(packet, message, false);
+	builder.MarkSignatureStart();
+	builder.append_INTEGER64(sessionid);
+	builder.append_STRING16(message);
+	builder.append_DSASignature(m_rng,*signer);
 
-	AssignLength( packet );
-	return packet;
+	return builder.GetResult();
 }
 
-BYTEARRAY DGMTP2PProtocol::SEND_HELLOFROMPEER(uint8_t clientid, uint32_t lobbyid)
-{
-	BYTEARRAY packet;
-	AppendHeader( packet );			        	// DGMT header constant
-
-	packet.push_back( DGMTP2P_HELLOFROMPEER );			// DGMTP2P_HELLOFROMPEER
+ByteArray DGMTP2PProtocol::SEND_CONNECTIONREQUEST( uint32_t lobbyid, uint8_t initiating_peerid, uint8_t listening_peerid, uint64_t initiating_challenge){
+	MessageBuilder builder(IsBigEndian());
 	
-	UTIL_AppendByteArray(packet, (uint8_t) clientid, m_isBigEndian);
-	UTIL_AppendByteArray(packet, (uint32_t) lobbyid, m_isBigEndian);
+	builder.append_BYTE((byte_t) TYPE_CONNECTIONREQUEST);			
+	
+	builder.append_INTEGER32(lobbyid);
+	builder.append_INTEGER8(initiating_peerid);
+	builder.append_INTEGER8(listening_peerid);
+	builder.append_INTEGER64(initiating_challenge);
 
-	AssignLength( packet );
-	return packet;
+	return builder.GetResult();
+}
+
+ByteArray DGMTP2PProtocol::SEND_CONNECTIONACCEPTED( uint32_t lobbyid, uint8_t initiating_peerid, uint8_t listening_peerid, uint64_t initiating_challenge,uint64_t listening_challenge, const unique_ptr <CryptoPP::DSA::Signer> & signer){
+
+	MessageBuilder builder(IsBigEndian());
+	
+	builder.append_BYTE((byte_t) TYPE_CONNECTIONACCEPTED);			
+	builder.MarkSignatureStart();
+	builder.append_INTEGER32(lobbyid);
+	builder.append_INTEGER8(initiating_peerid);
+	builder.append_INTEGER8(listening_peerid);
+	builder.append_INTEGER64(initiating_challenge);
+	builder.append_INTEGER64(listening_challenge);
+	builder.append_DSASignature(m_rng,*signer);
+	
+
+	return builder.GetResult();
+}
+ByteArray DGMTP2PProtocol::SEND_CONNECTIONACKNOWLEDGED( uint32_t lobbyid, uint8_t initiating_peerid, uint8_t listening_peerid, uint64_t initiating_challenge,uint64_t listening_challenge,  const unique_ptr <CryptoPP::DSA::Signer> & signer){
+	MessageBuilder builder(IsBigEndian());
+	
+	builder.append_BYTE((byte_t) TYPE_CONNECTIONACKNOWLEDGED);			
+	builder.MarkSignatureStart();
+	builder.append_INTEGER32(lobbyid);
+	builder.append_INTEGER8(initiating_peerid);
+	builder.append_INTEGER8(listening_peerid);
+	builder.append_INTEGER64(initiating_challenge);
+	builder.append_INTEGER64(listening_challenge);
+	builder.append_DSASignature(m_rng,*signer);
+
+	return builder.GetResult();
+}
+
+
+ByteArray DGMTP2PProtocol::SEND_ROUND(uint64_t sessionid, uint32_t round_number, vector<Move> moves, vector<RoundDataHash> hashes, const unique_ptr <CryptoPP::DSA::Signer> & signer){
+	MessageBuilder builder(IsBigEndian());
+
+	builder.append_BYTE((byte_t) TYPE_ROUND);		
+	builder.MarkSignatureStart();
+
+	builder.append_INTEGER64(sessionid);
+	builder.append_INTEGER32(round_number);
+	builder.append_INTEGER8(moves.size());
+	for(vector<Move>::iterator iter = moves.begin(); iter!=moves.end();iter++){
+		builder.append_INTEGER32(iter->GetPieceNumber());
+		builder.append_INTEGER8(iter->GetOrientation());
+		builder.append_INTEGER8(iter->GetPieceXOffset());
+		builder.append_INTEGER8(iter->GetPieceYOffset());
+	}
+
+	builder.append_INTEGER8(hashes.size());
+	for(vector<RoundDataHash>::iterator iter = hashes.begin(); iter!=hashes.end();iter++){
+		builder.append_INTEGER8(iter->GetPeerID());
+		builder.append_STRING8(iter->GetHash());
+	}
+	builder.append_DSASignature(m_rng,*signer);
+	return builder.GetResult();
 }
 
 ///////////////////////
 // RECEIVE FUNCTIONS //
 ///////////////////////
 	
-DGMTP2PProtocol::HelloFromPeer * DGMTP2PProtocol::RECEIVE_HELLOFROMPEER(BYTEARRAY data)
-{
-	int offset = 0;
-	int length;
-	int datasize = data.size( );
 
-		length = 1;
-		if(!( datasize >= length + offset)) return NULL;
-		uint8_t peerid = UTIL_ByteArrayToUInt8( data, m_isBigEndian, offset );
-		offset+= length;
+DGMTP2PProtocol::RoundData DGMTP2PProtocol::RECEIVE_ROUND( const ByteArray & message, size_t & offset,const unique_ptr<CryptoPP::DSA::Verifier> & verifier){
+	size_t begin_signature = offset;
 
-		length = 4;
-		if(!( datasize >= length + offset)) return NULL;
-		uint32_t lobbyid= UTIL_ByteArrayToUInt32( data, m_isBigEndian, offset );
-		offset+= length;
-		
-		return new HelloFromPeer(peerid,lobbyid);
-}
-DGMTP2PProtocol::ChatSend * DGMTP2PProtocol::RECEIVE_CHATSEND(BYTEARRAY data)
-{
+	uint64_t sessionid= m_parser.parse_INTEGER64(message,offset);
+	uint32_t round_number= m_parser.parse_INTEGER32(message,offset);
 
-	int offset = 0;
-	int length;
-	int datasize = data.size( );
+	uint8_t move_size= m_parser.parse_INTEGER8(message,offset);
 
-		length = 2;
-		if(!( datasize >= length + offset)) return NULL;
-		uint16_t signature_length= UTIL_ByteArrayToUInt16( data, m_isBigEndian, offset );
-		offset+= length;
+	vector<Move> moves;
+	moves.reserve(move_size);
 
-		length =  signature_length;
-		if(!(datasize >= length + offset)) return NULL;
-		string signature = string( data.begin( ) + offset, data.begin( ) + offset + length );
-		offset+= length;
-
-		length = 2;
-		if(!( datasize >= length + offset)) return NULL;
-		uint16_t message_length= UTIL_ByteArrayToUInt16( data, m_isBigEndian, offset );
-		offset+= length;
-
-		length =  message_length;
-		if(!(datasize >= length + offset)) return NULL;
-		string message = string( data.begin( ) + offset, data.begin( ) + offset + length );
-		offset+= length;
-
-		return new ChatSend(signature,message);
-}
-
-
-/////////////////////
-// OTHER FUNCTIONS //
-/////////////////////
-
-bool DGMTP2PProtocol :: ExtractPacket( BYTEARRAY Bytes, Packet ** packet)
-{
-	if (Bytes[0] == DGMTP2P_HEADER_CONSTANT1 && Bytes[1] == DGMTP2P_HEADER_CONSTANT2 && Bytes[2] == DGMTP2P_HEADER_CONSTANT3 && Bytes[3] == DGMTP2P_HEADER_CONSTANT4 && Bytes[4] == DGMTP2P_HEADER_CONSTANT5 && Bytes[5] == DGMTP2P_HEADER_CONSTANT6 && Bytes[6] == DGMTP2P_HEADER_CONSTANT7){
-		uint16_t Length  = UTIL_ByteArrayToUInt16( Bytes, m_isBigEndian, 7 );
-		if(Length >= HEADERLENGTH)
-		{
-			if(Length <= Bytes.size()){
-				if(Length == HEADERLENGTH)
-				{
-					*packet = new Packet(Length, DGMTP2P_KEEPALIVE, BYTEARRAY( Bytes.begin( ) + HEADERLENGTH+1, Bytes.begin( ) + Length ));
-				}else{
-					*packet = new Packet(Length, Bytes[HEADERLENGTH], BYTEARRAY( Bytes.begin( ) + HEADERLENGTH+1, Bytes.begin( ) + Length ));
-				}
-				return true;
-			}
-			else
-			{
-				*packet = NULL;
-				return true;
-			}
-		}
-		else
-		{
-			return false;
-		}
-	}else{
-		return false;
-	}
-}
-
-
-bool DGMTP2PProtocol :: AppendHeader( BYTEARRAY &content)
-{
-	content.push_back(DGMTP2P_HEADER_CONSTANT1);
-	content.push_back(DGMTP2P_HEADER_CONSTANT2);
-	content.push_back(DGMTP2P_HEADER_CONSTANT3);
-	content.push_back(DGMTP2P_HEADER_CONSTANT4);
-	content.push_back(DGMTP2P_HEADER_CONSTANT5);
-	content.push_back(DGMTP2P_HEADER_CONSTANT6);
-	content.push_back(DGMTP2P_HEADER_CONSTANT7);
-	content.push_back( 0 );						// packet length will be assigned later
-	content.push_back( 0 );						// packet length will be assigned later
-	return true;
-}
-
-bool DGMTP2PProtocol :: AssignLength( BYTEARRAY &content )
-{
-	// insert the actual length of the content array into bytes 3 and 4 (indices 2 and 3)
-
-	BYTEARRAY LengthBytes;
-
-	if( content.size( ) >= HEADERLENGTH && content.size( ) <= 65535 )
+	for(int i = 1; i<=move_size ;i++)
 	{
-		LengthBytes = UTIL_CreateByteArray( (uint16_t)content.size( ), m_isBigEndian);
-		content[7] = LengthBytes[0];
-		content[8] = LengthBytes[1];
-		return true;
+		uint32_t piecenumber= m_parser.parse_INTEGER32(message,offset);
+		uint8_t orientation= m_parser.parse_INTEGER8(message,offset);
+		uint8_t x= m_parser.parse_INTEGER8(message,offset);
+		uint8_t y= m_parser.parse_INTEGER8(message,offset);
+		moves.push_back(move(Move(piecenumber,orientation,x,y)));
 	}
 
-	return false;
+	uint8_t hashes_size= m_parser.parse_INTEGER8(message,offset);
+
+	for(int i = 1; i<=hashes_size ;i++)
+	{
+		m_parser.parse_STRING(20,message,offset);
+	}
+
+	bool verified = m_parser.parse_DSASignature(message,offset,m_rng, *verifier,begin_signature);
+
+	return RoundData(sessionid,round_number,vector<Move>(), vector<RoundDataHash>(), verified);
 }
 
 
-DGMTP2PProtocol :: DGMTP2PProtocol(bool bigEndian)
+DGMTP2PProtocol::ConnectionRequest DGMTP2PProtocol::RECEIVE_CONNECTIONREQUEST( const ByteArray & message, size_t & offset){
+	size_t begin_signature = offset;
+
+	uint32_t lobbyid= m_parser.parse_INTEGER32(message,offset);
+	uint8_t initiating_peerid= m_parser.parse_INTEGER8(message,offset);
+	uint8_t listening_peerid= m_parser.parse_INTEGER8(message,offset);
+	uint64_t initiating_challenge= m_parser.parse_INTEGER64(message,offset);
+
+	return ConnectionRequest(lobbyid,initiating_peerid,listening_peerid,initiating_challenge);
+}
+
+DGMTP2PProtocol::ConnectionAcceptAck DGMTP2PProtocol::RECEIVE_CONNECTIONACCEPTED( const ByteArray & message, size_t & offset,const unique_ptr<CryptoPP::DSA::Verifier> & verifier){
+	size_t begin_signature = offset;
+
+	uint32_t lobbyid= m_parser.parse_INTEGER32(message,offset);
+	uint8_t initiating_peerid= m_parser.parse_INTEGER8(message,offset);
+	uint8_t listening_peerid= m_parser.parse_INTEGER8(message,offset);
+	uint64_t initiating_challenge= m_parser.parse_INTEGER64(message,offset);
+	uint64_t listening_challenge= m_parser.parse_INTEGER64(message,offset);
+	bool verified = m_parser.parse_DSASignature(message,offset,m_rng, *verifier,begin_signature);
+    return DGMTP2PProtocol::ConnectionAcceptAck(verified,lobbyid,initiating_peerid,listening_peerid,initiating_challenge,listening_challenge);
+}
+
+DGMTP2PProtocol::ConnectionAcceptAck DGMTP2PProtocol::RECEIVE_CONNECTIONACKNOWLEDGED(const ByteArray & message, size_t & offset,const unique_ptr<CryptoPP::DSA::Verifier> & verifier){
+	size_t begin_signature = offset;
+
+	uint32_t lobbyid= m_parser.parse_INTEGER32(message,offset);
+	uint8_t initiating_peerid= m_parser.parse_INTEGER8(message,offset);
+	uint8_t listening_peerid= m_parser.parse_INTEGER8(message,offset);
+	uint64_t initiating_challenge= m_parser.parse_INTEGER64(message,offset);
+	uint64_t listening_challenge= m_parser.parse_INTEGER64(message,offset);
+
+	bool verified = m_parser.parse_DSASignature(message,offset,m_rng, *verifier,begin_signature);
+
+    return DGMTP2PProtocol::ConnectionAcceptAck(verified,lobbyid,initiating_peerid,listening_peerid,initiating_challenge,listening_challenge);
+}
+
+
+
+DGMTP2PProtocol::ChatSend DGMTP2PProtocol::RECEIVE_CHATSEND(const ByteArray & message, size_t & offset,const unique_ptr<CryptoPP::DSA::Verifier> & verifier)
 {
-	m_isBigEndian = true;
+	size_t begin_signature = offset;
+	uint64_t sessionid = m_parser.parse_INTEGER64(message,offset);
+	string clientmessage = m_parser.parse_STRING16(message,offset);
+	bool verified = m_parser.parse_DSASignature(message,offset,m_rng, *verifier,begin_signature);
+	return ChatSend(verified, sessionid,clientmessage);
 }
+
+byte_t DGMTP2PProtocol::GetMessageType(const ByteArray &message, size_t & offset){
+	return m_parser.parse_BYTE(message,offset);
+}
+
 

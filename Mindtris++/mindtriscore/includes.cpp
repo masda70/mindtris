@@ -27,3 +27,9 @@ uint32_t GetTicks( )
 	return ticks;
 #endif
 }
+
+uint64_t GenerateRandomUINT64(CryptoPP::RandomNumberGenerator &rng){
+	byte_t output[8];
+	rng.GenerateBlock (output, 8); 
+	return ( ((uint64_t) output[0]) << 56 |((uint64_t) output[1]) << 48 | ((uint64_t) output[2]) << 40 | ((uint64_t) output[3]) <<  32 | ((uint64_t) output[4]) << 24 | ((uint64_t) output[5]) << 16 | ((uint64_t) output[6]) << 8| ((uint64_t) output[7]));
+}

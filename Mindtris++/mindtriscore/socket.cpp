@@ -1,6 +1,8 @@
 
 #include "includes.h"
 #include "util.h"
+#include "bytearray.h"
+#include "bytebuffer.h"
 #include "socket.h"
 
 #include <string.h>
@@ -39,19 +41,19 @@ CSocket :: ~CSocket( )
 		closesocket( m_Socket );
 }
 
-BYTEARRAY CSocket :: GetPort( )
+ByteArray CSocket :: GetPort( )
 {
-	return UTIL_CreateByteArray( m_SIN.sin_port, false );
+	return ByteArray( m_SIN.sin_port, false );
 }
 
-BYTEARRAY CSocket :: GetIP( )
+ByteArray CSocket :: GetIP( )
 {
-	return UTIL_CreateByteArray( (uint32_t)m_SIN.sin_addr.s_addr, false );
+	return ByteArray( (uint32_t)htonl(m_SIN.sin_addr.s_addr), true);
 }
 
 uint32_t CSocket :: GetIPInt32()
 {
-	return (uint32_t)m_SIN.sin_addr.s_addr;
+	return (uint32_t)htonl(m_SIN.sin_addr.s_addr);
 }
 
 string CSocket :: GetIPString( )
@@ -155,21 +157,17 @@ void CTCPSocket :: Reset( )
 
 	Allocate( SOCK_STREAM );
 	m_Connected = false;
-	m_RecvBuffer.clear( );
-	m_SendBuffer.clear( );
+	m_RecvBuffer.skip(m_RecvBuffer.size());
+	m_SendBuffer.skip(m_RecvBuffer.size());
 
 }
 
-void CTCPSocket :: PutBytes( BYTEARRAY bytes )
-{
-	m_SendBuffer.append(string(bytes.begin(),bytes.end()));
-}
 
 void CTCPSocket :: DoRecv( )
 {
 
-		char buffer[1024];
-		int c = recv( m_Socket, buffer, 1024, 0 );
+		byte_t buffer[1024];
+		int c = recv( m_Socket, (char*) buffer, 1024, 0 );
 
 		if( c == SOCKET_ERROR && GetLastError( ) != EWOULDBLOCK )
 		{
@@ -191,7 +189,7 @@ void CTCPSocket :: DoRecv( )
 		{
 			// success! add the received data to the buffer
 
-			m_RecvBuffer.append(buffer,c);
+			m_RecvBuffer.write(buffer,c);
 	
 		//	m_LastRecv = GetTime( );
 		}
@@ -210,8 +208,10 @@ void CTCPSocket :: DoRecv( fd_set *fd )
 
 void CTCPSocket :: DoSend( )
 {
-
-	int s = send( m_Socket, m_SendBuffer.data(), (int) m_SendBuffer.size( ), MSG_NOSIGNAL );
+	size_t l = min(1024,m_SendBuffer.size());
+	byte_t buffer[1024];
+	m_SendBuffer.peek(buffer, 1024);
+	int s = send( m_Socket,(char*)  buffer, l, MSG_NOSIGNAL );
 
 	if( s == SOCKET_ERROR && GetLastError( ) != EWOULDBLOCK )
 	{
@@ -224,15 +224,18 @@ void CTCPSocket :: DoSend( )
 	}
 	else if( s > 0 )
 	{
-		// success! only some of the data may have been sent, emove it from the buffer
-		m_SendBuffer = m_SendBuffer.substr(s);
+		// success! only some of the data may have been sent, remove it from the buffer
+		m_SendBuffer.skip(s);
 		//m_LastSend = GetTime( );
 	}
 }
 
+ByteBuffer & CTCPSocket::GetRecvBuffer( )		{ return m_RecvBuffer; }
+ByteBuffer & CTCPSocket::GetSendBuffer( )		{ return m_SendBuffer; }
+
 void CTCPSocket :: DoSend( fd_set *send_fd )
 {
-	if( m_Socket == INVALID_SOCKET || m_HasError || !m_Connected || m_SendBuffer.empty( ) )
+	if( m_Socket == INVALID_SOCKET || m_HasError || !m_Connected || (m_SendBuffer.size()==0) )
 		return;
 
 	if( FD_ISSET( m_Socket, send_fd ) )
@@ -315,7 +318,7 @@ void CTCPClient :: Connect( string localaddress, uint32_t HostAddress, uint16_t 
 	// connect
 
 	m_SIN.sin_family = AF_INET;
-	m_SIN.sin_addr.s_addr = HostAddress;
+	m_SIN.sin_addr.s_addr = ntohl(HostAddress);
 	m_SIN.sin_port = htons( port );
 
 	if( connect( m_Socket, (struct sockaddr *)&m_SIN, sizeof( m_SIN ) ) == SOCKET_ERROR )
@@ -355,7 +358,50 @@ void CTCPClient :: Connect( string localaddress, string address, uint16_t port )
 
 	memcpy( &HostAddress, HostInfo->h_addr, HostInfo->h_length );
 
-	Connect(localaddress, HostAddress, port);
+	if( m_Socket == INVALID_SOCKET || m_HasError || m_Connecting || m_Connected )
+		return;
+
+	if( !localaddress.empty( ) )
+	{
+		struct sockaddr_in LocalSIN;
+		memset( &LocalSIN, 0, sizeof( LocalSIN ) );
+		LocalSIN.sin_family = AF_INET;
+
+		if( ( LocalSIN.sin_addr.s_addr = inet_addr( localaddress.c_str( ) ) ) == INADDR_NONE )
+			LocalSIN.sin_addr.s_addr = INADDR_ANY;
+
+		LocalSIN.sin_port = htons( 0 );
+
+		if( bind( m_Socket, (struct sockaddr *)&LocalSIN, sizeof( LocalSIN ) ) == SOCKET_ERROR )
+		{
+			m_HasError = true;
+			m_Error = GetLastError( );
+			(*m_CONSOLEPrint)( "[TCPCLIENT] error (bind) - " + GetErrorString( ) );
+			return;
+		}
+	}
+
+	// connect
+
+	m_SIN.sin_family = AF_INET;
+	m_SIN.sin_addr.s_addr = HostAddress;
+	m_SIN.sin_port = htons( port );
+
+	if( connect( m_Socket, (struct sockaddr *)&m_SIN, sizeof( m_SIN ) ) == SOCKET_ERROR )
+	{
+		if( GetLastError( ) != EINPROGRESS && GetLastError( ) != EWOULDBLOCK )
+		{
+			// connect error
+
+			m_HasError = true;
+			m_Error = GetLastError( );
+			(*m_CONSOLEPrint)( "[TCPCLIENT] error (connect) - " + GetErrorString( ) );
+			return;
+		}
+	}
+
+	m_Connecting = true;
+
 }
 
 bool CTCPClient :: CheckConnect( )
@@ -456,7 +502,7 @@ bool CTCPServer :: Listen( string address, uint16_t port )
 	return true;
 }
 
-CTCPSocket *CTCPServer :: Accept( )
+unique_ptr<CTCPSocket> CTCPServer :: Accept( )
 {
 	struct sockaddr_in Addr;
 	int AddrLen = sizeof( Addr );
@@ -474,15 +520,15 @@ CTCPSocket *CTCPServer :: Accept( )
 	{
 		// success! return the new socket
 
-		return new CTCPSocket( m_CONSOLEPrint,NewSocket, Addr );
+		return unique_ptr<CTCPSocket>(new CTCPSocket( m_CONSOLEPrint,NewSocket, Addr ));
 	}
-	return NULL;
+	return unique_ptr<CTCPSocket>(nullptr);
 }
 
-CTCPSocket *CTCPServer :: Accept( fd_set *fd )
+unique_ptr<CTCPSocket> CTCPServer :: Accept( fd_set *fd )
 {
 	if( m_Socket == INVALID_SOCKET || m_HasError )
-		return NULL;
+		return unique_ptr<CTCPSocket>(nullptr);
 
 	if( FD_ISSET( m_Socket, fd ) )
 	{
@@ -490,6 +536,6 @@ CTCPSocket *CTCPServer :: Accept( fd_set *fd )
 		return Accept();
 	}
 
-	return NULL;
+	return unique_ptr<CTCPSocket>(nullptr);
 }
 

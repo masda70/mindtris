@@ -1,306 +1,9 @@
 
 #include "includes.h"
 #include "util.h"
+#include "bytearray.h"
 #include <sys/stat.h>
 
-
-BYTEARRAY UTIL_CreateByteArray( string s )
-{
-	return BYTEARRAY( s.begin(), s.end());
-}
-
-BYTEARRAY UTIL_CreateByteArray( unsigned char *a, int size )
-{
-	if( size < 1 )
-		return BYTEARRAY( );
-
-	return BYTEARRAY( a, a + size );
-}
-
-BYTEARRAY UTIL_CreateByteArray( unsigned char c )
-{
-	BYTEARRAY result;
-	result.push_back( c );
-	return result;
-}
-
-BYTEARRAY UTIL_CreateByteArray( uint16_t i, bool reverse )
-{
-	BYTEARRAY result;
-	result.push_back( (unsigned char)i );
-	result.push_back( (unsigned char)( i >> 8 ) );
-
-	if( reverse )
-		return BYTEARRAY( result.rbegin( ), result.rend( ) );
-	else
-		return result;
-}
-
-BYTEARRAY UTIL_CreateByteArray( uint32_t i, bool reverse )
-{
-	BYTEARRAY result;
-	result.push_back( (unsigned char)i );
-	result.push_back( (unsigned char)( i >> 8 ) );
-	result.push_back( (unsigned char)( i >> 16 ) );
-	result.push_back( (unsigned char)( i >> 24 ) );
-
-	if( reverse )
-		return BYTEARRAY( result.rbegin( ), result.rend( ) );
-	else
-		return result;
-}
-
-BYTEARRAY UTIL_CreateByteArray( uint64_t i, bool reverse )
-{
-	BYTEARRAY result;
-	result.push_back( (unsigned char)i );
-	result.push_back( (unsigned char)( i >> 8 ) );
-	result.push_back( (unsigned char)( i >> 16 ) );
-	result.push_back( (unsigned char)( i >> 24 ) );
-	result.push_back( (unsigned char)( i >> 32 ) );
-	result.push_back( (unsigned char)( i >> 40 ) );
-	result.push_back( (unsigned char)( i >> 48 ) );
-	result.push_back( (unsigned char)( i >> 56 ) );
-
-	if( reverse )
-		return BYTEARRAY( result.rbegin( ), result.rend( ) );
-	else
-		return result;
-}
-
-
-uint8_t UTIL_ByteArrayToUInt8( BYTEARRAY b, bool reverse, unsigned int start )
-{
-	if( b.size( ) < start + 1 )
-		return 0;
-
-	BYTEARRAY temp = BYTEARRAY( b.begin( ) + start, b.begin( ) + start + 1 );
-
-	return (uint8_t)( temp[0] );
-}
-
-uint16_t UTIL_ByteArrayToUInt16( BYTEARRAY b, bool reverse, unsigned int start )
-{
-	if( b.size( ) < start + 2 )
-		return 0;
-
-	BYTEARRAY temp = BYTEARRAY( b.begin( ) + start, b.begin( ) + start + 2 );
-
-	if( reverse )
-		temp = BYTEARRAY( temp.rbegin( ), temp.rend( ) );
-
-	return (uint16_t)( temp[1] << 8 | temp[0] );
-}
-
-uint32_t UTIL_ByteArrayToUInt32( BYTEARRAY b, bool reverse, unsigned int start )
-{
-	if( b.size( ) < start + 4 )
-		return 0;
-
-	BYTEARRAY temp = BYTEARRAY( b.begin( ) + start, b.begin( ) + start + 4 );
-
-	if( reverse )
-		return (uint32_t)( temp[0] << 24 | temp[1] << 16 | temp[2] << 8 | temp[3] );
-	else
-		return (uint32_t)( temp[3] << 24 | temp[2] << 16 | temp[1] << 8 | temp[0] );
-}
-
-uint64_t UTIL_ByteArrayToUInt64( BYTEARRAY b, bool reverse, unsigned int start )
-{
-	if( b.size( ) < start + 8 )
-		return 0;
-
-	BYTEARRAY temp = BYTEARRAY( b.begin( ) + start, b.begin( ) + start + 8 );
-
-	if( reverse )
-		return (uint64_t)( ((uint64_t) temp[0]) << 56 | ((uint64_t) temp[1]) << 48 | ((uint64_t) temp[2]) << 40 | ((uint64_t) temp[3]) << 32 | ((uint64_t) temp[4]) << 24 | ((uint64_t) temp[5]) << 16 | ((uint64_t) temp[6]) << 8 | ((uint64_t) temp[7]) );
-	else
-		return (uint64_t)( ((uint64_t) temp[7]) << 56 | ((uint64_t) temp[6]) << 48 | ((uint64_t) temp[5]) << 40 | ((uint64_t) temp[4]) << 32 | ((uint64_t) temp[3]) << 24 | ((uint64_t) temp[2]) << 16 | ((uint64_t) temp[1]) << 8 | ((uint64_t) temp[0]) );
-}
-
-string UTIL_ByteArrayToDecString( BYTEARRAY b )
-{
-	if( b.empty( ) )
-		return string( );
-
-	string result = UTIL_ToString( b[0] );
-
-	for( BYTEARRAY :: iterator i = b.begin( ) + 1; i != b.end( ); i++ )
-		result += " " + UTIL_ToString( *i );
-
-	return result;
-}
-
-string UTIL_ByteArrayToHexString( BYTEARRAY b )
-{
-	if( b.empty( ) )
-		return string( );
-
-	string result = UTIL_ToHexString( b[0] );
-
-	for( BYTEARRAY :: iterator i = b.begin( ) + 1; i != b.end( ); i++ )
-	{
-		if( *i < 16 )
-			result += " 0" + UTIL_ToHexString( *i );
-		else
-			result += " " + UTIL_ToHexString( *i );
-	}
-
-	return result;
-}
-
-void UTIL_AppendByteArray( BYTEARRAY &b, BYTEARRAY append )
-{
-	b.insert( b.end( ), append.begin( ), append.end( ) );
-}
-
-void UTIL_AppendByteArrayFast( BYTEARRAY &b, BYTEARRAY &append )
-{
-	b.insert( b.end( ), append.begin( ), append.end( ) );
-}
-
-void UTIL_AppendByteArray( BYTEARRAY &b, unsigned char *a, int size )
-{
-	UTIL_AppendByteArray( b, UTIL_CreateByteArray( a, size ) );
-}
-
-void UTIL_AppendByteArray( BYTEARRAY &b, string append, int size, bool terminator )
-{
-	// append the first size characters from append
-
-	b.insert( b.end( ), append.begin( ), append.begin() + size );
-
-	if( terminator )
-		b.push_back( 0 );
-}
-
-void UTIL_AppendByteArray( BYTEARRAY &b, string append, bool terminator )
-{
-	// append the string plus a null terminator
-
-	b.insert( b.end( ), append.begin( ), append.end( ) );
-
-	if( terminator )
-		b.push_back( 0 );
-}
-
-void UTIL_AppendByteArrayFast( BYTEARRAY &b, string &append, bool terminator )
-{
-	// append the string plus a null terminator
-
-	b.insert( b.end( ), append.begin( ), append.end( ) );
-
-	if( terminator )
-		b.push_back( 0 );
-}
-
-void UTIL_AppendByteArray( BYTEARRAY &b, uint8_t i, bool reverse )
-{
-	b.push_back( i );
-}
-
-void UTIL_AppendByteArray( BYTEARRAY &b, uint16_t i, bool reverse )
-{
-	UTIL_AppendByteArray( b, UTIL_CreateByteArray( i, reverse ) );
-}
-
-void UTIL_AppendByteArray( BYTEARRAY &b, uint32_t i, bool reverse )
-{
-	UTIL_AppendByteArray( b, UTIL_CreateByteArray( i, reverse ) );
-}
-
-void UTIL_AppendByteArray( BYTEARRAY &b, uint64_t i, bool reverse )
-{
-	UTIL_AppendByteArray( b, UTIL_CreateByteArray( i, reverse ) );
-}
-
-BYTEARRAY UTIL_ExtractCString( BYTEARRAY &b, unsigned int start )
-{
-	// start searching the byte array at position 'start' for the first null value
-	// if found, return the subarray from 'start' to the null value but not including the null value
-
-	if( start < b.size( ) )
-	{
-		for( unsigned int i = start; i < b.size( ); i++ )
-		{
-			if( b[i] == 0 )
-				return BYTEARRAY( b.begin( ) + start, b.begin( ) + i );
-		}
-
-		// no null value found, return the rest of the byte array
-
-		return BYTEARRAY( b.begin( ) + start, b.end( ) );
-	}
-
-	return BYTEARRAY( );
-}
-
-unsigned char UTIL_ExtractHex( BYTEARRAY &b, unsigned int start, bool reverse )
-{
-	// consider the byte array to contain a 2 character ASCII encoded hex value at b[start] and b[start + 1] e.g. "FF"
-	// extract it as a single decoded byte
-
-	if( start + 1 < b.size( ) )
-	{
-		unsigned int c;
-		string temp = string( b.begin( ) + start, b.begin( ) + start + 2 );
-
-		if( reverse )
-			temp = string( temp.rend( ), temp.rbegin( ) );
-
-		stringstream SS;
-		SS << temp;
-		SS >> hex >> c;
-		return c;
-	}
-
-	return 0;
-}
-
-BYTEARRAY UTIL_ExtractNumbers( string s, unsigned int count )
-{
-	// consider the string to contain a bytearray in dec-text form, e.g. "52 99 128 1"
-
-	BYTEARRAY result;
-	unsigned int c;
-	stringstream SS;
-	SS << s;
-
-	for( unsigned int i = 0; i < count; i++ )
-	{
-		if( SS.eof( ) )
-			break;
-
-		SS >> c;
-
-		// todotodo: if c > 255 handle the error instead of truncating
-
-		result.push_back( (unsigned char)c );
-	}
-
-	return result;
-}
-
-BYTEARRAY UTIL_ExtractHexNumbers( string s )
-{
-	// consider the string to contain a bytearray in hex-text form, e.g. "4e 17 b7 e6"
-
-	BYTEARRAY result;
-	unsigned int c;
-	stringstream SS;
-	SS << s;
-
-	while( !SS.eof( ) )
-	{
-		SS >> hex >> c;
-
-		// todotodo: if c > 255 handle the error instead of truncating
-
-		result.push_back( (unsigned char)c );
-	}
-
-	return result;
-}
 
 string UTIL_ToString( unsigned long i )
 {
@@ -310,7 +13,6 @@ string UTIL_ToString( unsigned long i )
 	SS >> result;
 	return result;
 }
-
 string UTIL_ToString( unsigned short i )
 {
 	string result;
@@ -471,53 +173,8 @@ string UTIL_AddPathSeperator( string path )
 		return path + string( 1, Seperator );
 }
 
-BYTEARRAY UTIL_EncodeStatString( BYTEARRAY &data )
-{
-	unsigned char Mask = 1;
-	BYTEARRAY Result;
 
-	for( unsigned int i = 0; i < data.size( ); i++ )
-	{
-		if( ( data[i] % 2 ) == 0 )
-			Result.push_back( data[i] + 1 );
-		else
-		{
-			Result.push_back( data[i] );
-			Mask |= 1 << ( ( i % 7 ) + 1 );
-		}
-
-		if( i % 7 == 6 || i == data.size( ) - 1 )
-		{
-			Result.insert( Result.end( ) - 1 - ( i % 7 ), Mask );
-			Mask = 1;
-		}
-	}
-
-	return Result;
-}
-
-BYTEARRAY UTIL_DecodeStatString( BYTEARRAY &data )
-{
-	unsigned char Mask;
-	BYTEARRAY Result;
-
-	for( unsigned int i = 0; i < data.size( ); i++ )
-	{
-		if( ( i % 8 ) == 0 )
-			Mask = data[i];
-		else
-		{
-			if( ( Mask & ( 1 << ( i % 8 ) ) ) == 0 )
-				Result.push_back( data[i] - 1 );
-			else
-				Result.push_back( data[i] );
-		}
-	}
-
-	return Result;
-}
-
-bool UTIL_IsLanIP( BYTEARRAY ip )
+bool UTIL_IsLanIP( const ByteArray & ip )
 {
 	if( ip.size( ) != 4 )
 		return false;
@@ -547,12 +204,12 @@ bool UTIL_IsLanIP( BYTEARRAY ip )
 	return false;
 }
 
-bool UTIL_IsLocalIP( BYTEARRAY ip, vector<BYTEARRAY> &localIPs )
+bool UTIL_IsLocalIP( const ByteArray & ip, const vector<ByteArray> &localIPs )
 {
 	if( ip.size( ) != 4 )
 		return false;
 
-	for( vector<BYTEARRAY> :: iterator i = localIPs.begin( ); i != localIPs.end( ); i++ )
+	for( vector<ByteArray> :: const_iterator i = localIPs.begin( ); i != localIPs.end( ); i++ )
 	{
 		if( (*i).size( ) != 4 )
 			continue;

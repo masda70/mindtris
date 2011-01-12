@@ -1,9 +1,16 @@
+
 #include "mindtriscore/includes.h"
 #include "mindtriscore/util.h"
+#include "mindtriscore/bytearray.h"
+#include "mindtriscore/bytebuffer.h"
 #include "mindtriscore/socket.h"
 #include "mindtriscore/oalloc.h"
+#include "mindtriscore/commprotocol.h"
+#include "mindtriscore/packet.h"
+#include "mindtriscore/messagestreamer.h"
 #include "mindtriscore/serverprotocol.h"
 #include "mindtriscore/p2pprotocol.h"
+
 #include "lobby.h"
 #include "user.h"
 #include "database.h"
@@ -25,7 +32,7 @@ void DEBUG_Print( string message )
 	cout << message << endl;
 }
 
-void DEBUG_Print( BYTEARRAY b )
+void DEBUG_Print( const ByteArray & b )
 {
 	cout << "{ ";
 
@@ -37,32 +44,24 @@ void DEBUG_Print( BYTEARRAY b )
 
 void MindTrisServer :: DestroyLobby(Lobby * l)
 {
-	m_Lobbies->remove(l->GetLobbyID());
-	delete l;
+	if(l){ m_Lobbies.remove(l->GetLobbyID()); delete l;}
 }
 
-Lobby * MindTrisServer :: CreateLobby(User * creator, string lobbyname, int maxplayers, bool haspassword, string password)
+Lobby * MindTrisServer :: CreateLobby(User & creator, string lobbyname, int maxplayers, bool haspassword, string password)
 {
 	Lobby * l = new Lobby(creator, lobbyname, maxplayers, haspassword, password);
-	l->SetLobbyID(m_Lobbies->add(l));
-	l->SetSessionID( ((uint64_t) m_randPool.GenerateByte()) << 56 |((uint64_t) m_randPool.GenerateByte()) << 48 | ((uint64_t) m_randPool.GenerateByte()) << 40 | ((uint64_t) m_randPool.GenerateByte()) <<  32 | ((uint64_t) m_randPool.GenerateByte()) << 24 | ((uint64_t) m_randPool.GenerateByte()) << 16 | ((uint64_t) m_randPool.GenerateByte()) << 8| ((uint64_t) m_randPool.GenerateByte()));
+	l->SetLobbyID(m_Lobbies.add(l));
+	l->SetSessionID( GenerateRandomUINT64(m_randPool));
 	return l;
 }
 
 MindTrisServer :: MindTrisServer(string address, uint16_t port, string nMOTD)
 {
-
-	m_Users= new vector<User *>;
-	m_Lobbies = new OrderedAllocationVector<Lobby>();
-
-	m_Socket = new CTCPServer(&CONSOLE_Print,true);
-	m_Protocol = new DGMTProtocol(true);
+	m_Socket = unique_ptr<CTCPServer>(new CTCPServer(&CONSOLE_Print,true));
 	m_BindAddress = address;
 	m_ListenPort = port;
 	m_Exiting = false;
 	m_MOTD = nMOTD;
-
-	m_database = new ServerDatabase();
 
 	CryptoPP::InvertibleRSAFunction params;
 	params.GenerateRandomWithKeySize(m_randPool, 3072);
@@ -70,21 +69,15 @@ MindTrisServer :: MindTrisServer(string address, uint16_t port, string nMOTD)
 	CryptoPP::Integer modulus = params.GetModulus();
 	CryptoPP::Integer exponent = params.GetPublicExponent();
 
-	m_Decryptor = new CryptoPP::RSAES_OAEP_SHA_Decryptor(params);
+	m_Decryptor = unique_ptr<CryptoPP::RSAES_OAEP_SHA_Decryptor>(new CryptoPP::RSAES_OAEP_SHA_Decryptor(params));
 		
-	string modulusstring;
-	CryptoPP::TransparentFilter modulusFilter(new CryptoPP::StringSink(modulusstring));
-	modulus.Encode(modulusFilter,modulus.MinEncodedSize(),CryptoPP::Integer::UNSIGNED);
+	string modulusstring, exponentstring;
 
-	string exponentstring;
-	CryptoPP::TransparentFilter exponentFilter(new CryptoPP::StringSink(exponentstring));
-	exponent.Encode(exponentFilter,exponent.MinEncodedSize(),CryptoPP::Integer::UNSIGNED);
+	modulus.Encode(CryptoPP::StringSink(modulusstring),modulus.MinEncodedSize(),CryptoPP::Integer::UNSIGNED);
+	exponent.Encode( CryptoPP::StringSink(exponentstring),exponent.MinEncodedSize(),CryptoPP::Integer::UNSIGNED);
 
-	m_PublicKey = new RSAPublicKey();
-	m_PublicKey->Exponent = exponentstring;
-	m_PublicKey->Modulus = modulusstring;
-
-
+	m_PublicKey = move(RSAPublicKey(exponentstring,modulusstring));
+	
 	if( m_Socket->Listen( m_BindAddress, m_ListenPort ) )
 		CONSOLE_Print( "[MindTris Server] listening on port " + UTIL_ToString( m_ListenPort ) );
 	else
@@ -95,8 +88,6 @@ MindTrisServer :: MindTrisServer(string address, uint16_t port, string nMOTD)
 }
 
 MindTrisServer :: ~MindTrisServer(){
-	delete m_Socket;
-	delete m_Protocol;
 
 }
 
@@ -112,7 +103,7 @@ bool MindTrisServer :: Update(long usecBlock){
 
 	// User sockets
 
-	for( vector<User *> :: iterator i = m_Users->begin( ); i != m_Users->end( ); i++ )
+	for( vector<unique_ptr<User>> :: iterator i = m_Users.begin( ); i != m_Users.end( ); i++ )
 	{
 		(*i)->GetSocket( )->SetFD( &fd, &send_fd, &nfds );
 		NumFDs++;
@@ -151,16 +142,16 @@ bool MindTrisServer :: Update(long usecBlock){
 
 	if( m_Socket )
 	{
-		CTCPSocket *NewSocket = m_Socket->Accept( &fd );
+		unique_ptr<CTCPSocket> NewSocket = m_Socket->Accept( &fd );
 
 		if( NewSocket )
 		{
 
 				NewSocket->SetNoDelay( true );
+				string s = NewSocket->GetIPString( );
+				m_Users.push_back( unique_ptr<User>(new User( *this, m_Protocol, move(NewSocket) ) ));
 
-				m_Users->push_back( new User( this, m_Protocol, NewSocket ) );
-
-				CONSOLE_Print( "[MindTris Server] connection attempt from [" + NewSocket->GetIPString( ) + "]" );
+				CONSOLE_Print( "[MindTris Server] connection attempt from [" + s + "]" );
 		}
 
 		if( m_Socket->HasError( ) )
@@ -170,18 +161,17 @@ bool MindTrisServer :: Update(long usecBlock){
 		}
 	}
 
-	for( vector<User *> :: iterator i = m_Users->begin( ); i != m_Users->end( );  )
+	for( vector<unique_ptr<User>> :: iterator i = m_Users.begin( ); i != m_Users.end( );  )
 	{
 
 		if( (*i)->Update( &fd ) )
 		{
-			delete *i;
-			i = m_Users->erase( i );
+			i = m_Users.erase( i );
 		}
 		else i++;
 	}
 
-	for( vector<User *> :: iterator i = m_Users->begin( ); i != m_Users->end( );  i++)
+	for( vector<unique_ptr<User>> :: iterator i = m_Users.begin( ); i != m_Users.end( );  i++)
 	{
 		if( (*i)->GetSocket( ) ) (*i)->GetSocket( )->DoSend( &send_fd );
 	}

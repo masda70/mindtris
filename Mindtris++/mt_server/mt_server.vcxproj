@@ -40,10 +40,13 @@
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">
     <LinkIncremental>true</LinkIncremental>
     <IgnoreImportLibrary>false</IgnoreImportLibrary>
+    <IncludePath>C:\Users\David\Documents\Visual Studio 2010\Projects\boost_1_45_0;$(IncludePath)</IncludePath>
+    <LibraryPath>$(LibraryPath)</LibraryPath>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">
     <LinkIncremental>false</LinkIncremental>
     <IgnoreImportLibrary>false</IgnoreImportLibrary>
+    <IncludePath>C:\Users\David\Documents\Visual Studio 2010\Projects\boost_1_45_0;$(IncludePath)</IncludePath>
   </PropertyGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">
     <ClCompile>

@@ -859,7 +859,7 @@ Round Data include a bunch of gameplay dependent data.
   \end{tabular}
 \end{center}
 
-The Tetris board is a rectangle of 10 columns by 20 rows. The X and Y offset range between 0-9, and 0-19, respectively. The location of a piece is given by the X and Y offset of the bottom left corner of the rectangle that perfectly bounds the piece, given its current orientation. The Moves array will include the following:
+The Tetris board is a rectangle of 10 columns by 20 rows. The X and Y offset range between 0-9, and 0-19, respectively. A convention of increasing X rightwards, and increasing Y upwards is used, so that the (0,0) location corresponds to the bottom-left corner of the board, and the (9,19) to the top-right corner. The location of a piece is given by the X and Y offset of the bottom-left corner of the rectangle that perfectly bounds the piece, given its current orientation. The Moves array will include the following:
 
 \begin{center}
   \begin{tabular}{|p{2cm}|c|c|c|p{8cm}|}

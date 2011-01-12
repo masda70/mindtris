@@ -128,8 +128,8 @@ namespace Tetris
 
         void _client_NewPiecesIncoming(uint offset, byte[] pieces)
         {
-            _board.FeedPieces(pieces);
             _pieces.AddRange(pieces);
+            _board.FeedPieces(pieces);
         }
 
         void _client_BeginGame()
@@ -140,25 +140,33 @@ namespace Tetris
             _music.Play(0.3f, 0.0f, 0.0f);
         }
 
+        int _turn = 0;
         void SwitchObservator()
         {
-            int i = 0;
-            int max = _rand.Next(0, _observators.Count);
-            byte peer = Byte.MaxValue;
-            foreach (byte peerouze in _observators.Keys)
+            if (_observators.Count > 0)
             {
-                if (max - i == 0) peer = peerouze;
-            }
-            foreach (byte peerouze in _observators.Keys)
-            {
-                if (peerouze != peer)
+                int i = 0;
+                byte peer = Byte.MaxValue;
+                foreach (byte peerouze in _observators.Keys)
                 {
-                    _observators[peerouze].Board.Visible = false;
-                    _observators[peerouze].Score.Visible = false;
+                    if (i == _turn) peer = peerouze;
+                    i++;
+                }
+                _turn = (_turn + 1) % _observators.Count;
+                if (peer < Byte.MaxValue)
+                {
+                    foreach (byte peerouze in _observators.Keys)
+                    {
+                        if (peerouze != peer)
+                        {
+                            _observators[peerouze].Board.Visible = false;
+                            _observators[peerouze].Score.Visible = false;
+                        }
+                    }
+                    _observators[peer].Board.Visible = true;
+                    _observators[peer].Score.Visible = true;
                 }
             }
-            _observators[peer].Board.Visible = true;
-            _observators[peer].Board.Visible = true;
         }
 
         /// <summary>
@@ -236,8 +244,8 @@ namespace Tetris
         {
             _degrix.Play();
             y = TransformY(y);
-            Move move = new Move(0, pieceNumber, orientation, x, y);
-            Console.WriteLine("Move {0} : (X, Y) = ({1}, {2})", pieceNumber, x, y);
+            Move move = new Move(pieceNumber, orientation, x, y);
+            Console.WriteLine("Move {0} : piece {1}, orientation {2},({3}, {4})", pieceNumber, _pieces[(int)pieceNumber], orientation, x, y);
             _pendingMoves.AddLast(move);
         }
 
@@ -319,43 +327,31 @@ namespace Tetris
                         //[TOCHECK] On peut sûrement améliorer les behaviors des pieces
                         if (_tous_les_X_updates == 0)
                         {
-                            if (keyboardState.IsKeyDown(Keys.Space)) _isKeySpaceDown = true;
+                            if (keyboardState.IsKeyDown(Keys.Space))
+                                 _isKeySpaceDown = true;
                             if (keyboardState.IsKeyUp(Keys.Space) && _isKeySpaceDown)
                             {
                                 _isKeySpaceDown = false;
                                 _board.HardDrop();
+                                goto Fin;
                             }
 
                             // If left key is pressed then released
-                            if (keyboardState.IsKeyDown(Keys.Left)) _board.MoveFigureLeft();
-                            /*    _isKeyLeftDown = true;
-                            if (keyboardState.IsKeyUp(Keys.Left) && _isKeyLeftDown)
+                            if (keyboardState.IsKeyDown(Keys.Left))
                             {
-                                _isKeyLeftDown = false;
-                                board.MoveFigureLeft();
+                                _board.MoveFigureLeft();
                             }
-                            //*/
                             // If right key is pressed
-                            if (keyboardState.IsKeyDown(Keys.Right)) _board.MoveFigureRight();
-
-                            /*    _isKeyRightDown = true;
-                            if (keyboardState.IsKeyUp(Keys.Right) && _isKeyRightDown)
+                            if (keyboardState.IsKeyDown(Keys.Right))
                             {
-                                _isKeyRightDown = false;
-                                board.MoveFigureRight();
+                                _board.MoveFigureRight();
                             }
-                            //*/
                             // If down key is pressed
-                            if (keyboardState.IsKeyDown(Keys.Down)) _board.MoveFigureDown();
+                            if (keyboardState.IsKeyDown(Keys.Down))
+                            {
+                                _board.MoveFigureDown();
+                            }
                         }
-
-                        /*_isKeyDownDown = true;
-                        if (keyboardState.IsKeyUp(Keys.Down) && _isKeyDownDown)
-                        {
-                            _isKeyDownDown = false;
-                            board.MoveFigureDown();
-                        }
-                        //*/
 
                         // Rotate figure
                         if (keyboardState.IsKeyDown(Keys.Up)) _isKeyUpDown = true;
@@ -365,7 +361,6 @@ namespace Tetris
                             _board.RotateFigureSRSTrueRotation(true);
                         }
 
-                        //Pour l'instant je désactive le mouvement par gravité des pièces
                         // Moving figure
                         if (_board.Movement >= 1)
                         {
@@ -378,6 +373,7 @@ namespace Tetris
                     }
                 }
 
+            Fin:
                 //Sending Round packets
                 if (_elapsedSinceLastRound > new TimeSpan(0, 0, 0, 0, Client.ROUND_DELAY_MILLISECONDS - 20))
                 {

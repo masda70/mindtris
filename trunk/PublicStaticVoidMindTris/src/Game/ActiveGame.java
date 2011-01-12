@@ -11,45 +11,23 @@ public class ActiveGame extends Game {
 
 	////// FIELDS //////
 	private Client 			_c;
+	protected MainWindow	_gui;
 	private int				_fallX,
 							_fallY,
 							_fallenY;
 	private List<Move>		_moves;
 	
 	////// CONSTRUCTORS //////
-	public ActiveGame ( Client c ) {
-		super();
+	public ActiveGame ( Client c, int seed ) {
+		super(seed);
 		
 		_c = c;
 		_moves = new LinkedList<Move>();
 	}
 	
 	////// PUBLIC METHODS //////
-	public void start( MainWindow gui ) throws IOException {
-		super.start(gui);
-		
-		nextFall();
-		
-		Thread timer = new Thread() {
-			public void run() {
-				try {
-					while( !_stop ) {
-						sleep(1000);
-						if( _currentPiece.collide(_board, _fallX, _fallY-1) ) {
-							placeCurrent(_fallX, _fallY);
-						} else {
-							_fallY--;
-						}
-						_gui.upBoard();
-					}
-				} catch ( InterruptedException e ) {
-					e.printStackTrace();
-				} catch (IOException e) {
-					e.printStackTrace();
-				}
-			}
-		};
-		timer.start();
+	public void setGui ( MainWindow w ) {
+		_gui = w;
 	}
 	
 	public void leftMove() {
@@ -91,7 +69,47 @@ public class ActiveGame extends Game {
 		
 		return ret;
 	}
+
+	////// OVERRIDE //////
+	public void start() throws IOException {
+		super.start();
+		
+		nextFall();
+		
+		Thread timer = new Thread() {
+			public void run() {
+				try {
+					while( !_stop ) {
+						sleep(1000);
+						if( _currentPiece.collide(_board, _fallX, _fallY-1) ) {
+							placeCurrent(_fallX, _fallY);
+						} else {
+							_fallY--;
+						}
+						_display.repaint();
+					}
+				} catch ( InterruptedException e ) {
+					e.printStackTrace();
+				} catch (IOException e) {
+					e.printStackTrace();
+				}
+			}
+		};
+		timer.start();
+	}
 	
+	public int checkLines ( int yHigh ) {
+		int nbLines = super.checkLines(yHigh);
+		
+		if( nbLines > 0 ) _gui.addScore(nbLines);
+		
+		return nbLines;
+	}
+	
+	public void GameOver () {
+		super.gameOver();
+		_gui.gameOver();
+	}
 
 	////// GETTER //////
 	public int x () {
@@ -125,7 +143,7 @@ public class ActiveGame extends Game {
 		_fallX = Game.W/2 + _currentPiece.spawnX();
 		
 		_gui.upNextPieces();
-		_gui.upBoard();
+		_display.repaint();
 		computeFall();
 	}
 	
@@ -136,7 +154,8 @@ public class ActiveGame extends Game {
 		}
 		
 		_currentPiece.addToBoard(_board, x, y);
-		checkLines(y);
+		int nbLines = checkLines(y);
+		_penaltiesWinner.winPenalties(nbLines);
 		
 		// TODO check
 		_moves.add(new Move(_pieceNb, _currentPiece.getRotation(),

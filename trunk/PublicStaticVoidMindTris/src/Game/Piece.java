@@ -10,7 +10,15 @@ import IO.OutData;
 public class Piece implements Encodable {
 	////// STATIC //////
 	public static final int PIECES_NB = 7;
-	public static final int EMPTY = -1;
+	public static final int EMPTY = -1,
+							I = 0,
+							J = 1,
+							L = 2,
+							O = 3,
+							S = 4,
+							T = 5,
+							Z = 6,
+							PENALTY = 7;
 	private static final long serialVersionUID = 1L;
 	private static final String[][] PIECES_STR = {
 		{"00000",
@@ -60,7 +68,7 @@ public class Piece implements Encodable {
 	private static int[][][] OFFSETS;		// [piece][rotation](i,j)
 	private static int[][][][] KICKS;		// [piece][rotation][offsetNb](i,j)
 	private static Color[] COLORS = {
-		Color.GREEN, Color.BLUE, Color.CYAN, Color.YELLOW, Color.MAGENTA, Color.PINK, Color.RED
+		Color.CYAN, Color.BLUE, Color.ORANGE, Color.YELLOW, Color.GREEN, Color.MAGENTA, Color.RED, Color.BLACK
 	};
 	
 	static {
@@ -162,10 +170,10 @@ public class Piece implements Encodable {
 	}
 	
 	public int spawnX () {
-		return ( _code == 0 ) ? -3 : -2;
+		return ( _code == I ) ? -3 : -2;
 	}
 	public int spawnY () {
-		return ( _code == 0 ) ? 1 : 0;
+		return ( _code == I ) ? 1 : 0;
 	}
 	
 	public boolean collide ( int[][] board, int rotation, int x, int y ) {

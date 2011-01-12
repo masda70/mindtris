@@ -3,6 +3,7 @@ package Game;
 import java.io.IOException;
 import java.util.*;
 
+import Gui.Board;
 import Gui.MainWindow;
 
 public class Game {
@@ -12,16 +13,18 @@ public class Game {
 	protected static Random rdm = new Random();
 	
 	////// FIELDS //////
+	protected Game			_penaltiesWinner;
 	protected Queue<Piece> 	_pieces;
 	protected int[][]		_board;
 	protected int			_pieceNb;
 	protected Piece			_currentPiece;
-	protected MainWindow	_gui;
 	protected boolean		_stop;
+	protected Board			_display;
+	private int				_rndGen;
 
 	
 	////// CONSTRUCTORS //////
-	public Game () {
+	public Game ( int seed ) {
 		_pieces = new LinkedList<Piece>();
 		_board = new int[W][H];
 		_stop = false;
@@ -29,14 +32,77 @@ public class Game {
 		for( int i=0; i<W; i++ )
 			for( int j=0; j<H; j++ )
 				_board[i][j] = Piece.EMPTY;
+		
+		_rndGen = seed;
 	}
 
 	////// PUBLIC METHODS //////
-	public void start( MainWindow gui ) throws IOException {
-		_gui = gui;
+	public void start () throws IOException {
 		_pieceNb = -1;
 	}
 	
+	public void addNewPiece ( Piece piece, int pieceOffset ) {
+		synchronized (_pieces) {
+			_pieces.offer(piece);
+		}
+	}
+	
+	public void addMoves ( List<Move> moves ) throws IOException {
+		for( Move m : moves ) {
+			Piece p = getNextPiece();
+			p.setRotation(m.pieceRotation);
+			
+			try {
+				System.out.println("adv nb:"+m.pieceNb+" ("+p+") x:"+m.pieceX+" y:"+m.pieceY+" r:"+m.pieceRotation);
+				p.addToBoard(_board, m.pieceX-p.offsetX(), m.pieceY+p.offsetY());
+			} catch ( IndexOutOfBoundsException e ) {
+				gameOver();
+			}
+			
+			int nbLines = checkLines(m.pieceY+5);
+			_penaltiesWinner.winPenalties(nbLines);
+		}
+		
+		if( moves.size() > 0 ) _display.repaint();
+	}
+	
+	public void winPenalties ( int deletedLines ) {
+		int wonLines = deletedLines - 1;
+		
+		if( wonLines <= 0 ) return;
+		
+		for( int i=0; i<Game.W; i++ ) {
+			for( int j=Game.H-1; j>=0; j-- ) {
+				if( j+wonLines >= Game.H ) {
+					if( _board[i][j] != Piece.EMPTY ) {
+						System.out.println("peer game over by direct hit !");
+						gameOver();
+						return;
+					}
+				} else {
+					_board[i][j+wonLines] = _board[i][j];
+				}
+			}
+		}
+		
+		for( int j=0; j<wonLines; j++ ) {
+			int hole = nextHoleInPenalty();
+			
+			for( int i=0; i<Game.W; i++ )
+				_board[i][j] = ( i != hole ) ? Piece.PENALTY : Piece.EMPTY;
+		}
+		_display.repaint();
+	}
+	
+	public void setPenaltiesWinner ( Game winner ) {
+		_penaltiesWinner = winner;
+	}
+	
+	public void setBoard ( Board display ) {
+		_display = display;
+	}
+	
+	////// GETTER //////
 	public Queue<Piece> nextPieces() {
 		return _pieces;
 	}
@@ -45,34 +111,14 @@ public class Game {
 		return _pieceNb+_pieces.size()+1;
 	}
 	
-	public void addNewPiece ( Piece piece, int pieceOffset ) {
-		synchronized (_pieces) {
-			_pieces.offer(piece);
-			// !!!!! TODO offset
-				
-		}
-	}
-	
-	public void addMoves ( List<Move> moves ) throws IOException {
-		for( Move m : moves ) {
-			Piece p = getNextPiece();
-			p.setRotation(m.pieceRotation);
-			System.out.println("adv nb:"+m.pieceNb+" ("+p+") x:"+m.pieceX+" y:"+m.pieceY+" r:"+m.pieceRotation);
-			p.addToBoard(_board, m.pieceX-p.offsetX(), m.pieceY+p.offsetY());
-
-			checkLines(m.pieceY+5);
-		}
-	}
-	
 	public Piece getFallingPiece () {
 		return _currentPiece;
 	}
 
-	
-	////// GETTER //////
 	public int[][] board () {
 		return _board;
 	}
+	
 	////// PROTECTED //////
 	protected Piece getNextPiece () throws IOException {
 		_pieceNb++;
@@ -82,7 +128,7 @@ public class Game {
 		}
 	}
 	
-	protected void checkLines ( int yHigh ) {
+	protected int checkLines ( int yHigh ) {
 		int nbLines = 0;
 		int yLow = yHigh-5;
 		if( yLow < 0 ) yLow = 0;
@@ -103,13 +149,16 @@ public class Game {
 			}
 		}
 		
-		if( _gui != null && nbLines > 0 ) _gui.addScore(nbLines);
+		return nbLines;
 	}
 	
 	protected void gameOver () {
 		_stop = true;
-		
-		if( _gui != null ) _gui.gameOver();
+	}
+	
+	protected int nextHoleInPenalty () {
+		_rndGen = 18000 * (_rndGen & 65535) + (_rndGen >> 16);
+		return _rndGen % Piece.PIECES_NB;
 	}
 	
 	////// STATIC FUNCTION //////

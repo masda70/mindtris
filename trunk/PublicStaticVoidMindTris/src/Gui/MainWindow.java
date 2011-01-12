@@ -540,7 +540,7 @@ public class MainWindow extends JFrame {
 		addKeyListener(_keyListener);
 
 		requestFocusInWindow();
-		upBoard();
+		_board.repaint();
 	}
 
 	public void gameOver() {
@@ -581,18 +581,10 @@ public class MainWindow extends JFrame {
 		_center.repaint();		
 	}
 
-	public void upBoard() {
-		_board.repaint();
-	}
-
 	public void upNextPieces() {
 		_left.repaint();
 	}
 	
-	public void upPeerBoards ( int peerId ) {
-		_right.upPeerBoards(peerId);
-	}
-
 	public void addScore ( int nbLines ) {
 		_left.addScore(nbLines);
 	}

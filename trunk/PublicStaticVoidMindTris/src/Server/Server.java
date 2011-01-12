@@ -371,10 +371,13 @@ public class Server extends Thread {
 			Piece[] pieces = Game.generateNewPieces();
 			_piecesOffset = pieces.length-1;
 			
-			Msg loadMsg = new MsgCltSrv(MsgCltSrv.LOAD_GAME, 1+pieces.length);
-			loadMsg._out.write(pieces.length);
+			Set<Integer> peerOrder = l._peers.keys();
 			
+			Msg loadMsg = new MsgCltSrv(MsgCltSrv.LOAD_GAME, 1+pieces.length+1+peerOrder.size());
+			loadMsg._out.write(pieces.length);
 			for( Piece p : pieces ) loadMsg._out.write(p);
+			loadMsg._out.write(peerOrder.size());
+			for( int p : peerOrder ) loadMsg._out.write(p);
 
 			ch.send(MsgCltSrv.GAME_STARTING, (byte)0x00);
 			

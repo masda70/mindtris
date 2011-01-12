@@ -1,8 +1,13 @@
 
 #include "mindtriscore/includes.h"
 #include "mindtriscore/util.h"
+#include "mindtriscore/bytearray.h"
+#include "mindtriscore/bytebuffer.h"
 #include "mindtriscore/socket.h"
 #include "mindtriscore/oalloc.h"
+#include "mindtriscore/commprotocol.h"
+#include "mindtriscore/packet.h"
+#include "mindtriscore/messagestreamer.h"
 #include "mindtriscore/serverprotocol.h"
 #include "mindtriscore/p2pprotocol.h"
 #include "database.h"
@@ -11,47 +16,33 @@
 #include "user.h"
 
 
-uint32_t User :: GetIPInt32(){ return m_Socket->GetIPInt32();}
+uint32_t User :: GetIPInt32() const{ return m_Socket->GetIPInt32();}
 
-void User :: SendPeerStatusUpdate(User * u, DGMTProtocol::StatusUpdate status)
+void User :: SendPeerStatusUpdate(User & u, DGMTProtocol::UpdateClientStatus::status status)
 {
 	switch(status)
 	{
-		case DGMTProtocol::STATUSUPDATE_HASJOINEDTHELOBBY:
+		case DGMTProtocol::UpdateClientStatus::STATUSUPDATE_HASJOINEDTHELOBBY:
 			{
-				this->Send(m_Protocol->SEND_DGMT_UPDATECLIENTSTATUS(status,u->GetPeerID(),u->GetDisplayName(),u->GetIPInt32(),u->GetP2PPortNumber(),u->GetPublicKey())); break;
+				//u->GetDisplayName()
+				string displayname = u.GetDisplayName();
+				Send(m_Protocol.SEND_UPDATECLIENTSTATUS(status,this->GetLobby()->GetLobbyID(),u.GetPeerID(),u.GetDisplayName(),u.GetIPInt32(),u.GetP2PPortNumber(),u.GetPublicKey()));
+				break;
 			}
-		case DGMTProtocol::STATUSUPDATE_HASLEFTTHELOBBY:
+		case DGMTProtocol::UpdateClientStatus::STATUSUPDATE_HASLEFTTHELOBBY:
 			{
-				this->Send(m_Protocol->SEND_DGMT_UPDATECLIENTSTATUS(status,u->GetPeerID())); break;
+				Send(m_Protocol.SEND_UPDATECLIENTSTATUS(status,this->GetLobby()->GetLobbyID(),u.GetPeerID()));
+				break;
 			}
-		case DGMTProtocol::STATUSUPDATE_HASBEENKICKED:
+		case DGMTProtocol::UpdateClientStatus::STATUSUPDATE_HASBEENKICKED:
 			{
-				this->Send(m_Protocol->SEND_DGMT_UPDATECLIENTSTATUS(status,u->GetPeerID())); break;
+				this->Send(m_Protocol.SEND_UPDATECLIENTSTATUS(status,this->GetLobby()->GetLobbyID(),u.GetPeerID()));
+				break;
 			}
 	}
 }
 
-bool User :: LeaveLobby(){
-	if(this->GetLobby()->UserLeave(this))
-	{
-		SetLobby( NULL);
-		return true;
-	}else{
-		return false;
-	}
-}
-
-bool User :: JoinLobby(Lobby * lobby, string password, DGMTProtocol::JoinedLobby * answer){
-	if(lobby->UserJoin(this, password, answer))
-	{
-		SetLobby(lobby); return true;
-	}
-	return false;
-}
-
-
-void User :: PrintMalformedPacket(){
+void User :: PrintMalformedMessage(){
 	CONSOLE_Print( "[MindTris Server] Received malformed packet from [" + m_Socket->GetIPString( ) + "]" );
 }
 
@@ -59,171 +50,264 @@ bool User :: Update(fd_set * fd){
 
 	if( !m_Socket )
 		return true;
-
 	m_Socket->DoRecv( fd );
-	string * buffer = m_Socket->GetBytes( );
-	BYTEARRAY Bytes(buffer->begin(),buffer->end());
-
-	while( Bytes.size() >= DGMTProtocol::HEADERLENGTH )
-	{
-
-		DGMTPacket * packet = NULL;
-		if(m_Protocol->ExtractPacket(Bytes, &packet))
-		{
-			if(packet!=NULL)
-			{
-				uint16_t Length = packet->GetLength();
-				m_Packets.push( packet );
-				Bytes = BYTEARRAY(Bytes.begin()+Length,Bytes.end());
-				*buffer = buffer->substr( Length );
-			}else
-				break;
-		}else{
+	if(!m_MessageStreamer.Read(m_Socket->GetRecvBuffer( ),m_IncompletePacket,m_Messages)){
 			m_Error = true;
 			m_ErrorString = "received invalid packet from user";
-			break;
-		}
 	}
 
-	while( !m_Packets.empty( ) )
-	{
-		DGMTPacket *packet = m_Packets.front( );
-
-		m_Packets.pop( );
-
-		switch( packet->GetID( ) )
+	try{
+		while( !m_Messages.empty( ) )
 		{
-		case  DGMTProtocol::DGMT_HELLOFROMCLIENT:
-				 {
-					uint32_t ProtocolVersion = 0;
-					ProtocolVersion = m_Protocol-> RECEIVE_DGMT_HELLOFROMCLIENT( packet->GetData( ) );
-					if(ProtocolVersion == m_Protocol->DGMT_PROTOCOLVERSION)
-					{
-						Send(m_Protocol->SEND_DGMT_HELLOFROMSERVER(m_Protocol->SHELLO_CONNECTED,  m_Server->GetPublicKey(), m_Server->GetMOTD() ));
-						CONSOLE_Print( "[MindTris Server] connection accepted from [" + m_Socket->GetIPString( ) + "]" );
-					}else{
-						Send(m_Protocol->SEND_DGMT_HELLOFROMSERVER(m_Protocol->SHELLO_REFUSEDWRONGVERSION,   m_Server->GetPublicKey(), ""));
-						CONSOLE_Print( "[MindTris Server] connection refused from [" + m_Socket->GetIPString( ) + "], wrong protocol version" );
-						m_DeleteMe = true;
-					}
-					break;
-				 }
-			case DGMTProtocol::DGMT_CREATEUSER:
+
+			size_t offset = 0;
+			Message message = m_Messages.front( );
+			m_Messages.pop( );
+			byte_t type;
+			if(message.size() == 0)
+			{
+				type = DGMTProtocol::TYPE_KEEPALIVE;
+			}else{
+				type = m_Protocol.GetMessageType(message,offset);
+			}
+			switch( type)
+			{
+			case DGMTProtocol::TYPE_KEEPALIVE:
 				{
 
-					DGMTCreateUserInfo * info = m_Protocol-> RECEIVE_DGMT_CREATEUSER( packet->GetData( ), m_Server-> GetDecryptor());
-					if(info == NULL) {PrintMalformedPacket(); break;}
-					if(m_Server->GetDatabase()->UserExists(info->GetUsername()))
-					{
-						Send(m_Protocol->SEND_DGMT_USERCREATION(m_Protocol->USERCREATION_USERNAMEALREADYEXISTS));
-					}else{
-						m_Server->GetDatabase()->AddUser(info->GetUsername(),info->GetDisplayName(),info->GetEmail(),info->GetPassword());
-						Send(m_Protocol->SEND_DGMT_USERCREATION(m_Protocol->USERCREATION_SUCCESS));
-						CONSOLE_Print("[MindTris Server] Created User ["+info->GetUsername()+"].");
-					}
-					delete info;
+					// To do: KEEP ALIVE 
 					break;
 				}
-			case DGMTProtocol::DGMT_LOGIN:
-				{
-
-					DGMTLoginInfo * info = m_Protocol-> RECEIVE_DGMT_LOGIN(packet->GetData( ), m_Server-> GetDecryptor());
-					if(info == NULL) {PrintMalformedPacket(); break;}
-					UserData * userdata = NULL;
-					if(m_Server->GetDatabase()->UserMatchesPassword(info->GetUsername(),info->GetPassword(), userdata))
-					{
-						CONSOLE_Print("[MindTris Server] User ["+info->GetUsername()+"] has logged in.");
-						SetDisplayName(userdata->GetDisplayName());
-						Send(m_Protocol->SEND_DGMT_LOGINREPLY(m_Protocol->LOGINREPLY_SUCCESS,userdata->GetDisplayName()));
-					}else{
-						if(userdata != NULL)
+			case  DGMTProtocol::TYPE_HELLOFROMCLIENT:
+					 {
+						uint32_t ProtocolVersion = 0;
+						ProtocolVersion = m_Protocol.RECEIVE_HELLOFROMCLIENT(message,offset);
+						if(ProtocolVersion == m_Protocol.PROTOCOLVERSION)
 						{
-							CONSOLE_Print("[MindTris Server] Client ["+ m_Socket->GetIPString( )+"] log in: password/username mismatch.");
-							Send(m_Protocol->SEND_DGMT_LOGINREPLY(m_Protocol->LOGINREPLY_BADUSERNAMEPASSWORD,""));
-
+							Send(m_Protocol.SEND_HELLOFROMSERVER(DGMTProtocol::SHELLO_CONNECTED,  m_Server.GetPublicKey(), m_Server.GetMOTD() ));
+							CONSOLE_Print( "[MindTris Server] connection accepted from [" + m_Socket->GetIPString( ) + "]" );
 						}else{
-							CONSOLE_Print("[MindTris Server] Client ["+ m_Socket->GetIPString( )+"] log in: username ["+info->GetUsername()+"] does not exist.");
-							Send(m_Protocol->SEND_DGMT_LOGINREPLY(m_Protocol->LOGINREPLY_USERNAMEDOESNOTEXIST,""));
+							Send(m_Protocol.SEND_HELLOFROMSERVER(DGMTProtocol::SHELLO_REFUSEDWRONGVERSION,  m_Server.GetPublicKey(), ""));
+							CONSOLE_Print( "[MindTris Server] connection refused from [" + m_Socket->GetIPString( ) + "], wrong protocol version" );
+							m_DeleteMe = true;
 						}
-					}
-					delete info;
-					break;
-				}
-			case DGMTProtocol::DGMT_CREATELOBBY:
-				{
-
-					DGMTCreateLobby * info = m_Protocol-> RECEIVE_DGMT_CREATELOBBY(packet->GetData( ), m_Server-> GetDecryptor());
-					if(info == NULL) {PrintMalformedPacket(); break;}
-					CONSOLE_Print("[MindTris Server] Player ["+GetDisplayName()+"] trying to create lobby "+info->GetLobbyName()+".");
-					Lobby * l =m_Server->CreateLobby(this, info->GetLobbyName(),info->GetMaxPlayers(),info->GetHasPassword(),info->GetPassword());
-					Send(m_Protocol->SEND_DGMT_LOBBYCREATION(DGMTProtocol::LOBBYCREATION_SUCCESS,l->GetLobbyID(),l->GetSessionID()));
-					delete info;
-					break;
-				}
-			case DGMTProtocol::DGMT_GETLOBBYLIST:
-				{
-					m_Protocol-> RECEIVE_DGMT_GETLOBBYLIST(packet->GetData( ));
-					CONSOLE_Print("[MindTris Server] Player ["+GetDisplayName()+"] trying to retrieve lobby list.");
-					vector<DGMTLobbyInfo> * lobbiesinfo = new vector<DGMTLobbyInfo>();
-					for (OrderedAllocationVector<Lobby>::iterator it = m_Server->GetLobbies()->begin(); it != m_Server->GetLobbies()->end(); it++) 
+						break;
+					 }
+				case DGMTProtocol::TYPE_CREATEUSER:
 					{
-						lobbiesinfo->push_back(DGMTLobbyInfo(it->second->GetLobbyID(),it->second->GetLobbyName(),it->second->GetPlayerCount(),it->second->GetMaxPlayers(),it->second->GetHasPassword(),it->second->GetCreator()->GetDisplayName()));
-					}
 
-					Send(m_Protocol->SEND_DGMT_LOBBYLIST(lobbiesinfo));
-					delete lobbiesinfo;
-					break;
-				}
-			case DGMTProtocol::DGMT_JOINLOBBY:
-				{
-					DGMTJoinLobby * info = m_Protocol->RECEIVE_DGMT_JOINLOBBY(packet->GetData());
-					if(info == NULL) {PrintMalformedPacket(); break;}
-					CONSOLE_Print("[MindTris Server] Player ["+GetDisplayName()+"] trying to join lobby "+UTIL_ToString(info->GetLobbyID())+"...");
-					DGMTProtocol::JoinedLobby * answer = new DGMTProtocol::JoinedLobby();
-					try{
-						Lobby * lobby = m_Server->GetLobbies()->at(info->GetLobbyID());
-						if(JoinLobby( lobby,info->GetPassword(),answer))
+						DGMTProtocol::CreateUserInfo info = m_Protocol.RECEIVE_CREATEUSER( message,offset, *m_Server.GetDecryptor());
+						if(m_Server.GetDatabase().UserExists(info.GetUsername()))
 						{
-							SetPublicKey(info->GetPublicKey());
-							SetP2PPortNumber(info->GetPortNumber());
-							vector<DGMTClientLobbyInfo> * clientinfolist = new vector<DGMTClientLobbyInfo>();
-							for (OrderedAllocationVector<User>::iterator it = lobby->GetPeers()->begin(); it != lobby->GetPeers()->end(); it++) 
+							Send(m_Protocol.SEND_USERCREATION(DGMTProtocol::USERCREATION_USERNAMEALREADYEXISTS));
+						}else{
+							m_Server.GetDatabase().AddUser(info.GetUsername(),info.GetDisplayName(),info.GetEmail(),info.GetPassword());
+							Send(m_Protocol.SEND_USERCREATION(m_Protocol.USERCREATION_SUCCESS));
+							CONSOLE_Print("[MindTris Server] Created User ["+info.GetUsername()+"].");
+						}
+						break;
+					}
+				case DGMTProtocol::TYPE_LOGIN:
+					{
+						DGMTProtocol::LoginInfo info = m_Protocol.RECEIVE_LOGIN(message,offset, *m_Server.GetDecryptor());
+						unique_ptr<UserData> userdata;
+						if(m_Server.GetDatabase().UserMatchesPassword(info.GetUsername(),info.GetPassword(), userdata))
+						{ 
+							CONSOLE_Print("[MindTris Server] User ["+info.GetUsername()+"] has logged in.");
+							SetDisplayName(userdata->GetDisplayName());
+							Send(m_Protocol.SEND_LOGINREPLY(DGMTProtocol::LoginReply::LOGINREPLY_SUCCESS,userdata->GetDisplayName()));
+						}else{
+							if(userdata != NULL)
 							{
-								User * peer = it->second;
-								if(peer !=this)
+								CONSOLE_Print("[MindTris Server] Client ["+ m_Socket->GetIPString( )+"] log in: password/username mismatch.");
+								Send(m_Protocol.SEND_LOGINREPLY(DGMTProtocol::LoginReply::LOGINREPLY_BADUSERNAMEPASSWORD,""));
+
+							}else{
+								CONSOLE_Print("[MindTris Server] Client ["+ m_Socket->GetIPString( )+"] log in: username ["+info.GetUsername()+"] does not exist.");
+								Send(m_Protocol.SEND_LOGINREPLY(DGMTProtocol::LoginReply::LOGINREPLY_USERNAMEDOESNOTEXIST,""));
+							}
+						}
+						break;
+					}
+				case DGMTProtocol::TYPE_CREATELOBBY:
+					{
+
+						DGMTProtocol::CreateLobby info = m_Protocol. RECEIVE_CREATELOBBY(message,offset,*m_Server. GetDecryptor());
+						CONSOLE_Print("[MindTris Server] Player ["+GetDisplayName()+"] trying to create lobby "+info.GetLobbyName()+".");
+						if(info.GetMaxPlayers()<=0) 
+						{
+							Send(m_Protocol.SEND_LOBBYCREATION(DGMTProtocol::LobbyCreation::LOBBYCREATION_INVALIDNUMBEROFPLAYERS));
+						}else{
+							if(GetLobby())
+							{
+								Send(m_Protocol.SEND_LOBBYCREATION(DGMTProtocol::LobbyCreation::LOBBYCREATION_UNKNOWNERROR));
+							}else{
+								Lobby * l= m_Server.CreateLobby(*this, info.GetLobbyName(),info.GetMaxPlayers(),info.GetHasPassword(),info.GetPassword());
+								DGMTProtocol::JoinedLobby::answer answer;
+								if(l->UserJoin(*this, info.GetPassword(), answer))
 								{
-									clientinfolist->push_back(DGMTClientLobbyInfo(peer->GetPeerID(),peer->GetDisplayName(),peer->GetIPInt32(),peer->GetP2PPortNumber(),peer->GetPublicKey()));
-									peer->SendPeerStatusUpdate(this,DGMTProtocol::STATUSUPDATE_HASJOINEDTHELOBBY);
+									SetLobby(l); 
+									SetPublicKey(info.GetPublicKey());
+									SetP2PPortNumber(info.GetPortNumber());
+									Send(m_Protocol.SEND_LOBBYCREATION(DGMTProtocol::LobbyCreation::LOBBYCREATION_SUCCESS,l->GetLobbyID(),GetPeerID(),l->GetSessionID()));
+								}else
+								{
+									Send(m_Protocol.SEND_LOBBYCREATION(DGMTProtocol::LobbyCreation::LOBBYCREATION_UNKNOWNERROR));
 								}
 							}
-							Send(m_Protocol->SEND_DGMT_JOINEDLOBBY(info->GetLobbyID(),*answer,GetPeerID(),lobby->GetSessionID(),clientinfolist));
-							delete clientinfolist;
-						}else{
-							Send(m_Protocol->SEND_DGMT_JOINEDLOBBY(info->GetLobbyID(),*answer));
 						}
-					}catch (int e)
-					{
-						*answer = DGMTProtocol::JOINEDLOBBY_UNKNOWNERROR;
-						Send(m_Protocol->SEND_DGMT_JOINEDLOBBY(info->GetLobbyID(),*answer));
+						break;
 					}
-					delete answer;
-					break;
-				}
-			case DGMTProtocol::DGMT_LEAVELOBBY: 
-				{
-					m_Protocol->RECEIVE_DGMT_LEAVELOBBY(packet->GetData());
-					if(LeaveLobby())
+				case DGMTProtocol::TYPE_GETLOBBYLIST:
 					{
+						m_Protocol. RECEIVE_GETLOBBYLIST(message,offset);
+						CONSOLE_Print("[MindTris Server] Player ["+GetDisplayName()+"] trying to retrieve lobby list.");
+						vector<DGMTProtocol::LobbyInfo> lobbiesinfo;
+						for (LobbyList::iterator it = m_Server.GetLobbies().begin(); it != m_Server.GetLobbies().end(); it++) 
+						{
+							lobbiesinfo.push_back(DGMTProtocol::LobbyInfo(it->second->GetLobbyID(),it->second->GetLobbyName(),it->second->GetPlayerCount(),it->second->GetMaxPlayers(),it->second->GetHasPassword(),it->second->GetCreator().GetDisplayName()));
+						}
 
+						Send(m_Protocol.SEND_LOBBYLIST(lobbiesinfo));
+						break;
 					}
-					break;
-				}
-			default:
-				CONSOLE_Print( "[MindTris Server] received unhandled packet from [" + m_Socket->GetIPString( ) + "]" ); break;
+				case DGMTProtocol::TYPE_JOINLOBBY:
+					{
+						DGMTProtocol::JoinLobby info = m_Protocol.RECEIVE_JOINLOBBY(message,offset);
+						CONSOLE_Print("[MindTris Server] Player ["+GetDisplayName()+"] trying to join lobby "+UTIL_ToString(info.GetLobbyID())+"...");
+						if(GetLobby()){
+							Send(m_Protocol.SEND_JOINEDLOBBY(info.GetLobbyID(),DGMTProtocol::JoinedLobby::JOINEDLOBBY_UNKNOWNERROR));
+						}else{
+							DGMTProtocol::JoinedLobby::answer answer;
+							try{
+								Lobby * lobby = m_Server.GetLobbies().at(info.GetLobbyID());
+								if(!lobby) throw out_of_range("");
+								if(lobby->UserJoin(*this, info.GetPassword(), answer))
+								{
+									SetLobby(lobby); 
+									SetPublicKey(info.GetPublicKey());
+									SetP2PPortNumber(info.GetPortNumber());
+									vector<DGMTProtocol::ClientLobbyInfo> clientinfolist;
+									for (UserList::iterator it = lobby->GetPeers().begin(); it != lobby->GetPeers().end(); it++) 
+									{
+										User & peer = *it->second;
+										if(&peer != this)
+										{
+											clientinfolist.push_back(DGMTProtocol::ClientLobbyInfo(peer.GetPeerID(),peer.GetDisplayName(),peer.GetIPInt32(),peer.GetP2PPortNumber(),peer.GetPublicKey()));
+											peer.SendPeerStatusUpdate(*this,DGMTProtocol::UpdateClientStatus::STATUSUPDATE_HASJOINEDTHELOBBY);
+										}
+									}
+									Send(m_Protocol.SEND_JOINEDLOBBY(info.GetLobbyID(),answer,lobby->GetLobbyName(),lobby->GetMaxPlayers(),lobby->GetCreator().GetPeerID(),GetPeerID(),lobby->GetSessionID(),clientinfolist));
+								}else{
+									Send(m_Protocol.SEND_JOINEDLOBBY(info.GetLobbyID(),answer));
+								}
+							}catch(out_of_range r)
+							{
+								Send(m_Protocol.SEND_JOINEDLOBBY(info.GetLobbyID(),DGMTProtocol::JoinedLobby::JOINEDLOBBY_UNKNOWNERROR));
+							}catch (int e)
+							{
+								Send(m_Protocol.SEND_JOINEDLOBBY(info.GetLobbyID(),DGMTProtocol::JoinedLobby::JOINEDLOBBY_UNKNOWNERROR));
+							}
+							break;
+						}
+					}
+
+				case DGMTProtocol::TYPE_LEAVELOBBY: 
+					{
+						m_Protocol.RECEIVE_LEAVELOBBY(message,offset);
+						CONSOLE_Print("[MindTris Server] Player ["+GetDisplayName()+"] trying to leave lobby "+UTIL_ToString(GetLobby()->GetLobbyID())+"...");
+						if(this->GetLobby()){
+							if(&GetLobby()->GetCreator() == this){
+								m_Server.DestroyLobby(GetLobby());
+							}else{
+								if(this->GetLobby()->UserLeave(*this)) SetLobby( nullptr);
+							}
+						}
+						break;
+					}
+				case DGMTProtocol::TYPE_STARTGAME:
+					{
+						m_Protocol.RECEIVE_STARTGAME(message,offset);
+						if(this->GetLobby()){
+							if(&GetLobby()->GetCreator() == this){
+								CONSOLE_Print("[MindTris Server] Player ["+GetDisplayName()+"] trying to start lobby ID "+UTIL_ToString(GetLobby()->GetLobbyID())+"...");
+								Send(m_Protocol.SEND_GAMESTARTING(DGMTProtocol::GAMESTARTING_STARTING));
+
+								GetLobby()->SetGameStarting(true);
+								ByteArray msg = m_Protocol.SEND_LOADGAME(GetLobby()->GetNextPieces(m_Server.GetRandomGenerator(),7));
+								for (UserList::iterator it = GetLobby()->GetPeers().begin(); it != GetLobby()->GetPeers().end(); it++) 
+								{
+									User & peer = *it->second;
+									ByteArray msg_copy = msg;
+									peer.Send(move(msg_copy));
+								}
+							}
+						}
+						break;
+					}
+				case DGMTProtocol::TYPE_LOADEDGAME:
+					{
+						DGMTProtocol::LoadedGame info = m_Protocol.RECEIVE_LOADEDGAME(message,offset);
+						if(this->GetLobby()){
+							if(GetLobby()->GetGameStarting()){
+								CONSOLE_Print("[MindTris Server] Player ["+GetDisplayName()+"] has loaded game from lobby ID "+UTIL_ToString(GetLobby()->GetLobbyID())+"...");
+								SetHasLoadedGame(true);
+								bool start = true;
+								for (UserList::iterator it = GetLobby()->GetPeers().begin(); it != GetLobby()->GetPeers().end(); it++) 
+								{
+									User & peer = *it->second;
+									
+									if(!peer.HasLoadedGame()){
+										start = false; break;
+									}
+								}
+								if(start){
+									CONSOLE_Print("[MindTris Server] Started lobby ID "+UTIL_ToString(GetLobby()->GetLobbyID())+"...");
+									GetLobby()->SetGameStarted(true);
+									for (UserList::iterator it = GetLobby()->GetPeers().begin(); it != GetLobby()->GetPeers().end(); it++) 
+									{
+										User & peer = *it->second;
+									
+										peer.Send(m_Protocol.SEND_BEGINGAME());
+									}
+								}
+							}
+
+						}
+						break;
+					}
+				case DGMTProtocol::TYPE_GIVENEWPIECES:
+					{
+						DGMTProtocol::GiveNewPieces info = m_Protocol.RECEIVE_GIVENEWPIECES(message,offset);
+						if(this->GetLobby()){
+							if(GetLobby()->GetGameStarted()){
+								CONSOLE_Print("[MindTris Server] Player ["+GetDisplayName()+"] is requesting "+UTIL_ToString(info.GetNumber())+" more pieces at offset "+ UTIL_ToString(info.GetOffset()));
+								if(info.GetOffset() == GetLobby()->GetPieceOffset())
+								{
+									ByteArray msg = m_Protocol.SEND_NEWPIECES(info.GetOffset(),GetLobby()->GetNextPieces(m_Server.GetRandomGenerator(),info.GetNumber()));
+									for (UserList::iterator it = GetLobby()->GetPeers().begin(); it != GetLobby()->GetPeers().end(); it++) 
+									{
+										User & peer = *it->second;
+										ByteArray msg_copy = msg;
+										peer.Send(move(msg_copy));
+									}
+								}
+							}
+						}
+						break;
+					}
+				default:
+					CONSOLE_Print( "[MindTris Server] received unhandled packet from [" + m_Socket->GetIPString( ) + "]" ); break;
+			}
 		}
-
-		delete packet;
+	}catch (DGMTProtocol::Err p)
+	{
+		PrintMalformedMessage(); m_Error = true;
+	}catch (MessageParser::malformed_message p)
+	{
+		PrintMalformedMessage(); m_Error = true;
 	}
+
 	if(m_Error)
 	{
 		CONSOLE_Print( "[MindTris Server] user [" + m_Socket->GetIPString( ) + "] disconnected: " + m_ErrorString );
@@ -234,33 +318,29 @@ bool User :: Update(fd_set * fd){
 }
 
 
-User :: User(MindTrisServer * nServer, DGMTProtocol *nProtocol, CTCPSocket *nSocket)
+User :: User(MindTrisServer & nServer, DGMTProtocol & nProtocol, unique_ptr<CTCPSocket> nSocket) :
+m_Protocol(nProtocol), m_MessageStreamer(nProtocol.GetProtocolIdentifier(),nProtocol.IsBigEndian()), m_Server(nServer)
 {
-	m_lobby = NULL;
-	m_Protocol = nProtocol;
+	m_loadedgame = false;
+	m_lobby = nullptr;
 	m_DeleteMe = false;
-	m_Server = nServer;
 	m_Error = false;
-	m_Socket = nSocket;
+	m_Socket.swap(nSocket);
+
 }
 
 User :: ~User()
 {
-	if( m_Socket )
-		delete m_Socket;
-	if( GetLobby() != NULL )
-	{
-		if(GetLobby()->GetCreator() == this) delete GetLobby();
-	}
-	while( !m_Packets.empty( ) )
-	{
-		delete m_Packets.front( );
-		m_Packets.pop( );
+	if(this->GetLobby()){
+		if(&GetLobby()->GetCreator() == this){
+			m_Server.DestroyLobby(GetLobby());
+		}else{
+			if(this->GetLobby()->UserLeave(*this)) SetLobby( nullptr);
+		}
 	}
 }
 
-void User::Send( BYTEARRAY data )
+void User::Send( Message && msg )
 {
-	if( m_Socket )
-		m_Socket->PutBytes( data );
+	m_MessageStreamer.Write(m_Socket->GetSendBuffer(), forward<Message>(msg));
 }

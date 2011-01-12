@@ -1,10 +1,37 @@
 ﻿
 #include "mindtriscore/includes.h"
 #include "mindtriscore/util.h"
+#include "mindtriscore/bytearray.h"
+#include "mindtriscore/bytebuffer.h"
 #include "mindtriscore/socket.h"
+#include "mindtriscore/commprotocol.h"
+#include "mindtriscore/packet.h"
+#include "mindtriscore/messagestreamer.h"
 #include "mindtriscore/serverprotocol.h"
 #include "mindtriscore/p2pprotocol.h"
+#include "mindtriscore/tetromino.h"
+
+#include <SFML/System.hpp>
+#include <SFML/Window.hpp>
+#include <SFML/Graphics.hpp>
+
+#include "state.h"
+#include "gfxmanager.h"
+#include "sfxmanager.h"
+
+#include "signals.h"
+#include "block.h"
+#include "mover.h"
+#include "moverprovider.h"
+#include "board.h"
+#include "ingame.h"
+#include "globals.h"
+#include "tetris.h"
+
+
 #include "peer.h"
+
+
 #include "mindtris.h"
 
 #include <locale>
@@ -169,173 +196,332 @@ void CONSOLE_Resize( )
 	CONSOLE_Draw( );
 }
 
+
+
 bool MindTrisClient :: ServerStatusUpdate(fd_set * fd){
 
-	if( !m_Socket )
+	if( !m_Socket  )
 		return true;
+	if( !m_Socket->GetConnected()) return false;
+
 
 	m_Socket->DoRecv( fd );
-	string * buffer = m_Socket->GetBytes( );
-	BYTEARRAY Bytes(buffer->begin(),buffer->end());
-
-	while( Bytes.size() >= DGMTProtocol::HEADERLENGTH )
-	{
-		DGMTPacket * packet = NULL;
-		if(m_Protocol->ExtractPacket(Bytes, &packet))
-		{
-			if(packet!=NULL)
-			{
-				uint16_t Length = packet->GetLength();
-				m_Packets.push( packet );
-				Bytes = BYTEARRAY(Bytes.begin()+Length,Bytes.end());
-				*buffer = buffer->substr( Length );
-			}else
-				break;
-		}else{
+	if(!m_MessageStreamer.Read(m_Socket->GetRecvBuffer( ),m_IncompletePacket,m_Messages)){
 			m_Error = true;
 			m_ErrorString = "received invalid packet from server";
-			break;
-		}
 	}
 
-	while( !m_Packets.empty( ) )
-	{
-		DGMTPacket *packet = m_Packets.front( );
+	queue<Message> UnhandledMessages;
 
-		m_Packets.pop( );
-
-		switch( packet->GetID( ) )
+	try{
+		while( !m_Messages.empty( ) )
 		{
-		case DGMTProtocol::DGMT_LOBBYCREATION:
-				{
 
-					DGMTLobbyCreation * info = m_Protocol-> RECEIVE_DGMT_LOBBYCREATION(packet->GetData());
-					if(info == NULL) {PrintMalformedPacket(); break;}
-					switch(info->GetAnswer())
+			size_t offset = 0;
+			Message message = m_Messages.front( );
+			m_Messages.pop( );
+
+			byte_t type = m_Protocol.GetMessageType(message,offset);
+			switch(GetClientState())
+			{
+				case STATE_CONNECTING:
+				{
+					if(type == DGMTProtocol::TYPE_HELLOFROMSERVER)
 					{
-						case DGMTProtocol::LOBBYCREATION_SUCCESS:
+						DGMTProtocol::ConnectionReply reply = m_Protocol.RECEIVE_HELLOFROMSERVER(message,offset);
+						if(reply.Connected()){ 
+							CONSOLE_Print("[MindTris++] Successfully connected to Server. Message from server:");
+
+							SetClientState(STATE_CONNECTED);
+
+							m_serverPublicKey = reply.GetPublicKey();
+
+							string modulusstring = m_serverPublicKey.GetModulus();
+							string exponentstring = m_serverPublicKey.GetExponent();
+							CryptoPP::Integer modulus,exponent;
+
+							modulus.Decode((byte *) modulusstring.data(), modulusstring.size(),CryptoPP::Integer::UNSIGNED);
+							exponent.Decode((byte *) exponentstring.data(), exponentstring.size(),CryptoPP::Integer::UNSIGNED);
+
+							CryptoPP::RSAFunction f;
+							f.Initialize(modulus,exponent);
+							m_Encryptor.reset(new CryptoPP::RSAES_OAEP_SHA_Encryptor(f));
+							CONSOLE_Print(reply.GetMessage());
+						}else{
+							CONSOLE_Print("[MindTris++] Message from server:" + reply.GetMessage());
+							SetClientState(STATE_SERVERREFUSED);
+						}
+					}
+					break;
+				}
+				case STATE_REGISTERINGUSER:
+					{
+						 if(type == DGMTProtocol::TYPE_USERCREATION)
+						{
+								DGMTProtocol::UserCreation reply = m_Protocol.RECEIVE_USERCREATION(message,offset);
+								switch(reply)
+								{
+									case DGMTProtocol::USERCREATION_SUCCESS:
+										{
+											SetClientState(STATE_REGISTEREDUSER);
+											CONSOLE_Print("[MindTris++] Successfully registered new user."); break;
+										}
+									default:
+										{
+											SetClientState(STATE_REGISTRATIONERROR);
+											CONSOLE_Print("[MindTris++] Error during registration."); break;
+										}
+								}
+						}
+						 break;
+					}
+				case STATE_LOGGINGIN:
+				{
+					if( type ==DGMTProtocol::TYPE_LOGINREPLY)
+					{
+						DGMTProtocol::LoginReply reply  = m_Protocol.RECEIVE_LOGINREPLY(message,offset);
+						switch(reply.GetAnswer())
+						{
+							case DGMTProtocol::LoginReply::LOGINREPLY_SUCCESS:
+							case DGMTProtocol::LoginReply::LOGINREPLY_SUCCESSDISCONNECTEDELSEWHERE:
+								{
+									CONSOLE_Print("[MindTris++] Successfully logged in!");
+									SetClientState(STATE_LOGGEDIN);
+									SetDisplayName(reply.GetDisplayName());
+									break;
+								}
+							case DGMTProtocol::LoginReply::LOGINREPLY_BADUSERNAMEPASSWORD:
+								{
+									SetClientState(STATE_REFUSEDLOGIN);
+									CONSOLE_Print("[MindTris++] Password/Username mismatch."); break;
+								}
+							case DGMTProtocol::LoginReply::LOGINREPLY_USERNAMEDOESNOTEXIST:
+								{
+									SetClientState(STATE_REFUSEDLOGIN);
+									CONSOLE_Print("[MindTris++] Username does not exist."); break;
+								}
+							default:
+								{
+									SetClientState(STATE_REFUSEDLOGIN);
+									CONSOLE_Print("[MindTris++] Unknown error while signing in."); break;
+								}
+						}
+					}
+				}
+				case STATE_LOGGEDIN:
+				{
+					switch( type )
+					{
+						case DGMTProtocol::TYPE_LOBBYCREATION:
 							{
-								CONSOLE_Print("[MindTris++] Lobby with ID"+UTIL_ToString(info->GetLobbyID())+" and Session ID "+UTIL_ToString(info->GetSessionID())+ " created.");
+
+								DGMTProtocol::LobbyCreation info = m_Protocol.RECEIVE_LOBBYCREATION(message,offset);
+								switch(info.GetAnswer())
+								{
+									case DGMTProtocol::LobbyCreation::LOBBYCREATION_SUCCESS:
+										{
+											SetInALobby(true);
+											StartP2PSocket();
+											m_lobbyid = info.GetLobbyID();
+											m_sessionid = info.GetSessionID();
+											m_peerid = info.GetPeerID();
+											for(int i=0;i<255;i++)
+											{
+												GetPeerInfoVector().push_back(move(unique_ptr<PeerInfo>(nullptr)));
+											}
+											CONSOLE_ChangeLobby("Lobby "+UTIL_ToString(m_lobbyid));
+											CONSOLE_AddLobbyPeer(GetDisplayName());
+											CONSOLE_Print("[MindTris++] Lobby with ID"+UTIL_ToString(info.GetLobbyID())+" and Session ID "+UTIL_ToString(info.GetSessionID())+ " created.");
+											break;
+										}
+									default :
+										{
+											CONSOLE_Print("[MindTris++] Error during lobby creation.");
+										}
+								}
 								break;
 							}
-						default :
+						case DGMTProtocol::TYPE_LOBBYLIST:
 							{
-								CONSOLE_Print("[MindTris++] Error during lobby creation.");
+								vector<DGMTProtocol::LobbyInfo> v= m_Protocol.RECEIVE_LOBBYLIST(message,offset);
+								CONSOLE_Print(" ");
+								CONSOLE_Print("  Received Lobby List from Server:");
+								CONSOLE_Print(" (* = password protected ) ");
+								for (vector<DGMTProtocol::LobbyInfo>::iterator it = v.begin(); it != v.end(); it++) 
+								{
+									string pass = ""; if (it->GetHasPassword()) pass = "*";
+									CONSOLE_Print("  "+pass+"ID: "+UTIL_ToString(it->GetLobbyId())+"; ["+it->GetLobbyName()+"] created by "+ it->GetCreatorDisplayName()+" ("+UTIL_ToString(it->GetPlayerCount())+"/"+UTIL_ToString(it->GetMaxPlayers())+")");
+								}
+								break;
 							}
-					}
-					delete info;
-					break;
-				}
-			case DGMTProtocol::DGMT_LOBBYLIST:
-				{
-					vector<DGMTLobbyInfo> * v= m_Protocol-> RECEIVE_DGMT_LOBBYLIST(packet->GetData( ));
-					if(v == NULL) {PrintMalformedPacket(); break;}
-					CONSOLE_Print(" ");
-					CONSOLE_Print("  Received Lobby List from Server:");
-					CONSOLE_Print(" (* = password protected ) ");
-					for (vector<DGMTLobbyInfo>::iterator it = v->begin(); it != v->end(); it++) 
-					{
-						string pass = ""; if (it->GetHasPassword()) pass = "*";
-						CONSOLE_Print("  "+pass+"ID: "+UTIL_ToString(it->GetLobbyId())+"; ["+it->GetLobbyName()+"] created by "+ it->GetCreatorDisplayName()+" ("+UTIL_ToString(it->GetPlayerCount())+"/"+UTIL_ToString(it->GetMaxPlayers())+")");
-					}
-					delete v;
-					break;
-				}
-			case DGMTProtocol::DGMT_JOINEDLOBBY:
-				{
-					DGMTJoinedLobby * info = m_Protocol->RECEIVE_DGMT_JOINEDLOBBY(packet->GetData());
-					if(info == NULL) {PrintMalformedPacket(); break;}
-					switch(info->GetAnswer())
-					{
-						case DGMTProtocol::JOINEDLOBBY_SUCCESS:
-						{
-							SetInALobby(true);
-							StartP2PSocket();
-							m_lobbyid = info->GetLobbyID();
-							m_sessionid = info->GetSessionID();
-							m_peerid = info->GetPeerID();
-							GetPeerInfoVector()->resize(255,NULL);
-							CONSOLE_ChangeLobby("Lobby "+UTIL_ToString(m_lobbyid));
-							CONSOLE_AddLobbyPeer(GetDisplayName());
-							for (vector<DGMTClientLobbyInfo>::iterator it = info->GetClientLobbyList()->begin(); it != info->GetClientLobbyList()->end(); it++) 
+						case DGMTProtocol::TYPE_JOINEDLOBBY:
 							{
-								GetPeerInfoVector()->at(it->GetPeerID())= new PeerInfo(it->GetPeerID(), it->GetDisplayName(), it->GetIPAddress(), it->GetPortNumber(), it->GetPublicKey());
-								GetPeers()->push_back( new Peer( this, m_P2PProtocol, it->GetPeerID(), it->GetDisplayName(), it->GetIPAddress(), it->GetPortNumber(), it->GetPublicKey()) );
-								CONSOLE_AddLobbyPeer(it->GetDisplayName());
+								DGMTProtocol::JoinedLobby info = m_Protocol.RECEIVE_JOINEDLOBBY(message,offset);
+								switch(info.GetAnswer())
+								{
+									case DGMTProtocol::JoinedLobby::JOINEDLOBBY_SUCCESS:
+									{
+										SetInALobby(true);
+										StartP2PSocket();
+										m_lobbyid = info.GetLobbyID();
+										m_sessionid = info.GetSessionID();
+										m_peerid = info.GetPeerID();
+										for(int i=0;i<255;i++)
+										{
+											GetPeerInfoVector().push_back(move(unique_ptr<PeerInfo>(nullptr)));
+										}
+										CONSOLE_ChangeLobby("Lobby "+UTIL_ToString(m_lobbyid));
+										CONSOLE_AddLobbyPeer(GetDisplayName());
+										for (vector<DGMTProtocol::ClientLobbyInfo>::const_iterator it = info.GetClientLobbyList().begin(); it != info.GetClientLobbyList().end(); it++) 
+										{
+											GetPeerInfoVector().at(it->GetPeerID()).reset(new PeerInfo(it->GetPeerID(), it->GetDisplayName(), it->GetIPAddress(), it->GetPortNumber(), it->GetPublicKey()));
+											GetPeers().push_back( move(unique_ptr<Peer>(new Peer( *this, m_P2PProtocol, it->GetPeerID(), it->GetDisplayName(), it->GetIPAddress(), it->GetPortNumber(), it->GetPublicKey()) )));
+											CONSOLE_AddLobbyPeer(it->GetDisplayName());
+										}
+										CONSOLE_Print("[MindTris++] Successfully joined lobby ID "+UTIL_ToString(info.GetLobbyID())+".");
+										break;
+									}
+									case DGMTProtocol::JoinedLobby::JOINEDLOBBY_LOBBYFULL:
+									{
+										CONSOLE_Print("[MindTris++] Can't join lobby ID "+UTIL_ToString(info.GetLobbyID())+": Lobby is full.");
+										break;
+									}
+									case DGMTProtocol::JoinedLobby::JOINEDLOBBY_WRONGPASSWORD:
+									{
+										CONSOLE_Print("[MindTris++] Error while joining lobby ID "+UTIL_ToString(info.GetLobbyID())+": Incorrect password.");
+										break;
+									}
+									default:
+									{
+										CONSOLE_Print("[MindTris++] Error while joining lobby ID "+UTIL_ToString(info.GetLobbyID())+".");
+										break;
+									}
+								}
+								break;
 							}
-							CONSOLE_Print("[MindTris++] Successfully joined lobby ID "+UTIL_ToString(info->GetLobbyID())+".");
-							break;
-						}
-						case DGMTProtocol::JOINEDLOBBY_LOBBYFULL:
-						{
-							CONSOLE_Print("[MindTris++] Can't join lobby ID "+UTIL_ToString(info->GetLobbyID())+": Lobby is full.");
-							break;
-						}
-						case DGMTProtocol::JOINEDLOBBY_WRONGPASSWORD:
-						{
-							CONSOLE_Print("[MindTris++] Error while joining lobby ID "+UTIL_ToString(info->GetLobbyID())+": Incorrect password.");
-							break;
-						}
-						default:
-						{
-							CONSOLE_Print("[MindTris++] Error while joining lobby ID "+UTIL_ToString(info->GetLobbyID())+".");
-							break;
-						}
-					}
-					break;
-					delete info;
-				}
-			case DGMTProtocol::DGMT_UPDATECLIENTSTATUS:
-				{
-					DGMTUpdateClientStatus * info= m_Protocol-> RECEIVE_DGMT_UPDATECLIENTSTATUS(packet->GetData( ));
-					if(info == NULL) {PrintMalformedPacket(); break;}
-					DGMTClientLobbyInfo * peerinfo = info->GetClientLobbyInfo();
-					switch(info->GetStatusUpdate())
-					{
-						case DGMTProtocol::STATUSUPDATE_HASJOINEDTHELOBBY:
-						{
-							GetPeerInfoVector()->at(peerinfo->GetPeerID()) = new PeerInfo(peerinfo->GetPeerID(), peerinfo->GetDisplayName(), peerinfo->GetIPAddress(), peerinfo->GetPortNumber(), peerinfo->GetPublicKey());
+						case DGMTProtocol::TYPE_GAMESTARTING:
+							{
+								switch(m_Protocol.RECEIVE_GAMESTARTING(message,offset))
+								{
+									case DGMTProtocol::GAMESTARTING_STARTING:
+										CONSOLE_Print("[Mindtris++] Server has accepted START GAME request...");break;
 
-							CONSOLE_Print("[Mindtris++] User "+peerinfo->GetDisplayName()+" has joined the lobby.");
+									default:
+										CONSOLE_Print("[Mindtris++] Server has refused a START GAME request.");break;
+								}
+								break;
+							}
+						case DGMTProtocol::TYPE_LOADGAME:
+							{
+								CONSOLE_Print("[Mindtris++] Received a load game request...");
+								new_pieces = m_Protocol.RECEIVE_LOADGAME(message,offset);	
+								m_tetris.reset(new Tetris(&m_gamestarted,new_pieces ,800, 600, 32, false ));	
+								CONSOLE_Print("[Mindtris++] Loaded game.");
+								m_MessageStreamer.Write(m_Socket->GetSendBuffer(),m_Protocol.SEND_LOADEDGAME(DGMTProtocol::LOADEDGAME_READY));
+								break;
+							}
+						case DGMTProtocol::TYPE_BEGINGAME:
+							{
+								CONSOLE_Print("[Mindtris++] Begin game.");
+								m_Protocol.RECEIVE_BEGINGAME(message,offset);
+								while(!GetGame().GetMutex())
+								{
+								}
+								{
+									boost::mutex::scoped_lock l(*GetGame().GetMutex());
+									SetGameStarted(true);
+								}
+
+								break;
+							}
+						case DGMTProtocol::TYPE_NEWPIECES:
+							{
+								CONSOLE_Print("[Mindtris++] Receiving new pieces from the server.");
+								DGMTProtocol::NewPieces pieces = m_Protocol.RECEIVE_NEWPIECES(message,offset);
+								if(pieces.GetOffset()==GetGame().GetPieceOffset()){
+									CONSOLE_Print("[Mindtris++] matched offset...");
+									for(vector<uint8_t>::const_iterator iter =pieces.GetPieces().begin(); iter != pieces.GetPieces().end(); iter++){
+										CONSOLE_Print("[Mindtris++] Received piece: "+UTIL_ToString(*iter));
+										GetGame().AddNextPiece(*iter);
+									}
+								}
+								break;
+							}
+						case DGMTProtocol::TYPE_UPDATECLIENTSTATUS:
+							{
+								DGMTProtocol::UpdateClientStatus info= m_Protocol.RECEIVE_UPDATECLIENTSTATUS(message,offset);
+								const DGMTProtocol::ClientLobbyInfo peerinfo = info.GetClientLobbyInfo();
+								switch(info.GetStatusUpdate())
+								{
+									case DGMTProtocol::UpdateClientStatus::STATUSUPDATE_HASJOINEDTHELOBBY:
+									{
+										GetPeerInfoVector().at(peerinfo.GetPeerID()).reset(new PeerInfo(peerinfo.GetPeerID(), peerinfo.GetDisplayName(), peerinfo.GetIPAddress(), peerinfo.GetPortNumber(), peerinfo.GetPublicKey()));
+
+										CONSOLE_Print("[Mindtris++] User "+peerinfo.GetDisplayName()+" has joined the lobby.");
 						
-							CONSOLE_AddLobbyPeer(peerinfo->GetDisplayName());
-							break;
-						}
-						case DGMTProtocol::STATUSUPDATE_HASBEENKICKED:
-						{
-							if(peerinfo->GetPeerID()==GetPeerID())
-							{
-								UpdateLeaveLobby();
-							}else{
-								PeerInfo * peerinfop = GetPeerInfoVector()->at(peerinfo->GetPeerID());
-								CONSOLE_Print("[Mindtris++] User "+peerinfop->GetDisplayName()+" has been kicked the lobby.");
-								CONSOLE_RemoveLobbyPeer(peerinfop->GetDisplayName());
-								GetPeerInfoVector()->at(peerinfo->GetPeerID())=NULL;
-								delete peerinfop;
+										CONSOLE_AddLobbyPeer(peerinfo.GetDisplayName());
+										break;
+									}
+									case DGMTProtocol::UpdateClientStatus::STATUSUPDATE_HASBEENKICKED:
+									{
+										if(peerinfo.GetPeerID()==GetPeerID())
+										{
+											UpdateLeaveLobby();
+										}else{
+											unique_ptr<PeerInfo> & peerinfop = GetPeerInfoVector().at(peerinfo.GetPeerID());
+											CONSOLE_Print("[Mindtris++] User "+peerinfop->GetDisplayName()+" has been kicked the lobby.");
+											CONSOLE_RemoveLobbyPeer(peerinfop->GetDisplayName());
+											GetPeerInfoVector().at(peerinfo.GetPeerID()).reset(nullptr);
+
+										}
+										break;
+									}
+									case DGMTProtocol::UpdateClientStatus::STATUSUPDATE_HASLEFTTHELOBBY:
+									{
+										if(peerinfo.GetPeerID()==GetPeerID())
+										{
+											UpdateLeaveLobby();
+										}else{
+											unique_ptr<PeerInfo> & peerinfop = GetPeerInfoVector().at(peerinfo.GetPeerID());
+											CONSOLE_Print("[Mindtris++] User "+peerinfop->GetDisplayName()+" has left the lobby.");
+											CONSOLE_RemoveLobbyPeer(peerinfop->GetDisplayName());
+											GetPeerInfoVector().at(peerinfo.GetPeerID()).reset(nullptr);
+										}
+										break;
+									}
+								}
 								break;
 							}
-						}
-						case DGMTProtocol::STATUSUPDATE_HASLEFTTHELOBBY:
-						{
-							if(peerinfo->GetPeerID()==GetPeerID())
-							{
-								UpdateLeaveLobby();
-							}else{
-								PeerInfo * peerinfop = GetPeerInfoVector()->at(peerinfo->GetPeerID());
-								CONSOLE_Print("[Mindtris++] User "+peerinfop->GetDisplayName()+" has left the lobby.");
-								CONSOLE_RemoveLobbyPeer(peerinfop->GetDisplayName());
-								GetPeerInfoVector()->at(peerinfo->GetPeerID())=NULL;
-								delete peerinfop;
-								break;
-							}
-						}
+											
 					}
 				}
-			default:
-				 break;
+			}
 		}
-
-		delete packet;
+	}catch (DGMTProtocol::Err p)
+	{
+		PrintMalformedMessage(); m_Error = true;
+	}catch (MessageParser::malformed_message p)
+	{
+		PrintMalformedMessage(); m_Error = true;
+	}
+	if(m_gamestarted){
+		if(GetGame().GetRoundData()->size())
+		{
+			boost::mutex::scoped_lock l(*GetGame().GetMutex());
+			for(vector<pair<uint32_t,vector<DGMTP2PProtocol::Move>>>::iterator iter = GetGame().GetRoundData()->begin(); iter != GetGame().GetRoundData()->end(); iter++)
+			{
+				for( vector<unique_ptr<Peer>> :: iterator i = GetPeers().begin( ); i != GetPeers().end( );  i++ )
+				{
+					(*i)->SendRoundData(m_sessionid, iter->first, iter->second,m_Signer);
+				}
+			}
+			GetGame().GetRoundData()->clear();
+		}
+		uint8_t number = GetGame().RequestMorePieces();
+		if(number>0)
+		{
+			m_MessageStreamer.Write(m_Socket->GetSendBuffer(),m_Protocol.SEND_GIVENEWPIECES(GetGame().GetPieceOffset(),number));
+		}
 	}
 	if(m_Error)
 	{
@@ -357,7 +543,7 @@ bool MindTrisClient ::Update(long usecBlock){
 
 	// Peer sockets
 
-	for( vector<Peer *> :: iterator i = GetPeers()->begin( ); i != GetPeers()->end( ); i++ )
+	for( vector<unique_ptr<Peer>> :: iterator i = GetPeers().begin( ); i != GetPeers().end( ); i++ )
 	{
 		(*i)->GetSocket( )->SetFD( &fd, &send_fd, &nfds );
 		NumFDs++;
@@ -412,16 +598,18 @@ bool MindTrisClient ::Update(long usecBlock){
 
 	if( m_P2PSocket )
 	{
-		CTCPSocket *NewSocket = m_P2PSocket->Accept( &fd );
+		unique_ptr<CTCPSocket> NewSocket(m_P2PSocket->Accept( &fd ));
 
 		if( NewSocket )
 		{
 
 				NewSocket->SetNoDelay( true );
-
-				GetPeers()->push_back( new Peer( this, m_P2PProtocol, NewSocket ) );
-
+				
 				CONSOLE_Print( "[MindTris++] connection attempt from [" + NewSocket->GetIPString( ) + "]" );
+
+				GetPeers().push_back( move(unique_ptr<Peer>(new Peer(*this,m_P2PProtocol,NewSocket))));
+
+
 		}
 
 		if( m_P2PSocket->HasError( ) )
@@ -431,265 +619,92 @@ bool MindTrisClient ::Update(long usecBlock){
 		}
 	}
 
-	for( vector<Peer *> :: iterator i = GetPeers()->begin( ); i != GetPeers()->end( );  )
+	for( vector<unique_ptr<Peer>> :: iterator i = GetPeers().begin( ); i != GetPeers().end( );  )
 	{
 
 		if( (*i)->Update( &fd ) )
 		{
-			delete *i;
-			i = GetPeers()->erase( i );
+			i = GetPeers().erase( i );
 		}
 		else i++;
 	}
 
 
-	for( vector<Peer *> :: iterator i = GetPeers()->begin( ); i != GetPeers()->end( ); i++ )
+	for( vector<unique_ptr<Peer>> :: iterator i = GetPeers().begin( ); i != GetPeers().end( ); i++ )
 	{
 			if( (*i)->GetSocket( ) )
 			{
-				if( (*i)->GetSocket()->GetConnected()) (*i)->GetSocket( )->DoSend( &send_fd );
+				if( (*i)->GetSocket()->GetConnected()){ (*i)->GetSocket( )->DoSend( &send_fd );  }
 				else{
-					if((*i)->GetClientInitiatedHandshake()){
+					if((*i)->GetConnectionStatus() == Peer::STATUS_CONNECTIONREQUEST){
 						if(  (*i)->GetClientSocket( )->GetConnecting( ) )
 						{
 						// we are currently attempting to connect
 
-						(*i)->GetClientSocket( )->CheckConnect( );
+							(*i)->GetClientSocket( )->CheckConnect( );
 						}
 					}
 				}
 				
 			}
 	}
+	if(m_DeleteMe) return true;
 	return false;
 
 }
 
 void MindTrisClient ::SendChatCommand(string message){
-	for( vector<Peer *> :: iterator i = GetPeers()->begin( ); i != GetPeers()->end( );  i++ )
+	for( vector<unique_ptr<Peer>> :: iterator i = GetPeers().begin( ); i != GetPeers().end( );  i++ )
 	{
-		(*i)->GetSocket()->PutBytes(m_P2PProtocol->SEND_CHATSEND("", message));
+		(*i)->SendChat(m_sessionid,message,m_Signer);
 	}
 
 }
 
-void MindTrisClient :: PrintMalformedPacket(){
-	CONSOLE_Print( "[MindTris++] Received malformed packet from [" + m_Socket->GetIPString( ) + "]" );
+void MindTrisClient :: PrintMalformedMessage(){
+	CONSOLE_Print( "[MindTris++] Received malformed message from [" + m_Socket->GetIPString( ) + "]" );
 }
 
 void MindTrisClient::RegisterUser(string username, string displayname, string email, string password){
 	CONSOLE_Print("[MindTris++] Registering new user...");
-	fd_set fd;
-	fd_set send_fd;
-	int nfds = 0;
-
-	m_Socket->PutBytes(m_Protocol->SEND_DGMT_CREATEUSER(username,displayname,email,password,m_Encryptor));
-
-
-	bool done = false;
-	while(!done)
-	{
-	
-		FD_ZERO( &fd );
-		FD_ZERO( &send_fd );
-		m_Socket->SetFD( &fd, &send_fd, &nfds );
-
-		struct timeval tv;
-		tv.tv_sec = 0;
-		tv.tv_usec = 50000;
-
-		struct timeval send_tv;
-		send_tv.tv_sec = 0;
-		send_tv.tv_usec = 0;
-
-		#ifdef WIN32
-			select( 1, &fd, NULL, NULL, &tv );
-			select( 1, NULL, &send_fd, NULL, &send_tv );
-		#else
-			select( nfds + 1, &fd, NULL, NULL, &tv );
-			select( nfds + 1, NULL, &send_fd, NULL, &send_tv );
-		#endif
-
-		m_Socket->DoSend(&send_fd);
-		m_Socket->DoRecv(&fd);
-
-		string * buffer = m_Socket->GetBytes( );
-
-		while( buffer->size( ) >=  DGMTProtocol::HEADERLENGTH )
-		{
-			BYTEARRAY Bytes(buffer->begin(),buffer->end());
-			DGMTPacket * packet = NULL;
-			if(m_Protocol->ExtractPacket(Bytes, &packet))
-			{
-				if(packet!=NULL)
-				{
-					uint16_t Length = packet->GetLength();
-					DGMTProtocol::UserCreation reply;
-					if(packet->GetID() == DGMTProtocol::DGMT_USERCREATION)
-					{
-						reply = m_Protocol->RECEIVE_DGMT_USERCREATION(packet->GetData());
-						switch(reply)
-						{
-							case DGMTProtocol::USERCREATION_SUCCESS:
-								{
-									CONSOLE_Print("[MindTris++] Successfully registered new user."); break;
-								}
-							default:
-								{
-									CONSOLE_Print("[MindTris++] Error during registration."); break;
-								}
-						}
-						done = true;
-					}
-
-
-					Bytes = BYTEARRAY(Bytes.begin()+Length,Bytes.end());
-					*buffer = buffer->substr( Length );
-				}else{
-					break;
-				}
-			}else{
-				m_Error = true;
-				break;
-			}
-		}
-		if(m_Error)
-		{
-			CONSOLE_Print("[MindTris++] received invalid packet from server. Closing...");
-			this->~MindTrisClient();
-			return;
-		}
-	}
-
+	m_MessageStreamer.Write(m_Socket->GetSendBuffer(),m_Protocol.SEND_CREATEUSER(username,displayname,email,password,*m_Encryptor));
+	SetClientState(STATE_REGISTERINGUSER);
 }
-
 void MindTrisClient::Login(string username, string password)
 {
 	CONSOLE_Print("[MindTris++] Logging in user "+username+"...");
-	
-	fd_set fd;
-	fd_set send_fd;
-	int nfds = 0;
-	m_Socket->PutBytes(m_Protocol->SEND_DGMT_LOGIN(username,password,m_Encryptor));
+	m_MessageStreamer.Write(m_Socket->GetSendBuffer(),m_Protocol.SEND_LOGIN(username,password,*m_Encryptor));
+	SetClientState(STATE_LOGGINGIN);
 
-	bool done = false;
-	while(!done)
-	{
-	
-		FD_ZERO( &fd );
-		FD_ZERO( &send_fd );
-		m_Socket->SetFD( &fd, &send_fd, &nfds );
-
-	
-		struct timeval tv;
-		tv.tv_sec = 0;
-		tv.tv_usec = 50000;
-
-		struct timeval send_tv;
-		send_tv.tv_sec = 0;
-		send_tv.tv_usec = 0;
-
-		#ifdef WIN32
-			select( 1, &fd, NULL, NULL, &tv );
-			select( 1, NULL, &send_fd, NULL, &send_tv );
-		#else
-			select( nfds + 1, &fd, NULL, NULL, &tv );
-			select( nfds + 1, NULL, &send_fd, NULL, &send_tv );
-		#endif
-
-		m_Socket->DoSend(&send_fd);
-		m_Socket->DoRecv(&fd);
-
-		string * buffer = m_Socket->GetBytes( );
-
-		while( buffer->size( ) >=  DGMTProtocol::HEADERLENGTH )
-		{
-			BYTEARRAY Bytes(buffer->begin(),buffer->end());
-			DGMTPacket * packet = NULL;
-			if(m_Protocol->ExtractPacket(Bytes, &packet))
-			{
-				if(packet!=NULL)
-				{
-					uint16_t Length = packet->GetLength();
-					DGMTLoginReply * reply;
-					if(packet->GetID() == DGMTProtocol::DGMT_LOGINREPLY)
-					{
-						reply = m_Protocol->RECEIVE_DGMT_LOGINREPLY(packet->GetData());
-						if(reply ==NULL) 
-						{
-							PrintMalformedPacket();
-						}else{
-							switch(reply->GetAnswer())
-							{
-								case DGMTProtocol::LOGINREPLY_SUCCESS:
-								case DGMTProtocol::LOGINREPLY_SUCCESSDISCONNECTEDELSEWHERE:
-									{
-										CONSOLE_Print("[MindTris++] Successfully logged in!");
-										SetHasLoggedIn(true);
-										SetDisplayName(reply->GetDisplayName());
-										break;
-									}
-								case DGMTProtocol::LOGINREPLY_BADUSERNAMEPASSWORD:
-									{
-										CONSOLE_Print("[MindTris++] Password/Username mismatch."); break;
-									}
-								case DGMTProtocol::LOGINREPLY_USERNAMEDOESNOTEXIST:
-									{
-										CONSOLE_Print("[MindTris++] Username does not exist."); break;
-									}
-								default:
-									{
-										CONSOLE_Print("[MindTris++] Unknown error while signing in."); break;
-									}
-							}
-							done = true;
-						}
-					}
-
-					Bytes = BYTEARRAY(Bytes.begin()+Length,Bytes.end());
-					*buffer = buffer->substr( Length );
-				}else
-					break;
-			}else{
-				m_Error = true;
-				break;
-			}
-		}
-		if(m_Error)
-		{
-			CONSOLE_Print("[MindTris++] received invalid packet from server. Closing...");
-			this->~MindTrisClient();
-			return;
-		}
-	}
 
 }
 
 void MindTrisClient::CreateLobby(string lobbyname, uint8_t maxplayers,bool haspassword,string password){
-	m_Socket->PutBytes(m_Protocol->SEND_DGMT_CREATELOBBY(lobbyname,maxplayers,haspassword,password,m_Encryptor));
+	m_MessageStreamer.Write(m_Socket->GetSendBuffer(),m_Protocol.SEND_CREATELOBBY(lobbyname,maxplayers,haspassword,password,*m_Encryptor,m_listenport,m_PublicKey));
 }
 
 void MindTrisClient::JoinLobby(uint32_t lobbyid, string password){
-	m_Socket->PutBytes(m_Protocol->SEND_DGMT_JOINLOBBY(lobbyid,password,m_listenport,m_PublicKey));
+	m_MessageStreamer.Write(m_Socket->GetSendBuffer(),m_Protocol.SEND_JOINLOBBY(lobbyid,password,m_listenport,m_PublicKey));
 }
 
 void MindTrisClient::LeaveLobby(){
-	m_Socket->PutBytes(m_Protocol->SEND_DGMT_LEAVELOBBY());
+	m_MessageStreamer.Write(m_Socket->GetSendBuffer(),m_Protocol.SEND_LEAVELOBBY());
+}
+
+void MindTrisClient::StartGame(){
+	m_MessageStreamer.Write(m_Socket->GetSendBuffer(),m_Protocol.SEND_STARTGAME());
 }
 
 void MindTrisClient::RetrieveLobbyList(){
-	m_Socket->PutBytes(m_Protocol->SEND_DGMT_GETLOBBYLIST());
+	m_MessageStreamer.Write(m_Socket->GetSendBuffer(),m_Protocol.SEND_GETLOBBYLIST());
 }
 
 void MindTrisClient::StopP2PSocket(){
-	if(m_P2PSocket){
-		delete m_P2PSocket;
-		m_P2PSocket = NULL;
-	}
+	m_P2PSocket.reset(nullptr);
 }
 
 void MindTrisClient::StartP2PSocket(){
-	m_P2PSocket = new CTCPServer(&CONSOLE_Print,true);
+	m_P2PSocket.reset(new CTCPServer(&CONSOLE_Print,true));
 	if( m_P2PSocket->Listen( "", m_listenport ) )
 		CONSOLE_Print( "[MindTris++] listening on port " + UTIL_ToString( m_listenport ) );
 	else
@@ -698,38 +713,48 @@ void MindTrisClient::StartP2PSocket(){
 	}
 }
 
-MindTrisClient::MindTrisClient(string address, uint16_t port, uint16_t clientport){
+MindTrisClient::MindTrisClient(string address, uint16_t port, uint16_t clientport):
+m_MessageStreamer(m_Protocol.GetProtocolIdentifier(),m_Protocol.IsBigEndian())
 
+{
+	
+	m_gamestarted = false;
 	CryptoPP::AutoSeededRandomPool rng;
-	CryptoPP::InvertibleRSAFunction params;
-	params.GenerateRandomWithKeySize(rng, 3072);
 
-	CryptoPP::Integer modulus = params.GetModulus();
-	CryptoPP::Integer exponent = params.GetPublicExponent();
-		
-	string modulusstring;
-	CryptoPP::TransparentFilter modulusFilter(new CryptoPP::StringSink(modulusstring));
-	modulus.Encode(modulusFilter,modulus.MinEncodedSize());
+	// Generate Private Key
+	CryptoPP::DSA::PrivateKey PrivateKey;
+	PrivateKey.GenerateRandomWithKeySize(rng, 1024);
+   
+	// Generate Public Key   
+	CryptoPP::DSA::PublicKey PublicKey;
+	PublicKey.AssignFrom(PrivateKey);
+	if (!PrivateKey.Validate(rng, 3) || !PublicKey.Validate(rng, 3))
+	{
+		throw runtime_error("DSA key generation failed");
+	}
+	
+	CryptoPP::Integer i_p = PublicKey.GetGroupParameters().GetModulus();
+	CryptoPP::Integer i_q = PublicKey.GetGroupParameters().GetSubgroupOrder();
+	CryptoPP::Integer i_g = PublicKey.GetGroupParameters().GetGenerator();
+	CryptoPP::Integer i_y = PublicKey.GetPublicElement();
 
-	string exponentstring;
-	CryptoPP::TransparentFilter exponentFilter(new CryptoPP::StringSink(exponentstring));
-	exponent.Encode(exponentFilter,exponent.MinEncodedSize());
+	string s_p,s_q,s_g,s_y;
 
-	m_PublicKey = new RSAPublicKey();
-	m_PublicKey->Exponent = exponentstring;
-	m_PublicKey->Modulus = modulusstring;
+	i_p.Encode(CryptoPP::StringSink(s_p),i_p.MinEncodedSize());
+	i_q.Encode(CryptoPP::StringSink(s_q),i_q.MinEncodedSize());
+	i_g.Encode(CryptoPP::StringSink(s_g),i_g.MinEncodedSize());
+	i_y.Encode(CryptoPP::StringSink(s_y),i_y.MinEncodedSize());
 
-	m_peers = new vector<Peer *>;
-	m_peerinfovector = new vector<PeerInfo *>;
+	m_PublicKey = DSAPublicKey(move(s_p),move(s_q),move(s_g),move(s_y));
+
+	m_Signer.reset(new CryptoPP::DSA::Signer(PrivateKey));
+
 	m_DeleteMe = false;
-	m_P2PProtocol = new DGMTP2PProtocol(true);
-	m_P2PSocket = NULL;
 	m_listenport = clientport;
 	m_inalobby = false;
-	m_Socket = new CTCPClient( &CONSOLE_Print, false);
+	m_Socket.reset( new CTCPClient( &CONSOLE_Print, false));
 	m_Error= false;
-	m_hasloggedin = false;
-	m_Protocol = new DGMTProtocol(true);
+
 
 	CONSOLE_Print("[MindTris++] Attempting to connect to server at ["+address+"] on port "+ UTIL_ToString(port));
 	CONSOLE_Print("[MindTris++] Connecting...");
@@ -743,140 +768,37 @@ MindTrisClient::MindTrisClient(string address, uint16_t port, uint16_t clientpor
 
 	CONSOLE_Print("[MindTris++] Checking Server Version...");
 
-	m_Socket->PutBytes(m_Protocol->SEND_DGMT_HELLOFROMCLIENT());
+	m_MessageStreamer.Write(m_Socket->GetSendBuffer(),m_Protocol.SEND_HELLOFROMCLIENT());
 	
 	CONSOLE_Print("[MindTris++] Awaiting reply...");
+	SetClientState(STATE_CONNECTING);
 
-	fd_set fd;
-	fd_set send_fd;
-	int nfds = 0;
-
-	bool done = false;
-	while(!done)
-	{
-	
-		FD_ZERO( &fd );
-		FD_ZERO( &send_fd );
-		m_Socket->SetFD( &fd, &send_fd, &nfds );
-
-		struct timeval tv;
-		tv.tv_sec = 0;
-		tv.tv_usec = 50000;
-
-		struct timeval send_tv;
-		send_tv.tv_sec = 0;
-		send_tv.tv_usec = 0;
-
-		#ifdef WIN32
-			select( 1, &fd, NULL, NULL, &tv );
-			select( 1, NULL, &send_fd, NULL, &send_tv );
-		#else
-			select( nfds + 1, &fd, NULL, NULL, &tv );
-			select( nfds + 1, NULL, &send_fd, NULL, &send_tv );
-		#endif
-
-
-
-		m_Socket->DoSend(&send_fd);
-		m_Socket->DoRecv(&fd);
-
-		string * buffer = m_Socket->GetBytes( );
-
-		while( buffer->size( ) >=  DGMTProtocol::HEADERLENGTH )
-		{
-			BYTEARRAY Bytes(buffer->begin(),buffer->end());
-
-			DGMTPacket * packet = NULL;
-			if(m_Protocol->ExtractPacket(Bytes, &packet))
-			{
-				if(packet!=NULL)
-				{
-					uint16_t Length = packet->GetLength();
-					DGMTConnectionReply * reply;
-					if(packet->GetID() == DGMTProtocol::DGMT_HELLOFROMSERVER)
-					{
-						reply = m_Protocol->RECEIVE_DGMT_HELLOFROMSERVER(packet->GetData());
-						if(reply==NULL){ 
-							CONSOLE_Print("[MindTris++] received malformed HELLO_FROM_SERVER packet from server. Closing...");
-							assert(false);
-						}else{
-							if(reply->Connected()){ 
-								CONSOLE_Print("[MindTris++] Successfully connected to Server. Message from server:");
-								m_serverPublicKey = reply->GetPublicKey();
-								string modulusstring = m_serverPublicKey->Modulus;
-								string exponentstring = m_serverPublicKey->Exponent;
-								CryptoPP::Integer modulus;
-								CryptoPP::Integer exponent;
-
-								modulus.Decode((byte *) modulusstring.data(), modulusstring.size(),CryptoPP::Integer::UNSIGNED);
-								exponent.Decode((byte *) exponentstring.data(), exponentstring.size(),CryptoPP::Integer::UNSIGNED);
-								CryptoPP::RSAFunction f;
-								f.Initialize(modulus,exponent);
-								m_Encryptor = new CryptoPP::RSAES_OAEP_SHA_Encryptor(f);
-								CONSOLE_Print(reply->GetMessage());
-							}else{
-								CONSOLE_Print("[MindTris++] Message from server:" + reply->GetMessage());
-							}
-							delete reply;
-						}
-						done = true;
-					}
-	
-					Bytes = BYTEARRAY(Bytes.begin()+Length,Bytes.end());
-					*buffer = buffer->substr( Length );
-				}else
-					break;
-			}else{
-				m_Error = true;
-				break;
-			}
-		}
-		if(m_Error)
-		{
-			CONSOLE_Print("[MindTris++] received invalid packet from server. Closing...");
-			delete m_Socket;
-			return;
-		}
-	}
 
 }
 
-void WaitForStringInput(string question, string helper, string &s){
-	CONSOLE_Print( "");
-	CONSOLE_Print( "  "+question+" ");
-	CONSOLE_Print( "");
 
-	do
-	{
-		CONSOLE_PrintNoCRLF( "  "+helper+": " );
-		getline( cin, s );
-	} while( s.empty() );
-}
 
 void MindTrisClient::UpdateLeaveLobby()
 {
 	CONSOLE_Print("[MindTris++] Leaving lobby. Closing peer connections ...");
-	for (vector<PeerInfo *>::iterator it = GetPeerInfoVector()->begin(); it != GetPeerInfoVector()->end(); it++) 
+	for (vector<unique_ptr<PeerInfo>>::iterator it = GetPeerInfoVector().begin(); it != GetPeerInfoVector().end(); it++) 
 	{
-		if( *it !=NULL)
+		if( *it)
 		{
-			delete (*it);
+			it->reset(nullptr);
 		}
 	}
-	GetPeerInfoVector()->clear();
-	for (vector<Peer *>::iterator it = GetPeers()->begin(); it != GetPeers()->end(); it++) 
+	GetPeerInfoVector().clear();
+	for (vector<unique_ptr<Peer>>::iterator it = GetPeers().begin(); it != GetPeers().end(); it++) 
 	{
 		CONSOLE_RemoveLobbyPeer((*it)->GetDisplayName());
-		delete (*it);
 	}
-	GetPeers()->clear();
+	GetPeers().clear();
 	CONSOLE_ChangeLobby("");
 	CONSOLE_RemoveLobbyPeer(GetDisplayName());
 	StopP2PSocket();
 	SetInALobby(false);
 	CONSOLE_Print("[MindTris++] Successfully left the lobby.");
-
-
 
 }
 
@@ -891,8 +813,23 @@ enum TextCommandMode
 	TEXTCOMMANDMODE_JOINLOBBYCOMMAND_PASSWORD,
 };
 
+void WaitForStringInput(string question, string helper, string &s){
+	CONSOLE_Print( "");
+	CONSOLE_Print( "  "+question+" ");
+	CONSOLE_Print( "");
+
+	do
+	{
+		CONSOLE_PrintNoCRLF( "  "+helper+": " );
+		getline( cin, s );
+	} while( s.empty() );
+}
+
 int main(int argc, char ** argv)
 {
+
+
+
 #ifdef WIN32
     SetConsoleOutputCP(CP_UTF8);
 #endif
@@ -969,47 +906,79 @@ int main(int argc, char ** argv)
 		} while( client_port==0 );
 	}
 
+	
+	TextCommandMode commandMode = TEXTCOMMANDMODE_GENERAL;
 
-	MindTrisClient * client = new MindTrisClient(server_address, server_port, client_port);
 
-	while(!client->HasLoggedIn())
+	string createlobby_lobbyname;
+	uint8_t createlobby_maxplayers;
+	string createlobby_password;
+
+	uint32_t joinlobby_lobbyid;
+	string joinlobby_password;
+
+	unique_ptr<MindTrisClient> client(new MindTrisClient(server_address, server_port, client_port));
+	MindTrisClient::ClientState clientstate;
+
+	while(clientstate = client->GetClientState(), clientstate==MindTrisClient::STATE_CONNECTING)
 	{
-		CONSOLE_Print( "");
-		CONSOLE_Print( "  Please, either register a new user or login with an existing one." );
-		CONSOLE_Print( "  What do you want to do?" );
-		CONSOLE_Print( "	1. Register a new user.");
-		CONSOLE_Print( "	2. Login with an existing user.");
-		CONSOLE_Print( "");
-
-		string input; int inputID;
-
-		do
+		if( client->Update( 40000 ) ){
+			goto shutdown_mindtris;
+		}
+	}
+	if(clientstate==MindTrisClient::STATE_CONNECTED)
+	{
+		while(client->GetClientState()!=MindTrisClient::STATE_LOGGEDIN)
 		{
-			CONSOLE_PrintNoCRLF( "  Option #: " );
-			getline( cin, input );
-			inputID = atoi(input.c_str());
-		} while( inputID!=1 && inputID!=2);
+			CONSOLE_Print( "");
+			CONSOLE_Print( "  Please, either register a new user or login with an existing one." );
+			CONSOLE_Print( "  What do you want to do?" );
+			CONSOLE_Print( "	1. Register a new user.");
+			CONSOLE_Print( "	2. Login with an existing user.");
+			CONSOLE_Print( "");
 
-		switch(inputID)
-		{
-			case 1:
-				{
-					string username; string displayname; string email; string password;
-					WaitForStringInput("What username do you want to register?", "Username",username);
-					WaitForStringInput("What display name do you want to use?", "Display Name",displayname);
-					WaitForStringInput("What is your email address?", "Email",email);
-					WaitForStringInput("Please type in a password (it will be visible).", "Password",password);
-					client->RegisterUser(username,displayname,email,password);
-					break;
-				}
-			case 2:
-				{
-					string username; string password;
-					WaitForStringInput("Which username to want to log as?", "Username",username);
-					WaitForStringInput("Type in your password (it will be visible).", "Password",password);
-					client->Login(username,password);
-					break;
-				}
+			string input; int inputID;
+
+			do
+			{
+				CONSOLE_PrintNoCRLF( "  Option #: " );
+				getline( cin, input );
+				inputID = atoi(input.c_str());
+			} while( inputID!=1 && inputID!=2);
+
+			switch(inputID)
+			{
+				case 1:
+					{
+						string username; string displayname; string email; string password;
+						WaitForStringInput("What username do you want to register?", "Username",username);
+						WaitForStringInput("What display name do you want to use?", "Display Name",displayname);
+						WaitForStringInput("What is your email address?", "Email",email);
+						WaitForStringInput("Please type in a password (it will be visible).", "Password",password);
+						client->RegisterUser(username,displayname,email,password);
+						while(clientstate = client->GetClientState(), clientstate==MindTrisClient::STATE_REGISTERINGUSER)
+						{
+							if( client->Update( 40000 ) ){
+								goto shutdown_mindtris;
+							}
+						}
+						break;
+					}
+				case 2:
+					{
+						string username; string password;
+						WaitForStringInput("Which username to want to log as?", "Username",username);
+						WaitForStringInput("Type in your password (it will be visible).", "Password",password);
+						client->Login(username,password);
+						while(clientstate = client->GetClientState(), clientstate==MindTrisClient::STATE_LOGGINGIN)
+						{
+							if( client->Update( 40000 ) ){
+								goto shutdown_mindtris;
+							}
+						}
+						break;
+					}
+			}
 		}
 	}
 
@@ -1047,15 +1016,6 @@ int main(int argc, char ** argv)
 		wgetch( gInputWindow );
 		nodelay( gInputWindow, TRUE );
 
-	TextCommandMode commandMode = TEXTCOMMANDMODE_GENERAL;
-
-
-	string createlobby_lobbyname;
-	uint8_t createlobby_maxplayers;
-	string createlobby_password;
-
-	uint32_t joinlobby_lobbyid;
-	string joinlobby_password;
 
 	while( 1 )
 	{
@@ -1105,6 +1065,7 @@ int main(int argc, char ** argv)
 							CONSOLE_Print( "   /version            : show version text" );
 							CONSOLE_Print( "  In a lobby:" );
 							CONSOLE_Print( "   /leavelobby       : leave the lobby");
+							CONSOLE_Print( "   /startgame        : start game");
 							CONSOLE_Print( "" );
 						}
 						else if( Command == "/lobbylist")
@@ -1210,6 +1171,10 @@ int main(int argc, char ** argv)
 						if( Command == "/leavelobby" )
 						{
 							client->LeaveLobby();
+						}
+						else if( Command == "/startgame" )
+						{
+							client->StartGame();
 						}else{
 							client->SendChatCommand( gInputBuffer );
 							CONSOLE_Print( "[P2P Chat] "+client->GetDisplayName()+": "+gInputBuffer);
@@ -1274,11 +1239,11 @@ int main(int argc, char ** argv)
 			break;
 	}
 
-	// shutdown gproxy
+shutdown_mindtris:
+
+	// shutdown Mindtris;
 
 	CONSOLE_Print( "[MindTris++] shutting down" );
-	delete client;
-	client = NULL;
 
 #ifdef WIN32
 	// shutdown winsock
@@ -1294,10 +1259,3 @@ int main(int argc, char ** argv)
 
 }
 
-
-MindTrisClient:: ~MindTrisClient()
-{
-	if( m_Socket )
-		delete m_Socket;
-	
-}

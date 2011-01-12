@@ -1,98 +1,153 @@
 #ifndef DGMTP2PPROTOCOL_H
 #define DGMTP2PPROTOCOL_H
 
-#define DGMTP2P_HEADER_CONSTANT1 'D'
-#define DGMTP2P_HEADER_CONSTANT2 'G'
-#define DGMTP2P_HEADER_CONSTANT3 'M'
-#define DGMTP2P_HEADER_CONSTANT4 'T'
-#define DGMTP2P_HEADER_CONSTANT5 'P'
-#define DGMTP2P_HEADER_CONSTANT6 '2'
-#define DGMTP2P_HEADER_CONSTANT7 'P'
+#define DGMTP2P_PROTOCOLIDENTIFIER "DGMTP2P"
 
 
-class DGMTP2PPacket;
-
-class DGMTP2PProtocol
+class ByteArray;
+class MessageParser;
+class DGMTP2PProtocol: NonCopyable
 {
+private:
 
+	MessageParser m_parser;
+	CryptoPP::AutoSeededRandomPool m_rng;
 public:
-	const int static HEADERLENGTH = 9;
+	const ByteArray & GetProtocolIdentifier() const;
+	const bool IsBigEndian() const ;
+	DGMTP2PProtocol();
 
 	enum Protocol {
-		DGMTP2P_KEEPALIVE				= 0xFF,
-		DGMTP2P_HELLOFROMPEER		= 0x00,	
-		DGMTP2P_CHATSEND			= 0x01,
+		TYPE_KEEPALIVE				= 0xFF,
+		TYPE_CONNECTIONREQUEST		= 0x00,	
+		TYPE_CONNECTIONACCEPTED		= 0x01,	
+		TYPE_CONNECTIONACKNOWLEDGED	= 0x02,	
+		TYPE_CHATSEND				= 0x10,
+		TYPE_ROUND					= 0x11,
 	};
 
-	//SEND FUNCTIONS
-	BYTEARRAY SEND_KEEPALIVE();
+	class Err
+	{
+		public: Err(){};
+	};
 
-		// HELLOFROMPEER
-		BYTEARRAY SEND_HELLOFROMPEER(uint8_t clientid, uint32_t lobbyid);
-		BYTEARRAY SEND_CHATSEND(string signature, string message);
-
-	//RECEIVE FUNCTIONS
-
-	class HelloFromPeer
+	class ConnectionRequest
 	{
 	private:
-		uint8_t m_peerid;
 		uint32_t m_lobbyid;
+		uint8_t m_initiating_peerid;
+		uint8_t m_listening_peerid;
+		uint64_t m_initiating_challenge;		
 	public:
-		uint8_t GetPeerID(){return m_peerid;}
-		uint32_t GetLobbyId(){return m_lobbyid;}
-		HelloFromPeer(uint8_t peerid,int32_t lobbyid){
-			m_peerid = peerid;
-			m_lobbyid = lobbyid;
+		uint32_t GetLobbyId() const{return m_lobbyid;}
+		uint8_t GetInitiatingPeerID() const{return m_initiating_peerid;}
+		uint8_t GetListeningPeerID() const{return m_listening_peerid;}
+		uint64_t GetInitiatingChallenge() const {return m_initiating_challenge;}
+		ConnectionRequest( int32_t lobbyid,uint8_t initiating_peerid, uint8_t listening_peerid, uint64_t initiating_challenge):
+		m_lobbyid(lobbyid), m_initiating_peerid(initiating_peerid), m_listening_peerid(listening_peerid), m_initiating_challenge(initiating_challenge){
+		}
+	};
+
+	class ConnectionAcceptAck
+	{
+	private:
+		bool m_verified;
+		uint32_t m_lobbyid;
+		uint8_t m_initiating_peerid;
+		uint8_t m_listening_peerid;
+		uint64_t m_initiating_challenge;	
+		uint64_t m_listening_challenge;
+	public:
+		uint32_t GetLobbyId() const{return m_lobbyid;}
+		uint8_t GetInitiatingPeerID() const{return m_initiating_peerid;}
+		uint8_t GetListeningPeerID() const{return m_listening_peerid;}
+		uint64_t GetInitiatingChallenge() const {return m_initiating_challenge;}
+		uint64_t GetListeningChallenge() const {return m_listening_challenge;}
+		bool GetVerified() const { return m_verified;}
+		ConnectionAcceptAck(bool verified,  int32_t lobbyid,uint8_t initiating_peerid, uint8_t listening_peerid, uint64_t initiating_challenge,  uint64_t listening_challenge):
+		m_verified(verified), m_lobbyid(lobbyid), m_initiating_peerid(initiating_peerid), m_listening_peerid(listening_peerid), m_initiating_challenge(initiating_challenge), m_listening_challenge(listening_challenge){
 		}
 	};
 	
-	HelloFromPeer * RECEIVE_HELLOFROMPEER(BYTEARRAY data);
-
 	class ChatSend
 	{
 	private:
-		string m_signature;
+		bool m_verified;
+		uint64_t m_sessionid;
 		string m_message;
 	public:
-		string GetSignature(){return m_signature;}
-		string GetMessage(){return m_message;}
-		ChatSend(string signature, string message){
-			m_signature = signature;
-			m_message = message;
-		}
+		uint64_t GetSessionID() const { return m_sessionid;}
+		string GetMessage() const {return m_message;}
+		ChatSend(bool verified, const uint64_t sessionid, const string & message): m_verified(verified), m_message(message), m_sessionid(sessionid){}
 	};
 
-	ChatSend * RECEIVE_CHATSEND(BYTEARRAY data);
-		
-	class Packet
-	{
+
+	class Move{
 	private:
-		int m_ID;
-		BYTEARRAY m_Data;
-		uint16_t m_Length;
+		uint32_t m_piecenumber;
+		uint8_t m_orientation;
+		uint8_t m_piece_xoffset;
+		uint8_t m_piece_yoffset;
 	public:
-		Packet( uint16_t nLength, int nID, BYTEARRAY nData )
-		{
-			m_Length = nLength;
-			m_ID = nID;
-			m_Data = nData;
-		}
-		int GetID( )					{ return m_ID; }
-		uint16_t GetLength( )			{ return m_Length; }
-		BYTEARRAY GetData( )			{ return m_Data; }
+		uint32_t GetPieceNumber() const {return m_piecenumber;}
+		uint8_t GetOrientation() const {return m_orientation;}
+		uint8_t GetPieceXOffset() const {return m_piece_xoffset;}
+		uint8_t GetPieceYOffset() const {return m_piece_yoffset;}
+		Move(uint32_t piecenumber,uint8_t orientation,uint8_t x, uint8_t y): m_piecenumber(piecenumber), m_orientation(orientation), m_piece_xoffset(x), m_piece_yoffset(y){}
 	};
+	class RoundDataHash{
+	private:
+		uint8_t m_peer_id;
+		string m_hash;
+	public:
+		uint8_t GetPeerID() const {return m_peer_id;}
+		string GetHash() const { return m_hash;}
+		RoundDataHash(uint8_t peerid, string hash): m_peer_id(peerid), m_hash(hash){}
+	};
+
+	class RoundData{
+	private:
+		uint64_t m_sessionid;
+		uint32_t m_roundnumber;
+		vector<Move> m_moves;
+		vector<RoundDataHash> m_hashes;
+		bool m_verified;
+	public:
+		uint64_t GetSessionID() const { return m_sessionid;}
+		uint32_t GetRoundNumber() const {return m_roundnumber;}
+		vector<Move> GetMoves() const {return m_moves;}
+		vector<RoundDataHash> GetHashes() const {return  m_hashes;}
+		bool GetVerified() const {return  m_verified;}
+		RoundData(uint64_t sessionid,uint32_t roundnumber, vector<Move> moves, vector<RoundDataHash> hashes, bool verified): m_sessionid(sessionid), m_roundnumber(roundnumber), m_moves(moves), m_hashes(hashes), m_verified(verified){}
+	};
+
+
+	//SEND FUNCTIONS
+	ByteArray SEND_KEEPALIVE();
+
+	ByteArray SEND_CONNECTIONREQUEST( uint32_t lobbyid, uint8_t initiating_peerid, uint8_t listening_peerid, uint64_t initiating_challenge);
+	ByteArray SEND_CONNECTIONACCEPTED( uint32_t lobbyid, uint8_t initiating_peerid, uint8_t listening_peerid, uint64_t initiating_challenge,uint64_t listening_challenge,  const unique_ptr <CryptoPP::DSA::Signer> & signer);
+	ByteArray SEND_CONNECTIONACKNOWLEDGED( uint32_t lobbyid, uint8_t initiating_peerid, uint8_t listening_peerid, uint64_t initiating_challenge,uint64_t listening_challenge,  const unique_ptr <CryptoPP::DSA::Signer> & signer);
+
+	ByteArray SEND_CHATSEND(uint64_t sessionid, string message, const unique_ptr<CryptoPP::DSA::Signer> & signer );
+
+	ByteArray SEND_ROUND(uint64_t sessionid, uint32_t round_number, vector<Move> moves, vector<RoundDataHash> hashes, const unique_ptr<CryptoPP::DSA::Signer> & signer);
+
+	//RECEIVE FUNCTIONS
+	ConnectionRequest RECEIVE_CONNECTIONREQUEST(const ByteArray & message, size_t & offset);
+	ConnectionAcceptAck RECEIVE_CONNECTIONACCEPTED(const ByteArray & message, size_t & offset, const unique_ptr<CryptoPP::DSA::Verifier> & verifier);
+	ConnectionAcceptAck RECEIVE_CONNECTIONACKNOWLEDGED(const ByteArray & message, size_t & offset, const unique_ptr<CryptoPP::DSA::Verifier> & verifier);
+
+	RoundData RECEIVE_ROUND(const ByteArray & message, size_t & offset, const unique_ptr<CryptoPP::DSA::Verifier> & verifier);
+
+
+	ChatSend RECEIVE_CHATSEND(const ByteArray & message, size_t & offset, const unique_ptr<CryptoPP::DSA::Verifier> & verifier);
+	
+	byte_t GetMessageType(const ByteArray &message, size_t & offset);
+
 	//Other functions
-	bool ExtractPacket( BYTEARRAY Bytes, Packet ** packet);
 
-	DGMTP2PProtocol(bool bigEndian);
-private:
 
-	bool m_isBigEndian;
-	CryptoPP::AutoSeededRandomPool m_rng;
-	bool AssignLength( BYTEARRAY &content );
-	bool ValidateLength( BYTEARRAY &content );
-	bool AppendHeader( BYTEARRAY &content );
 
 };
 

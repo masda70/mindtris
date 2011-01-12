@@ -21,13 +21,13 @@ public:
 class ServerDatabase
 {
 private:
-	map<string,UserData *> users;
+	map<string,unique_ptr<UserData>> users;
 
 public:
 
 	bool UserExists(string username);	
-	UserData * FindUser(string username);
-	bool UserMatchesPassword(string username, string password, UserData * &userdata);
+	unique_ptr<UserData> FindUser(string username);
+	bool UserMatchesPassword(string username, string password, unique_ptr<UserData> & userdata);
 	void AddUser(string username, string displayname, string email, string password);
 		
 	ServerDatabase();

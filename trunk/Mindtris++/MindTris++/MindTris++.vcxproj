@@ -39,9 +39,13 @@
   <PropertyGroup Label="UserMacros" />
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">
     <LinkIncremental>true</LinkIncremental>
+    <IncludePath>C:\Users\David\Documents\Visual Studio 2010\Projects\boost_1_45_0;C:\Users\David\Documents\Visual Studio 2010\Projects\SFML-1.6\include;$(IncludePath)</IncludePath>
+    <LibraryPath>C:\Users\David\Documents\Visual Studio 2010\Projects\boost_1_45_0\stage\lib;C:\Users\David\Documents\Visual Studio 2010\Projects\SFML-1.6\lib\vc2008;$(LibraryPath)</LibraryPath>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">
     <LinkIncremental>false</LinkIncremental>
+    <IncludePath>C:\Users\David\Documents\Visual Studio 2010\Projects\boost_1_45_0;C:\Users\David\Documents\Visual Studio 2010\Projects\SFML-1.6\include;$(IncludePath)</IncludePath>
+    <LibraryPath>C:\Users\David\Documents\Visual Studio 2010\Projects\boost_1_45_0\stage\lib;C:\Users\David\Documents\Visual Studio 2010\Projects\SFML-1.6\lib\vc2008;$(LibraryPath)</LibraryPath>
   </PropertyGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">
     <ClCompile>
@@ -55,7 +59,10 @@
     <Link>
       <SubSystem>Console</SubSystem>
       <GenerateDebugInformation>true</GenerateDebugInformation>
-      <AdditionalDependencies>..\pdcurses\pdcurses.lib;..\Crypto++\Debug\cryptlib.lib;ws2_32.lib;winmm.lib;kernel32.lib;user32.lib;gdi32.lib;winspool.lib;comdlg32.lib;advapi32.lib;shell32.lib;ole32.lib;oleaut32.lib;uuid.lib;odbc32.lib;odbccp32.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalDependencies>sfml-system-s-d.lib;sfml-window-s-d.lib;sfml-graphics-s-d.lib;sfml-audio-s-d.lib;..\pdcurses\pdcurses.lib;..\Crypto++\Debug\cryptlib.lib;ws2_32.lib;winmm.lib;kernel32.lib;user32.lib;gdi32.lib;winspool.lib;comdlg32.lib;advapi32.lib;shell32.lib;ole32.lib;oleaut32.lib;uuid.lib;odbc32.lib;odbccp32.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <IgnoreAllDefaultLibraries>
+      </IgnoreAllDefaultLibraries>
+      <IgnoreSpecificDefaultLibraries>LIBCMT;%(IgnoreSpecificDefaultLibraries)</IgnoreSpecificDefaultLibraries>
     </Link>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">
@@ -74,16 +81,35 @@
       <GenerateDebugInformation>true</GenerateDebugInformation>
       <EnableCOMDATFolding>true</EnableCOMDATFolding>
       <OptimizeReferences>true</OptimizeReferences>
-      <AdditionalDependencies>..\pdcurses\pdcurses.lib;..\Crypto++\cryptlib.lib;ws2_32.lib;winmm.lib;kernel32.lib;user32.lib;gdi32.lib;winspool.lib;comdlg32.lib;advapi32.lib;shell32.lib;ole32.lib;oleaut32.lib;uuid.lib;odbc32.lib;odbccp32.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalDependencies>sfml-system-s.lib;sfml-window-s.lib;sfml-graphics-s.lib;sfml-audio-s.lib;..\pdcurses\pdcurses.lib;..\Crypto++\cryptlib.lib;ws2_32.lib;winmm.lib;kernel32.lib;user32.lib;gdi32.lib;winspool.lib;comdlg32.lib;advapi32.lib;shell32.lib;ole32.lib;oleaut32.lib;uuid.lib;odbc32.lib;odbccp32.lib;%(AdditionalDependencies)</AdditionalDependencies>
     </Link>
   </ItemDefinitionGroup>
   <ItemGroup>
+    <ClCompile Include="board.cpp" />
+    <ClCompile Include="gfxmanager.cpp" />
+    <ClCompile Include="ingame.cpp" />
     <ClCompile Include="mindtris.cpp" />
+    <ClCompile Include="mover.cpp" />
+    <ClCompile Include="moverprovider.cpp" />
     <ClCompile Include="peer.cpp" />
+    <ClCompile Include="sfxmanager.cpp" />
+    <ClCompile Include="state.cpp" />
+    <ClCompile Include="tetris.cpp" />
   </ItemGroup>
   <ItemGroup>
+    <ClInclude Include="block.h" />
+    <ClInclude Include="board.h" />
+    <ClInclude Include="gfxmanager.h" />
+    <ClInclude Include="globals.h" />
+    <ClInclude Include="ingame.h" />
     <ClInclude Include="mindtris.h" />
+    <ClInclude Include="mover.h" />
+    <ClInclude Include="moverprovider.h" />
     <ClInclude Include="peer.h" />
+    <ClInclude Include="sfxmanager.h" />
+    <ClInclude Include="signals.h" />
+    <ClInclude Include="state.h" />
+    <ClInclude Include="tetris.h" />
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\mindtriscore\mindtriscore.vcxproj">

@@ -1,61 +1,95 @@
+
+#include <SFML/System.hpp>
 #include "mindtriscore/includes.h"
 #include "mindtriscore/util.h"
+#include "mindtriscore/bytearray.h"
+#include "mindtriscore/bytebuffer.h"
 #include "mindtriscore/socket.h"
+#include "mindtriscore/commprotocol.h"
+#include "mindtriscore/packet.h"
+#include "mindtriscore/messagestreamer.h"
 #include "mindtriscore/serverprotocol.h"
 #include "mindtriscore/p2pprotocol.h"
+#include "mindtriscore/tetromino.h"
+
+#include <SFML/System.hpp>
+#include <SFML/Window.hpp>
+#include <SFML/Graphics.hpp>
+
+#include "state.h"
+#include "gfxmanager.h"
+#include "sfxmanager.h"
+
+#include "signals.h"
+#include "block.h"
+#include "mover.h"
+#include "moverprovider.h"
+#include "board.h"
+#include "ingame.h"
+#include "globals.h"
+#include "tetris.h"
+
 #include "mindtris.h"
 #include "peer.h"
 
 Peer :: ~Peer()
 {
-	if( m_Socket )
-		delete m_Socket;
-	while( !m_Packets.empty( ) )
-	{
-		delete m_Packets.front( );
-		m_Packets.pop( );
-	}
 }
 
+void Peer::NewGame(vector<uint8_t> pieces){
+	/*m_tetris.reset(new Tetris( 800, 600, 32, false ));
+	for(vector<uint8_t>::iterator iter = pieces.begin(); iter!= pieces.end(); iter++){
+		m_tetris->AddNextPiece(*iter);
+	}
+	m_tetris->run();
+	*/
+}
 
 // Peer has initiated connection with client
-Peer::Peer(MindTrisClient * client, DGMTP2PProtocol * protocol, CTCPSocket * nSocket){
-	m_Protocol = protocol;
+Peer::Peer(MindTrisClient & client, DGMTP2PProtocol & protocol, unique_ptr<CTCPSocket> & nSocket):
+m_MessageStreamer(protocol.GetProtocolIdentifier(),protocol.IsBigEndian()),
+m_client(client), m_Protocol(protocol)
+{
 	m_DeleteMe = false;
-	m_client = client;
+
 	m_Error = false;
-	m_Socket = nSocket;
-
-	m_peerinitiatedhandshake = true;
-	m_clientinitiatedhandshake = false;
-
-	m_trusted = false;
+	m_Socket.swap(nSocket);
+	m_ClientSocket = nullptr;
+	m_status = STATUS_LISTENING;
 }
 
 // Client initiates connection with peer
-Peer::Peer(MindTrisClient * client, DGMTP2PProtocol * protocol, uint8_t peerid, string displayname, uint32_t ipaddress, uint16_t port, RSAPublicKey * publickey){
-	m_Protocol = protocol;
+Peer::Peer(MindTrisClient & client, DGMTP2PProtocol & protocol, uint8_t peerid,const string & displayname, uint32_t ipaddress, uint16_t port, const DSAPublicKey & publickey):
+m_MessageStreamer(protocol.GetProtocolIdentifier(),protocol.IsBigEndian()),m_client(client), m_Protocol(protocol)
+{
 	m_DeleteMe = false;
-	m_client = client;
+
 	m_Error = false;
 	m_peerid = peerid;
 	m_displayname = displayname;
-	m_publickey = publickey;
-	m_ClientSocket  = new CTCPClient( &CONSOLE_Print, false);
+
+	m_ClientSocket = new CTCPClient( &CONSOLE_Print, false);
 	m_ClientSocket -> Connect( "", ipaddress, port );
+	m_Socket.reset(m_ClientSocket);
 
-	m_Socket = m_ClientSocket;
-	m_Socket->PutBytes(protocol->SEND_HELLOFROMPEER(client->GetPeerID(),client->GetLobbyID()));
+	m_challengeforpeer = GenerateRandomUINT64(client.GetRandomPool());
+	m_challengefrompeer = 0;
 
-	m_peerinitiatedhandshake = false;
-	m_clientinitiatedhandshake = true;
-	m_trusted = false;
+	if(!InitializeVerifier(publickey))
+	{
+		CONSOLE_Print( "[MindTris++] Invalid DSA key from peer: ["+m_displayname+"]" );
+	}
+
+	Send(m_Protocol.SEND_CONNECTIONREQUEST(client.GetLobbyID(),client.GetPeerID(),peerid,m_challengeforpeer));
+
+	m_status = STATUS_CONNECTIONREQUEST;
 }
 
 
-void Peer :: PrintMalformedPacket(){
-	if(m_trusted) CONSOLE_Print( "[MindTris++] Received malformed P2P packet from peer ID: "+UTIL_ToString(m_peerid)+".");
-	else CONSOLE_Print( "[MindTris++] Received malformed P2P packet from [" + m_Socket->GetIPString( ) + "]" );
+
+void Peer :: PrintMalformedMessage(){
+	if(GetConnectionStatus() == STATUS_CONNECTED) CONSOLE_Print( "[MindTris++] Received malformed P2P message from peer ID: "+UTIL_ToString(GetPeerID())+".");
+	else CONSOLE_Print( "[MindTris++] Received malformed P2P message from [" + m_Socket->GetIPString( ) + "]" );
 }
 
 
@@ -64,98 +98,134 @@ bool Peer::Update(fd_set *fd)
 
 	if( !m_Socket  )
 		return true;
+
 	if( !m_Socket->GetConnected()) return false;
+
+
 	m_Socket->DoRecv( fd );
-	string * buffer = m_Socket->GetBytes( );
-	BYTEARRAY Bytes(buffer->begin(),buffer->end());
-
-	while( Bytes.size() >= DGMTP2PProtocol::HEADERLENGTH )
-	{
-
-		DGMTP2PProtocol::Packet * packet = NULL;
-		if(m_Protocol->ExtractPacket(Bytes, &packet))
-		{
-			if(packet!=NULL)
-			{
-				uint16_t Length = packet->GetLength();
-				m_Packets.push( packet );
-				Bytes = BYTEARRAY(Bytes.begin()+Length,Bytes.end());
-				*buffer = buffer->substr( Length );
-			}else
-				break;
-		}else{
+	if(!m_MessageStreamer.Read(m_Socket->GetRecvBuffer( ),m_IncompletePacket,m_Messages)){
 			m_Error = true;
 			m_ErrorString = "received invalid packet from peer";
-			break;
-		}
 	}
 
-	queue<DGMTP2PProtocol::Packet *> UnhandledPackets = queue<DGMTP2PProtocol::Packet *>();
+	queue<Message> UnhandledMessages;
 
-	while( !m_Packets.empty( ) )
-	{
-		DGMTP2PProtocol::Packet *packet = m_Packets.front( );
-
-		m_Packets.pop( );
-
-		switch( packet->GetID( ) )
+	try{
+		while( !m_Messages.empty( ) )
 		{
-			case DGMTP2PProtocol::DGMTP2P_HELLOFROMPEER:
-				 {
-					DGMTP2PProtocol::HelloFromPeer * reply = m_Protocol-> RECEIVE_HELLOFROMPEER(packet->GetData());
-					if(reply==NULL) {PrintMalformedPacket(); break;}
 
-					if(!m_trusted)
-					{
-						if(m_clientinitiatedhandshake)
-						{
-							if( reply->GetPeerID()== GetPeerID() && reply->GetLobbyId() == m_client->GetLobbyID()){
-								CONSOLE_Print("[MindTris++] Established handshake with peer ["+GetDisplayName()+"]");
-								m_trusted = true;
-							}else{
-								m_DeleteMe = true;
-							}
-						}else if (m_peerinitiatedhandshake)	{
-							PeerInfo * peerinfo = m_client->GetPeerInfoVector()->at(reply->GetPeerID());
-							if(peerinfo!=NULL){
-								if(peerinfo->GetPeerID() == reply->GetPeerID() && reply->GetLobbyId() == m_client->GetLobbyID())
-								{
-									m_trusted = true;
-									SetPeerID(peerinfo->GetPeerID());
-									SetDisplayName(peerinfo->GetDisplayName());
-									SetPublicKey(peerinfo->GetPublicKey());
-									m_Socket->PutBytes(m_Protocol-> SEND_HELLOFROMPEER(m_client->GetPeerID(),m_client->GetLobbyID()));
-									CONSOLE_Print("[MindTris++] Established handshake with peer ["+peerinfo->GetDisplayName()+"]");
+			size_t offset = 0;
+			Message message = m_Messages.front( );
+			m_Messages.pop( );
+
+			byte_t type = m_Protocol.GetMessageType(message,offset);
+			switch(GetConnectionStatus())
+			{
+				case STATUS_LISTENING:
+				{
+					switch(type){
+						case DGMTP2PProtocol::TYPE_CONNECTIONREQUEST:
+							{
+								DGMTP2PProtocol::ConnectionRequest request = m_Protocol.RECEIVE_CONNECTIONREQUEST(message,offset);
+								unique_ptr<PeerInfo> & peerinfo = m_client.GetPeerInfoVector().at(request.GetInitiatingPeerID());
+								if(request.GetListeningPeerID() == m_client.GetPeerID() && request.GetLobbyId() == m_client.GetLobbyID()){
+									if(peerinfo){
+										SetConnectionStatus(STATUS_CONNECTIONACCEPTED);
+										SetChallengeFromPeer(request.GetInitiatingChallenge());
+										SetChallengeForPeer(GenerateRandomUINT64(m_client.GetRandomPool()));
+										SetPeerID(peerinfo->GetPeerID());
+										SetDisplayName(peerinfo->GetDisplayName());
+										SetPublicKey(peerinfo->GetPublicKey());
+										if(!InitializeVerifier(peerinfo->GetPublicKey()))
+										{
+											CONSOLE_Print( "[MindTris++] Invalid DSA key from peer: ["+peerinfo->GetDisplayName()+"]" );
+										}
+
+										Send(m_Protocol.SEND_CONNECTIONACCEPTED(m_client.GetLobbyID(),GetPeerID(),m_client.GetPeerID(),GetChallengeFromPeer(),GetChallengeForPeer(),m_client.GetSigner()));
+										CONSOLE_Print("[MindTris++] received a CONNECTION_REQUEST from ["+peerinfo->GetDisplayName()+"]");
+									}else{
+
+										UnhandledMessages.push(move(message));
+									}
 								}else{
+									CONSOLE_Print("[MindTris++] received an invalid CONNECTION_REQUEST from ["+GetSocket()->GetIPString()+"]");
 									m_DeleteMe = true;
 								}
-							}else{
-								UnhandledPackets.push(packet);
-								packet = NULL;
+								break;
+
 							}
-						}
-					} 
+					}
 					break;
-				 }
-			case DGMTP2PProtocol::DGMTP2P_CHATSEND:
+				}
+				case STATUS_CONNECTIONREQUEST:
 				{
-					if(m_trusted){
-						DGMTP2PProtocol::ChatSend * info = m_Protocol-> RECEIVE_CHATSEND(packet->GetData());
-						if(info == NULL) {PrintMalformedPacket(); break;}
-						CONSOLE_Print("[P2P Chat] "+GetDisplayName()+": "+info->GetMessage());					
-						delete info;
-						break;
+					switch(type){
+						case DGMTP2PProtocol::TYPE_CONNECTIONACCEPTED:
+							{
+								DGMTP2PProtocol::ConnectionAcceptAck accept = m_Protocol.RECEIVE_CONNECTIONACCEPTED(message,offset,GetVerifier());
+								if( !accept.GetVerified() || accept.GetInitiatingPeerID()!=m_client.GetPeerID() || accept.GetListeningPeerID()!=GetPeerID() || accept.GetLobbyId() != m_client.GetLobbyID() || accept.GetInitiatingChallenge() != GetChallengeForPeer())
+								{
+									CONSOLE_Print("[MindTris++] Received invalid CONNECTION_ACCEPTED message from ["+GetDisplayName()+"], disconnecting...");
+									m_DeleteMe = true;
+								}else{
+									SetChallengeFromPeer(accept.GetListeningChallenge());
+									SetConnectionStatus(STATUS_CONNECTED);
+									Send(m_Protocol.SEND_CONNECTIONACKNOWLEDGED(m_client.GetLobbyID(),m_client.GetPeerID(),GetPeerID(),GetChallengeForPeer(),GetChallengeFromPeer(),m_client.GetSigner()));
+									CONSOLE_Print("[MindTris++] Received a valid CONNECTION_ACCEPTED message from ["+GetDisplayName()+"], sending CONNECTION_ACKNOWLEDGED");
+									CONSOLE_Print("[MindTris++] Successfully connected to ["+GetDisplayName()+"]");
+								}
+								break;
+							}
 					}
 				}
+				case STATUS_CONNECTIONACCEPTED:
+				{
+					switch(type){
+						case DGMTP2PProtocol::TYPE_CONNECTIONACKNOWLEDGED:
+							{
+								DGMTP2PProtocol::ConnectionAcceptAck accept = m_Protocol.RECEIVE_CONNECTIONACKNOWLEDGED(message,offset,GetVerifier());
+								if( !accept.GetVerified() || accept.GetInitiatingPeerID()!=GetPeerID() || accept.GetListeningPeerID()!=m_client.GetPeerID() || accept.GetLobbyId() != m_client.GetLobbyID() || accept.GetInitiatingChallenge() != GetChallengeFromPeer() || accept.GetListeningChallenge() != GetChallengeForPeer())
+								{
+									CONSOLE_Print("[MindTris++] Received invalid CONNECTION_ACKNOWLEDGED message from ["+GetDisplayName()+"], disconnecting...");
+									m_DeleteMe = true;
+								}else{
+									CONSOLE_Print("[MindTris++] Successfully connected to ["+GetDisplayName()+"]");
+									SetConnectionStatus(STATUS_CONNECTED);
+								}
+								break;
+							}
+					}
+				}
+				case STATUS_CONNECTED:
+				{
+					switch(type){
+						case DGMTP2PProtocol::TYPE_CHATSEND:
+							{
+								DGMTP2PProtocol::ChatSend info = m_Protocol.RECEIVE_CHATSEND(message,offset,GetVerifier());
+								CONSOLE_Print("[P2P Chat] "+GetDisplayName()+": "+info.GetMessage());					
+								break;
+							}
+						case DGMTP2PProtocol::TYPE_ROUND:
+							{
+								DGMTP2PProtocol::RoundData info = m_Protocol.RECEIVE_ROUND(message,offset,GetVerifier());
+			
+								break;
+							}
+					}
+					break;
+				}
+			}
+			m_Messages = move(UnhandledMessages);
+
 		}
-		if(packet) delete packet;
+	}catch (DGMTP2PProtocol::Err p)
+	{
+		PrintMalformedMessage(); m_Error = true;
+	}catch (MessageParser::malformed_message p)
+	{
+		PrintMalformedMessage(); m_Error = true;
 	}
 
-	while (!UnhandledPackets.empty() )
-	{
-		m_Packets.push(UnhandledPackets.front());
-		UnhandledPackets.pop();
-	}
 	
 	if(m_Error)
 	{
@@ -166,3 +236,38 @@ bool Peer::Update(fd_set *fd)
 	return m_DeleteMe;
 }
 
+void Peer::SendRoundData(uint64_t sessionid, uint32_t round, vector<DGMTP2PProtocol::Move> moves, const unique_ptr<CryptoPP::DSA::Signer> & signer){
+	Send( m_Protocol.SEND_ROUND(sessionid,round,moves,vector<DGMTP2PProtocol::RoundDataHash>(),signer));
+}
+
+void Peer::SendChat(uint64_t sessionid, const string & msg, const unique_ptr<CryptoPP::DSA::Signer> & signer){
+	Send( m_Protocol.SEND_CHATSEND(sessionid,msg,signer));
+}
+
+void Peer::Send( Message && msg )
+{
+	m_MessageStreamer.Write(m_Socket->GetSendBuffer(), forward<Message>(msg));
+}
+
+bool Peer::InitializeVerifier(const DSAPublicKey & key)
+{
+		m_publickey = key;
+		string p(key.GetP());
+		string q(key.GetQ());
+		string g(key.GetG());
+		string y(key.GetY());
+
+		CryptoPP::Integer i_p,i_q,i_g,i_y;
+
+		i_p.Decode(CryptoPP::StringSource(p,true),p.size(),CryptoPP::Integer::UNSIGNED);
+		i_q.Decode(CryptoPP::StringSource(q,true),q.size(),CryptoPP::Integer::UNSIGNED);
+		i_g.Decode(CryptoPP::StringSource(g,true),g.size(),CryptoPP::Integer::UNSIGNED);
+		i_y.Decode(CryptoPP::StringSource(y,true),y.size(),CryptoPP::Integer::UNSIGNED);
+
+		CryptoPP::DSA::PublicKey pubkey;
+		pubkey.Initialize(i_p,i_q,i_g,i_y);
+
+		m_Verifier.reset(new CryptoPP::DSA::Verifier(pubkey));
+		if (!pubkey.Validate(m_client.GetRandomPool(), 3)){return false;}
+		return true;
+}

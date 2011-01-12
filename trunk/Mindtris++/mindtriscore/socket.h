@@ -61,9 +61,9 @@ public:
 	~CSocket( );
 
 	void SetBlocking(bool nIsBlocking);
-	virtual BYTEARRAY GetPort( );
+	virtual ByteArray GetPort( );
 	virtual uint32_t GetIPInt32();
-	virtual BYTEARRAY GetIP( );
+	virtual ByteArray GetIP( );
 	virtual string GetIPString( );
 	virtual bool HasError( )						{ return m_HasError; }
 	virtual int GetError( )							{ return m_Error; }
@@ -77,15 +77,15 @@ public:
 //
 // CTCPSocket
 //
-
+class ByteBuffer; 
 class CTCPSocket : public CSocket
 {
 protected:
 	bool m_Connected;
 
 private:
-	string m_RecvBuffer;
-	string m_SendBuffer;
+	ByteBuffer m_RecvBuffer;
+	ByteBuffer m_SendBuffer;
 	uint32_t m_LastRecv;
 	uint32_t m_LastSend;
 
@@ -96,10 +96,8 @@ public:
 
 	virtual void Reset( );
 	virtual bool GetConnected( )				{ return m_Connected; }
-	virtual string *GetBytes( )					{ return &m_RecvBuffer; }
-	virtual void PutBytes( BYTEARRAY bytes );
-	virtual void ClearRecvBuffer( )				{ m_RecvBuffer.clear( ); }
-	virtual void ClearSendBuffer( )				{ m_SendBuffer.clear( ); }
+	virtual ByteBuffer & GetRecvBuffer( );
+	virtual ByteBuffer & GetSendBuffer( );
 	virtual uint32_t GetLastRecv( )				{ return m_LastRecv; }
 	virtual uint32_t GetLastSend( )				{ return m_LastSend; }
 	virtual void DoRecv();
@@ -142,8 +140,8 @@ public:
 	virtual ~CTCPServer( );
 
 	virtual bool Listen( string address, uint16_t port );
-	virtual CTCPSocket *Accept( );
-	virtual CTCPSocket *Accept( fd_set *fd );
+	virtual unique_ptr<CTCPSocket> Accept( );
+	virtual unique_ptr<CTCPSocket> Accept( fd_set *fd );
 };
 
 #endif

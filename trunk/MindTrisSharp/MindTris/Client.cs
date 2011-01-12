@@ -748,9 +748,9 @@ namespace MindTris
                 else
                 {
                     //Grab the message type
-                    byte id = user.Buffer[Dgmt.PROTOCOL_ID_LENGTH + Dgmt.PACKET_LENGTH_LENGTH];
+                    Dgmt.PacketID id = (Dgmt.PacketID)user.Buffer[Dgmt.PROTOCOL_ID_LENGTH + Dgmt.PACKET_LENGTH_LENGTH];
                     //Process accordingly
-                    switch ((Dgmt.PacketID)id)
+                    switch (id)
                     {
                         case Dgmt.PacketID.HelloFromServer:
                             Process_HelloFromServer(user, content_length);
@@ -1352,12 +1352,11 @@ namespace MindTris
                 Move[] moves = new Move[move_size];
                 for (int k = 0; k < move_size; k++)
                 {
-                    uint moveTimeStamp = BigE.ReadInt32(packet, ref i);
                     uint pieceNumber = BigE.ReadInt32(packet, ref i);
                     byte orientation = BigE.ReadByte(packet, ref i);
                     byte x = BigE.ReadByte(packet, ref i);
                     byte y = BigE.ReadByte(packet, ref i);
-                    moves[k] = new Move(moveTimeStamp, pieceNumber, orientation, x, y);
+                    moves[k] = new Move(pieceNumber, orientation, x, y);
                 }
                 //Round hash
                 byte hash_size = BigE.ReadByte(packet, ref i);
@@ -1502,7 +1501,6 @@ namespace MindTris
             BigE.WriteByte(packet, ref i, (byte)moves.Count);
             foreach (Move move in moves)
             {
-                BigE.WriteInt32(packet, ref i, move.MoveTimeStamp);
                 BigE.WriteInt32(packet, ref i, move.PieceNumber);
                 BigE.WriteByte(packet, ref i, move.Orientation);
                 BigE.WriteByte(packet, ref i, move.X);

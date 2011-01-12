@@ -1,6 +1,7 @@
 using Microsoft.Xna.Framework;
 using Microsoft.Xna.Framework.Graphics;
 using MindTrisCore;
+using System;
 
 namespace Tetris
 {
@@ -74,7 +75,7 @@ namespace Tetris
         /// <param name="gameTime">Provides a snapshot of timing values.</param>
         public override void Draw(GameTime gameTime)
         {
-            sBatch.DrawString(font, "Player:\n" + _peer.DisplayName + "\nPieces: " + PiecesPlayed,
+            sBatch.DrawString(font, "Player:\n" + _peer.DisplayName.Substring(0, Math.Min(10, _peer.DisplayName.Length)) + "\nPieces: " + PiecesPlayed,
                 new Vector2(1.5f * 24, 3 * 24) + _trans, Color.Green);
 
             sBatch.DrawString(font, "Score:\n" + value,

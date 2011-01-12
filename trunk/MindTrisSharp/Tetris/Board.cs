@@ -2,6 +2,7 @@
 using System.Collections.Generic;
 using Microsoft.Xna.Framework;
 using Microsoft.Xna.Framework.Graphics;
+using System.Diagnostics;
 
 namespace Tetris
 {
@@ -164,6 +165,7 @@ namespace Tetris
                 //On redemande d'autres pièces s'il n'en reste plus beaucoup
                 if (_nextFigures.Count < 10) if (PiecesRequired != null) PiecesRequired();
 
+                if (_nextFigures.Count == 0) return false;
                 // Generate new figure's shape
                 DynamicFigureNumber = _nextFigures.Dequeue();
 
@@ -294,7 +296,7 @@ namespace Tetris
             return;
         }
 
-        public Vector2 GetPositionOfPlacedPiece(Vector2[] piece)
+        Vector2 GetPositionOfPlacedPiece(Vector2[] piece)
         {
             float Y_max = float.MinValue;
             for (int i = 0; i < piece.Length; i++)
@@ -310,7 +312,7 @@ namespace Tetris
             return new Vector2(X_min, Y_max);
         }
 
-        public Vector2 GetPositionOfSRSPiece(Vector2[] piece)
+        Vector2 GetPositionOfSRSPiece(Vector2[] piece)
         {
             float Y_min = float.MaxValue;
             for (int i = 0; i < piece.Length; i++)
@@ -324,6 +326,46 @@ namespace Tetris
                 if (piece[i].X < X_min) X_min = piece[i].X;
             }
             return new Vector2(X_min, Y_min);
+        }
+
+        int SeekMino(Vector2 mino, Vector2[] piece)
+        {
+            for (int i = 0; i < piece.Length; i++)
+            {
+                if (mino.X == piece[i].X && mino.Y == piece[i].Y) return i;
+            }
+            return -1;
+        }
+
+        int ConfirmOrientation(Vector2[] piece, int orientation)
+        {
+            int result = -1;
+            bool vrai = false;
+
+            for (int j = 0; j < 4; j++)
+            {
+                Vector2[] sample = new Vector2[BLOCKS_COUNT_IN_FIGURE];
+                for (int i = 0; i < BLOCKS_COUNT_IN_FIGURE; i++) sample[i] = _figures[DynamicFigureNumber, j, i];
+                Vector2 pos_ref = GetPositionOfPlacedPiece(sample);
+                Vector2 pos = GetPositionOfPlacedPiece(piece);
+                Vector2 offset = pos - pos_ref;
+
+                bool pas_celui_la = false;
+                for (int i = 0; i < BLOCKS_COUNT_IN_FIGURE; i++)
+                {
+                    if (SeekMino(sample[i] + offset, piece) < 0)
+                    {
+                        pas_celui_la = true;
+                        break;
+                    }
+                }
+                if (!pas_celui_la)
+                {
+                    if (orientation == j) vrai = true;
+                    result = j;
+                }
+            }
+            return vrai ? orientation : result;
         }
 
         
@@ -356,6 +398,7 @@ namespace Tetris
         void FixPieceAndSendEvent()
         {
             //On a posé la pièce!
+            Debug.Assert(ConfirmOrientation(DynamicFigure, DynamicFigureModificationNumber) == DynamicFigureModificationNumber);
             Vector2 position = GetPositionOfPlacedPiece(DynamicFigure);
             byte orientation = (byte)DynamicFigureModificationNumber;
             uint pieceNumber = _piecesPlacedCount;
@@ -394,59 +437,6 @@ namespace Tetris
             }
             // Change position vector
             PositionForDynamicFigure.Y++;
-        }
-
-        public void RotateFigure()
-        {
-            // Check colisions for next modification
-            Vector2[] TestDynamicFigure = new Vector2[DynamicFigure.GetUpperBound(0) + 1];
-            for (int i = 0; i < BLOCKS_COUNT_IN_FIGURE; i++)
-                TestDynamicFigure[i] = _figures[DynamicFigureNumber, (DynamicFigureModificationNumber + 1) % 4, i] +
-                    PositionForDynamicFigure;
-
-            // Make sure that figure can rotate if she stand near left and right borders
-            SortingVector2(ref TestDynamicFigure, true, TestDynamicFigure.GetLowerBound(0),
-                TestDynamicFigure.GetUpperBound(0));
-            int leftFigureBound;
-            int rightFigureBound;
-            if ((leftFigureBound = (int)TestDynamicFigure[0].X) < 0)
-            {
-                //int leftFigureBound = (int)TestDynamicFigure[0].X;
-                for (int i = 0; i < BLOCKS_COUNT_IN_FIGURE; i++)
-                {
-                    TestDynamicFigure[i] +=
-                        new Vector2(0 - leftFigureBound, 0);
-                }
-                if (TryPlaceFigureOnBoard(TestDynamicFigure))
-                    PositionForDynamicFigure +=
-                        new Vector2(0 - leftFigureBound, 0);
-            }
-            if ((rightFigureBound = (int)TestDynamicFigure[BLOCKS_COUNT_IN_FIGURE - 1].X) >= WIDTH)
-            {
-                //int rightFigureBound = (int)TestDynamicFigure[BlocksCountInFigure - 1].X;
-                for (int i = 0; i < BLOCKS_COUNT_IN_FIGURE; i++)
-                {
-                    TestDynamicFigure[i] -=
-                        new Vector2(rightFigureBound - WIDTH + 1, 0);
-                }
-                if (TryPlaceFigureOnBoard(TestDynamicFigure))
-                    PositionForDynamicFigure -=
-                        new Vector2(rightFigureBound - WIDTH + 1, 0);
-            }
-
-            if (TryPlaceFigureOnBoard(TestDynamicFigure))
-            {
-                DynamicFigureModificationNumber = (DynamicFigureModificationNumber + 1) % 4;
-                // Clear dynamic fields
-                for (int i = 0; i <= DynamicFigure.GetUpperBound(0); i++)
-                    ClearBoardField((int)DynamicFigure[i].X, (int)DynamicFigure[i].Y);
-                DynamicFigure = TestDynamicFigure;
-                for (int i = 0; i <= DynamicFigure.GetUpperBound(0); i++)
-                {
-                    boardFields[(int)DynamicFigure[i].X, (int)DynamicFigure[i].Y] = FieldState.Dynamic;
-                    BoardColor[(int)DynamicFigure[i].X, (int)DynamicFigure[i].Y] = DynamicFigureColor;
-                }
-            }
         }
 
         public void RotateFigureSRSTrueRotation(bool isClockWise)

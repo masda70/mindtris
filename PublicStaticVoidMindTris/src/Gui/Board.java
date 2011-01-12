@@ -24,6 +24,7 @@ public class Board extends JPanel {
 		super();
 		
 		_g = g;
+		g.setBoard(this);
 		_gameOver = false;
 		setBackground(Color.DARK_GRAY);
 		setBorder(BorderFactory.createLineBorder(Color.GRAY, BORDER_SZ-2));

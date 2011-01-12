@@ -45,6 +45,7 @@ public class Client {
 	private IdMap<Game>			_peerGames;
 	private List<Hash>			_hashes;
 	private int					_roundNb;
+	private List<Integer>		_peersOrder;
 
 	
 	////// CONSTRUCTORS //////
@@ -54,6 +55,7 @@ public class Client {
 		_challengeCodes = new IdMap<byte[][]>();
 		_waitingPeerCh = new IdMap<ChP2P>();
 		_waitingAck = new IdMap<InData>();
+		_peersOrder = new LinkedList<Integer>();
 		
 		try {
 			_rdmGen = SecureRandom.getInstance ("SHA1PRNG");
@@ -492,11 +494,15 @@ public class Client {
 	
 	private class GameLoadHdl implements Handler<ChCltSrv> {
 		public void handle(InData in, ChCltSrv ch) throws IOException {
-			_game = new ActiveGame(Client.this);
+			byte[] buf = _lobby._sessionId;
+			int seed = (((buf[4] & 0xff) << 24) | ((buf[5] & 0xff) << 16) | ((buf[6] & 0xff) << 8) | (buf[7] & 0xff));
+			debug("seed : "+seed);
+			
+			_game = new ActiveGame(Client.this, seed);
 			_hashes = new LinkedList<Hash>();
 			_peerGames = new IdMap<Game>();
 			for( int peerId : _lobby._peers.keys() ) {
-				if( peerId != _me._id ) _peerGames.add(peerId, new Game());
+				if( peerId != _me._id ) _peerGames.add(peerId, new Game(seed));
 			}
 			
 			int nbPieces = in.readUnsignedByte();
@@ -505,6 +511,20 @@ public class Client {
 				_game.addNewPiece(new Piece(code), 0);
 				for( Game g : _peerGames.elements() ) g.addNewPiece(new Piece(code), 0);
 			}
+			
+			int peersOrderSz = in.readUnsignedByte();
+			int thrower=-1, winner, first=-1;
+			
+			for( int i=0; i<peersOrderSz; i++ ) {
+				winner = in.readUnsignedByte();
+				if( thrower != -1 ) {
+					getPeerGames (thrower).setPenaltiesWinner(getPeerGames(winner));
+				} else {
+					first = winner;
+				}
+				thrower = winner;
+			}
+			getPeerGames(thrower).setPenaltiesWinner(getPeerGames(first));
 			
 			_w.loadGame();
 			
@@ -522,13 +542,18 @@ public class Client {
 				_srvCh.send(MsgCltSrv.LOADED_GAME, (byte)0x00);
 			}
 		}
+
+		private Game getPeerGames ( int id ) {
+			return ( id == _me._id ) ? _game : _peerGames.get(id);
+		}
 	}
 	
 	private class BeginGameHdl implements Handler<ChCltSrv> {
 		public void handle(InData in, ChCltSrv ch) throws IOException {
 			debug("Begin Game");
-			_game.start(_w);
-			for( Game g : _peerGames.elements() ) g.start(null);
+			_game.setGui(_w);
+			_game.start();
+			for( Game g : _peerGames.elements() ) g.start();
 			_w.beginGame();
 			
 			Thread timer = new Thread() {
@@ -724,6 +749,7 @@ public class Client {
 			int hashesNb = in.readUnsignedByte();
 			
 			if( roundNb != _roundNb ) {
+				debug(Integer.toString(roundNb-_roundNb));
 				//debug("Wrong round nb : "+roundNb+" instead of "+_roundNb);
 			}
 			
@@ -732,7 +758,6 @@ public class Client {
 			
 			if( movesNb > 0 ) {
 				_peerGames.get(peerId).addMoves(moves);
-				_w.upPeerBoards(peerId);
 			}
 		}
 	}

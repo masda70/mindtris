@@ -60,8 +60,4 @@ public class GameRight extends JPanel {
 		add(chat);
 		
 	}
-
-	public void upPeerBoards( int peerId ) {
-		_boards.get(peerId).repaint();
-	}
 }

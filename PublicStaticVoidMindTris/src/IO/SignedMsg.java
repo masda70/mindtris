@@ -60,7 +60,7 @@ public class SignedMsg extends MsgP2P {
 		int len = in.readUnsignedShort();
 		byte[] sign = new byte[len];
 		in.readFully(sign);
-		byte[] msg = in.g 
+		byte[] msg = in.getData();
 		
 		verifier.update(sign);
 		*/

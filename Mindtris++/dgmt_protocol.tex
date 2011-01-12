@@ -13,7 +13,7 @@
 \usepackage[pdftex]{graphicx}
 \usepackage{fixltx2e}
 \newcommand{\mc}{\mathcal}
-\newcommand{\dgmtversion}{1.2.0.3}
+\newcommand{\dgmtversion}{1.2.0.4}
 \newcommand{\HRule}{\rule{\linewidth}{0.5mm}}
 \begin{document}
 
@@ -451,6 +451,7 @@ Users can decide to join a particular lobby. This is only possible if \verb logg
     Lobby ID & INTEGER & 4 & N/A  & The lobby ID. \\ \hline
     Password Size & INTEGER & 1 & N/A & The size of the Password field.\\ \hline
     Password & STRING & varies & N/A & The lobby's password. \\ \hline
+    IP Address & INTEGER & 4 & N/A & The client's IPv4 address, as described  in \href{http://tools.ietf.org/html/rfc791}{RFC 791}. \\ \hline
 	Port number & INTEGER & 2 & N/A & The client's TCP listen port number, used for communication between peers.\\ \hline
     Client's Public Key & BYTE & varies & N/A & The client's public key, used to sign peer-to-peer messages. The expected format is the DGMT DSA Public Key format. \\ \hline
   \end{tabular}
@@ -615,6 +616,22 @@ The server can request clients having joined a certain lobby to start loading a 
     Type & INTEGER & 1 & 0x91 & This identifies the message as \verb LOAD_GAME . \\ \hline
     First Pieces Array Size & INTEGER & 1 & 10 & The size of the First Pieces array. \\ \hline
     First Pieces & ARRAY & varies & N/A & An array including the IDs of the first pieces being played, each of them is encoded as 1-byte INTEGER. \\ \hline
+  \end{tabular}
+\end{center}
+
+Note: Pieces are encoded from 0 to 6, as follows:
+
+\begin{center}
+  \begin{tabular}{|c|c|}
+    \hline
+ 	Piece Name &   Piece ID\\  \hline \hline
+	I & 0 \\ \hline
+	J & 1 \\ \hline
+	L & 2 \\ \hline
+	O & 3 \\ \hline
+	S & 4 \\ \hline
+	T & 5 \\ \hline
+	Z & 6 \\ \hline
   \end{tabular}
 \end{center}
 
@@ -842,14 +859,13 @@ Round Data include a bunch of gameplay dependent data.
   \end{tabular}
 \end{center}
 
-The Moves array will include the following:
+The Tetris board is a rectangle of 10 columns by 20 rows. The X and Y offset range between 0-9, and 0-19, respectively. The location of a piece is given by the X and Y offset of the bottom left corner of the rectangle that perfectly bounds the piece, given its current orientation. The Moves array will include the following:
 
 \begin{center}
   \begin{tabular}{|p{2cm}|c|c|c|p{8cm}|}
     \hline
     Name & Encoding & Size (B) & Default & Comment \\  \hline \hline
-    Move Time Stamp & INTEGER & 4 & N/A & The time in milliseconds of the move being executed.\\ \hline
-    Piece Number & INTEGER & 4 & N/A & The number of the piece being moved. Games start with piece number 0, and this number increases by 1 for each new piece that comes.\\ \hline
+    Piece Number & INTEGER & 4 & N/A & The number of the piece being moved. Games start with piece number 0, and this number increases by 1 for each new piece that comes. \\ \hline
     Piece Orientation & INTEGER & 1 & N/A & The orientation of the piece. The default piece position is 0x00, and this number increases by 1 each time the piece is rotated in a clockwise fashion. \\ \hline
     Piece X Offset& INTEGER & 1 & N/A & The X offset of the location where the piece has been dropped.\\ \hline
     Piece Y Offset& INTEGER & 1 & N/A & The Y offset of the location where the piece has been dropped.\\ \hline

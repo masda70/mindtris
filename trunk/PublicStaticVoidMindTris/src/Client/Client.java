@@ -6,6 +6,8 @@ import IO.*;
 import Util.*;
 import Game.*;
 
+import java.awt.event.ActionEvent;
+import java.awt.event.ActionListener;
 import java.io.*;
 import java.net.ServerSocket;
 import java.net.Socket;
@@ -17,6 +19,7 @@ import java.util.List;
 import java.util.Map.Entry;
 import javax.crypto.Cipher;
 import javax.crypto.IllegalBlockSizeException;
+import javax.swing.Timer;
 
 import sun.reflect.generics.reflectiveObjects.NotImplementedException;
 
@@ -556,43 +559,39 @@ public class Client {
 			for( Game g : _peerGames.elements() ) g.start();
 			_w.beginGame();
 			
-			Thread timer = new Thread() {
-				public void run () {
-					_roundNb = 0;
-					
+			Timer timer = new Timer(Game.ROUND_TIME, new ActionListener() {
+				public void actionPerformed(ActionEvent ev) {
 					try {
-						while( true ) {
-							sleep(100);
-							
-							List<Move> moves = _game.getMoves();
-							
-							SignedMsg msg = new SignedMsg(
-									MsgP2P.ROUND,
-									8+4+1+moves.size()*Move.encodingLen()+1+_hashes.size()*Hash.encodingLen(),
-									_signer);
-							msg._out.write(_lobby._sessionId);
-							msg._out.writeInt(_roundNb);
-							msg._out.writeByte(moves.size());
-							for( Move mv : moves ) msg._out.write(mv);
-							msg._out.writeByte(_hashes.size());
-							for( Hash h : _hashes ) msg._out.write(h);
-							
-							for( Entry<Integer, Peer> o : _lobby._peers ) {
-								Peer p = o.getValue();
-								if( p._id != _me._id ) {
-									p.getCh().send(msg);
-								}
+						List<Move> moves = _game.getMoves();
+						
+						SignedMsg msg = new SignedMsg(
+								MsgP2P.ROUND,
+								8+4+1+moves.size()*Move.encodingLen()+1+_hashes.size()*Hash.encodingLen(),
+								_signer);
+						msg._out.write(_lobby._sessionId);
+						msg._out.writeInt(_roundNb);
+						msg._out.writeByte(moves.size());
+						for( Move mv : moves ) msg._out.write(mv);
+						msg._out.writeByte(_hashes.size());
+						for( Hash h : _hashes ) msg._out.write(h);
+						
+						for( Entry<Integer, Peer> o : _lobby._peers ) {
+							Peer p = o.getValue();
+							if( p._id != _me._id ) {
+								p.getCh().send(msg);
 							}
-							
-							_roundNb++;
 						}
-					} catch ( InterruptedException e ) {
-						e.printStackTrace();
+						
+						_roundNb++;
+						
+						_game.nextRound(_roundNb);
+						for( Game g : _peerGames.elements() ) g.nextRound(_roundNb); 
 					} catch ( IOException e ) {
 						_w.printError(e.getMessage());
 					}
 				}
-			};
+			});
+			
 			timer.start();
 		}
 	}
@@ -757,7 +756,7 @@ public class Client {
 			for( int i=0; i<hashesNb; i++ ) hashes.add(new Hash(in));
 			
 			if( movesNb > 0 ) {
-				_peerGames.get(peerId).addMoves(moves);
+				_peerGames.get(peerId).addMoves(moves, roundNb);
 			}
 		}
 	}

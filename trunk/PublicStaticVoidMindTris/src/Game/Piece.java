@@ -206,9 +206,11 @@ public class Piece implements Encodable {
 		int len = piece.length;
 		
 		try {
-			for( int i=0; i<len; i++ )
-				for( int j=0; j<len; j++ )
-					if( piece[i][j] ) board[x+i][y-j] = _code;
+			synchronized(board) {
+				for( int i=0; i<len; i++ )
+					for( int j=0; j<len; j++ )
+						if( piece[i][j] ) board[x+i][y-j] = _code;
+			}
 		} catch ( IndexOutOfBoundsException e ) {
 			System.out.println("DŽbordement : p:"+_code+" x:"+x+" y:"+y);
 			throw e;

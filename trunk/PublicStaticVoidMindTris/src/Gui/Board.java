@@ -35,11 +35,13 @@ public class Board extends JPanel {
 		super.paint(gr);
 		int sz = ( getHeight() - 2*BORDER_SZ ) / Game.H;
 		
-		for( int i=0; i<Game.W; i++ ) {
-			for( int j=0; j<Game.H; j++ ) {
-				int code = _g.board()[i][j];
-				if( code != Piece.EMPTY )
-					Piece.drawSquare(gr, code, sz, BORDER_SZ+sz*i, BORDER_SZ+sz*(Game.H-j-1), true); 
+		synchronized(_g.board()) {
+			for( int i=0; i<Game.W; i++ ) {
+				for( int j=0; j<Game.H; j++ ) {
+					int code = _g.board()[i][j];
+					if( code != Piece.EMPTY )
+						Piece.drawSquare(gr, code, sz, BORDER_SZ+sz*i, BORDER_SZ+sz*(Game.H-j-1), true); 
+				}
 			}
 		}
 		if( _g.getFallingPiece() != null ) {

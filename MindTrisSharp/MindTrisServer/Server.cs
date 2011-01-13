@@ -328,11 +328,13 @@ namespace MindTrisServer
                 byte[] rgb_pass = BigE.ReadSizePrefixedRawBytes(plain, ref i, 2);
                 string pass = Encoding.ASCII.GetString(Decrypt(rgb_pass));
                 //Do some validity checks
+                /*
                 if (!Regex.IsMatch(username, Dgmt.REGEX_LOGIN))
                 {
                     Response_CreateUser(user, 0x02);
                     return;
                 }
+                //*/
                 if (_accounts.ContainsKey(username))
                 {
                     Response_CreateUser(user, 0x01);

@@ -32,10 +32,14 @@ namespace Tetris
 
             Console.WriteLine("Server Address (default port will be used)?");
             string address = Console.ReadLine();
-            IPAddress ip;
-            if (IPAddress.TryParse(address, out ip))
+            IPAddress ip = null;
+            if (String.IsNullOrEmpty(address))
             {
-                _ip_server = address;
+                address = "127.0.0.1";
+                ip = IPAddress.Parse(address);
+            }
+            else if (IPAddress.TryParse(address, out ip))
+            {
             }
             else
             {
@@ -43,6 +47,7 @@ namespace Tetris
                 ip = Dns.GetHostAddresses(address)[0];
                 _ip_server = ip.ToString();
             }
+            _ip_server = ip.ToString();
 
             _peers = new Dictionary<byte, Peer>();
             _client = new Client(_ip_server);

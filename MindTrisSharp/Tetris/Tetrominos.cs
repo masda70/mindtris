@@ -7,7 +7,7 @@ using Microsoft.Xna.Framework;
 namespace Tetris
 {
     [Flags]
-    public enum FieldState { Free = 0, Static = 1 << 0, Dynamic = 1 << 1, Ghost = 1 << 2 };
+    public enum FieldState { Free = 0, Static = 1 << 0, Dynamic = 1 << 1};
 
     class Tetrominos
     {

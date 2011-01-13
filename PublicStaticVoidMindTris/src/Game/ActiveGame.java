@@ -155,9 +155,7 @@ public class ActiveGame extends Game {
 			return;
 		}
 		
-		_currentPiece.addToBoard(_board, x, y);
-		int nbLines = checkLines(y);
-		_penaltiesWinner.winPenalties(nbLines, _roundNb);
+		placePiece(_currentPiece, x, y, _roundNb);
 		
 		// TODO check
 		_moves.add(new Move(_pieceNb, _currentPiece.getRotation(),

@@ -565,9 +565,9 @@ public class Client {
 						List<Move> moves = _game.getMoves();
 						
 						SignedMsg msg = new SignedMsg(
-								MsgP2P.ROUND,
-								8+4+1+moves.size()*Move.encodingLen()+1+_hashes.size()*Hash.encodingLen(),
-								_signer);
+							MsgP2P.ROUND,
+							8+4+1+moves.size()*Move.encodingLen()+1+_hashes.size()*Hash.encodingLen(),
+							_signer);
 						msg._out.write(_lobby._sessionId);
 						msg._out.writeInt(_roundNb);
 						msg._out.writeByte(moves.size());
@@ -582,6 +582,12 @@ public class Client {
 							}
 						}
 						
+						if( moves.size() > 0 ) {
+							debug("round "+_roundNb+" :");
+							for( Move mv : moves ) {
+								System.out.println(mv.pieceNb+" : ("+mv.pieceX+","+mv.pieceY+")");
+							}
+						}
 						_roundNb++;
 						
 						_game.nextRound(_roundNb);
@@ -746,11 +752,6 @@ public class Client {
 			}
 			
 			int hashesNb = in.readUnsignedByte();
-			
-			if( roundNb != _roundNb ) {
-				debug(Integer.toString(roundNb-_roundNb));
-				//debug("Wrong round nb : "+roundNb+" instead of "+_roundNb);
-			}
 			
 			List<Hash> hashes = new LinkedList<Hash>();
 			for( int i=0; i<hashesNb; i++ ) hashes.add(new Hash(in));

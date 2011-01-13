@@ -1,0 +1,132 @@
+\documentclass{beamer}
+
+\usepackage{amssymb}
+\usepackage{amsmath}
+\usepackage{mathabx}
+\usepackage[french]{babel}
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage[]{eufrak}
+\usepackage[]{verbatim}
+\usepackage{graphicx}
+\graphicspath{{images/}}
+\usepackage{float}
+
+\renewcommand{\FrenchLabelItem}{\textbullet}
+
+\usetheme{Warsaw}
+\title[Programmation Réseau]{Projet de Programmation Réseau}
+\author[Emile CONTAL]{Charles-Pierre Astolfi, Raphael Bonaque, Emile Contal, Martin Gleize, David Montoya}
+\date{13 Janvier 2011}
+
+\begin{document}
+
+\begin{frame}
+  \titlepage
+  \begin{figure}[H]
+    \begin{center}
+      \includegraphics[scale=0.05]{logo.jpg}
+    \end{center}
+  \end{figure}
+\end{frame}
+
+
+\section{Un aperçu du programme}
+\subsection{Connexion au serveur}
+\begin{frame}
+  \begin{figure}[H]
+    \begin{center}
+      \includegraphics[scale=0.35]{screen1.jpg}
+    \end{center}
+  \end{figure}
+\end{frame}
+
+\begin{frame}
+  \begin{figure}[H]
+    \begin{center}
+      \includegraphics[scale=0.35]{screen2.jpg}
+    \end{center}
+  \end{figure}
+\end{frame}
+
+\subsection{Les parties en attente}
+\begin{frame}
+  \begin{figure}[H]
+    \begin{center}
+      \includegraphics[scale=0.35]{screen3.jpg}
+    \end{center}
+  \end{figure}
+\end{frame}
+
+\begin{frame}
+  \begin{figure}[H]
+    \begin{center}
+      \includegraphics[scale=0.35]{screen4.jpg}
+    \end{center}
+  \end{figure}
+\end{frame}
+
+\subsection{Le Tetris}
+\begin{frame}
+  \begin{figure}[H]
+    \begin{center}
+      \includegraphics[scale=0.35]{screen6.jpg}
+    \end{center}
+  \end{figure}
+\end{frame}
+
+\begin{frame}
+  \begin{figure}[H]
+    \begin{center}
+      \includegraphics[scale=0.35]{screen5.jpg}
+    \end{center}
+  \end{figure}
+\end{frame}
+
+\section{Le Protocole}
+\subsection{Le protocole en deux mots}
+\begin{frame}
+
+\begin{block}{Le protocole en deux mots}
+\begin{itemize}
+\item TCP
+\item Spécification octet par octet
+\end{itemize}
+\end{block}
+
+\begin{block}{Conventions d'écriture}
+\begin{itemize}
+\item Big-endianness
+\item entiers non signés
+\item description précise de chaque nouvel objet (clés RSA et DSA,
+ actions du round, etc...)
+\end{itemize}
+\end{block}
+
+\end{frame}
+
+\section{Bilan}
+\subsection{Ce qu'il me resterait à faire}
+\begin{frame}
+\begin{block}{Ce qu'il me resterait à faire}
+\begin{itemize}
+\item Déconnexion des clients
+\item Base de donnée partagée
+\item Détection des tricheurs
+\end{itemize}
+\end{block}
+\end{frame}
+
+\subsection{Conclusion}
+\begin{frame}
+\begin{block}{Conclusion}
+\begin{itemize}
+\item Travail en groupe (réunion, chat vocal, spécifications communes,
+  ...)
+\item Confrontation au bas niveau des langages et du réseau
+\end{itemize}
+\end{block}
+\end{frame}
+
+
+\end{document}

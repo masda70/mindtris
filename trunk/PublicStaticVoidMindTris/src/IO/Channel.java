@@ -8,7 +8,7 @@ import Encodings.Ip;
 
 public abstract class Channel {
 	////// STATIC //////
-	private final boolean DEBUG_IN = false;
+	private final boolean DEBUG_IN = true;
 	private final boolean DEBUG_OUT = false;
 	
 	////// FIELDS //////

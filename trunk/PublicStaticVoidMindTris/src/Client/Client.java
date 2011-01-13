@@ -330,7 +330,7 @@ public class Client {
 				
 				int motdLen = in.readUnsignedShort();
 				UString motd = new UString(in, motdLen);
-				_w.printCenter(motd.v());
+				_w.print(motd.v());
 				
 				keepAlive();
 				break;

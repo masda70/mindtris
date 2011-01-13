@@ -1,8 +1,12 @@
 package Game;
 
+import java.awt.event.ActionEvent;
+import java.awt.event.ActionListener;
 import java.io.IOException;
 import java.util.LinkedList;
 import java.util.List;
+
+import javax.swing.Timer;
 
 import Client.Client;
 import Gui.MainWindow;
@@ -16,6 +20,7 @@ public class ActiveGame extends Game {
 							_fallY,
 							_fallenY;
 	private List<Move>		_moves;
+	private Timer			_timer;
 	
 	////// CONSTRUCTORS //////
 	public ActiveGame ( Client c, int seed ) {
@@ -76,26 +81,22 @@ public class ActiveGame extends Game {
 		
 		nextFall();
 		
-		Thread timer = new Thread() {
-			public void run() {
+		_timer = new Timer(1000, new ActionListener() {
+			public void actionPerformed(ActionEvent ev) {
 				try {
-					while( !_stop ) {
-						sleep(1000);
-						if( _currentPiece.collide(_board, _fallX, _fallY-1) ) {
-							placeCurrent(_fallX, _fallY);
-						} else {
-							_fallY--;
-						}
-						_display.repaint();
+					if( _currentPiece.collide(_board, _fallX, _fallY-1) ) {
+						placeCurrent(_fallX, _fallY);
+					} else {
+						_fallY--;
 					}
-				} catch ( InterruptedException e ) {
-					e.printStackTrace();
+					_display.repaint();
 				} catch (IOException e) {
 					e.printStackTrace();
 				}
 			}
-		};
-		timer.start();
+		});
+		
+		_timer.start();
 	}
 	
 	public int checkLines ( int yHigh ) {
@@ -108,6 +109,7 @@ public class ActiveGame extends Game {
 	
 	public void GameOver () {
 		super.gameOver();
+		_timer.stop();
 		_gui.gameOver();
 	}
 
@@ -155,7 +157,7 @@ public class ActiveGame extends Game {
 		
 		_currentPiece.addToBoard(_board, x, y);
 		int nbLines = checkLines(y);
-		_penaltiesWinner.winPenalties(nbLines);
+		_penaltiesWinner.winPenalties(nbLines, _roundNb);
 		
 		// TODO check
 		_moves.add(new Move(_pieceNb, _currentPiece.getRotation(),

@@ -1,0 +1,137 @@
+\documentclass{article}
+
+\usepackage{amssymb}
+\usepackage{amsmath}
+\usepackage{mathabx}
+\usepackage[french]{babel}
+\usepackage[babel=true,kerning=true]{microtype}
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage{url}
+\usepackage{a4wide}
+\usepackage{verbatim}
+\usepackage{graphicx}
+
+\renewcommand{\FrenchLabelItem}{\textbullet}
+
+\author{CONTAL Emile}
+\title{Projet programmation réseau}
+\date{\today}
+
+\begin{document}
+
+\maketitle
+
+\begin{center}
+\includegraphics[width=3cm]{logo.jpg}
+\end{center}
+
+
+\let\thefootnote\relax\footnotetext{logo by David Montoya : )}
+\newcommand{\thefootnote}{\arabic{footnote}}
+
+\section{La spécification du jeu}
+\subsection{Le déroulement d'une partie}
+Voici les différentes étapes que réalisent client et serveur durant l'établissement d'une partie.
+\begin{enumerate}
+\item
+  Pour commencer, un client et le serveur initient une communication RSA,
+  qui va permettre à l'utilisateur de se connecter à son compte ou d'en créer un nouveau de manière sécurisée.
+
+\item
+  Une fois le client authentifié, il va pouvoir accéder à la liste des parties en attente (\textit{lobby})
+  et peut également fabriquer la sienne.
+
+\item
+  Quand un client décide de rejoindre une partie il fournit au serveur les données qui vont permettre la connexion avec les pairs :
+  adresse ip globale, port d'écoute et clé publique.
+  Le serveur accepte alors la requête en envoyant en retour les données de connexion de tout les pairs déjà connectés.
+  Il devra prévenir ces pairs de l'arrivée d'un nouveau joueur en leur fournissant les mêmes informations.
+
+\item
+  C'est alors que débute la véritable connexion \textit{peer-to-peer}.
+  Les clients procèdent à une étape d'introduction en trois étapes pour sécuriser la connexion.
+  Ils vont signer leur message via DSA combiné à l'emploi de nombres aléatoires uniques (\textit{nonce}) pour empêcher la réutilisation des messages par un fraudeur.
+  \begin{enumerate}
+  \item
+    Pour chaque pair déjà connecté, le nouveau joueur va envoyer une demande portant les identifiants nécessaires ainsi qu'un \textit{nonce}.
+  \item
+    La réponse à cette demande est constituée d'une répétition des identifiants, du \textit{nonce} et d'un deuxième \textit{nonce} fraichement généré.
+    Le pair signe l'ensemble du message pour prouver son identité.
+  \item
+    Enfin, le client ayant fait la demande vérifie que toutes les informations concordent et envoie un acquittement signé contenant les identifiants et les deux \textit{nonces}.
+  \end{enumerate}
+  Les pairs en attente de partie ont maintenant accès au \textit{chat} de manière sécurisée.
+  Ils sont connectés en clique et peuvent envoyer et recevoir des messages signés.
+  Comme pour les autres messages signés, les pairs sécurisent leur signature, ici en incorporant un \textit{nonce} propre à la session.
+
+\item
+  Lorsque le créateur d'une partie le décide, il peut demander au serveur de commencer le jeu.
+  Le serveur va alors dire aux clients de se préparer au lancement. Il leur fournit par la même occasion les premières pièces de la partie.
+  Une fois que tout les clients sont prêts, le serveur lance le jeu. \\
+  Les prochaines pièces seront envoyées par le serveur sur demande des clients.
+
+\item
+  Les pairs informent tout leurs adversaires de leurs action.
+  A intervalle régulier (\textit{round}), ils sont sensés envoyer un message signé comportant le descriptif des actions effectuées durant ce round.
+  Les pairs reconstruisent ainsi le jeu des adversaires. Ils peuvent en vérifier la justesse et doivent en inférer les pénalités qu'ils subissent.
+  Pour assurer qu'un pair n'envoie pas des informations différentes
+  aux autres, ce message contient également un hash SHA-1 des messages reçus au tour précédent.
+  Ceci garantie la cohérence d'une seule et même partie valide malgré l'éventuelle présence de client frauduleux.
+\end{enumerate}
+
+\subsection{Le protocole réseau}
+L'ensemble du protocole est décrit dans un pdf que nous tenons à jour à chaque modification.
+Clients et serveur communiquent via TCP.
+La cohérence des parties n'étant assurée que si les messages arrivent tous et dans le bon ordre, nous n'avons pas pu utiliser UDP.
+Par soucis d'efficacité et de rigueur, nous avons choisi de spécifier le contenu des messages octet par octet.
+La structure des paquets envoyés est la suivante :
+\begin{verbatim}
+ProtocoleId + messageLength (2 bytes) + messageType (1 byte) + payload
+\end{verbatim}
+
+Ce choix nous a amené à définir très précisément le codage des données, chaque langage ayant une manière différente de les représenter.
+Voici en particulier quelques exemples importants : 
+
+\begin{itemize}
+\item L'ordre des octets envoyés correspond au \textit{network endianness} soit \textit{big-endian}.
+\item Les entiers sont non signés.
+\item Les clés publiques et les signatures sont envoyées en concaténant les grands entiers qui les compose précédés de leurs tailles.
+\end{itemize}
+
+\subsection{Les règles du jeu}
+Les règles que nous avons choisi suivent la spécification officielle\footnote{\url{http://tetrisconcept.net/wiki/Tetris_Guideline}} de $Tetris\textsuperscript{\textregistered}$ par \textit{The Tetris Company}.
+Parmi ces règles on notera les plus intéressantes :
+\begin{itemize}
+\item La génération des nouvelles pièces se fait par séquence de permutations aléatoires des sept pièces\footnote{\url{http://tetrisconcept.net/wiki/Random_Generator}}.
+\item Les rotations s'effectuent en suivant l'algorithme \textit{Super Rotation System}\footnote{\url{http://tetrisconcept.net/wiki/SRS}}.
+  En particulier, les rotations doivent implémenter les \textit{wall kick} : lorsqu'une rotation bloque, il faut tenter de décaler légèrement la pièce vers une position alternative.
+  Ceci autorise les joueurs à effectuer des mouvements de pivots très intéressants lorsqu'ils sont bien contrôlés.
+\end{itemize}
+
+\newpage 
+
+\section{Implémentation}
+\subsection{Généralités}
+Afin de mettre au point notre protocole, nous nous réunissons régulièrement pour que chacun puisse apporter son point de vue.
+Nous avons utilisé un système de gestion de version pour autoriser tout le monde à récupérer le travail des autres.
+Il est ainsi aisé de tester la compatibilité des diverses versions.
+
+J'ai choisi d'utiliser Java pour ce projet.
+Mon implémentation sépare systématiquement l'aspect graphique (vue et controleur) du modèle.
+Je me suis forcé à n'utiliser aucune librairie externe de façon à exécuter facilement mes binaires sous n'importe quelle plateforme.
+
+ J'ai fait usage sans modération des structures de Java pour faciliter le code.
+
+\subsection{Lecture et Ecriture des paquets}
+La communication est fondée sur la classe \verb Channel  qui gère les \verb Socket  et créer une instance des classes \verb InData  et \verb OutData .
+Ces dernières héritent respectivement des classes de Java \verb DataInputStream  et \verb DataOutputStream .
+Elles permettent la lecture et l'écriture de n'importe quel objet dont le codage est donné par les méthodes précisées dans l'interface \verb Encodable .
+Je peux ainsi m'abstraire des détails du protocole dans l'implémentation du client et du serveur et léguer le codage aux classes particulières.
+
+\subsection{Reception des paquets}
+Les classes \verb Client  et \verb Server  disposent toutes deux d'une instance de \verb MsgHandler  ainsi qu'une implémentations de l'interface \verb Handler  par type de message.
+Le rôle du thread \verb MsgHandler  est d'écouter sur le \verb Channel  les messages entrants et de transmettre les données au \verb Handler  selon le type du message.
+Il est alors aisé d'ajouter de nouveaux types de paquets.
+
+\end{document}

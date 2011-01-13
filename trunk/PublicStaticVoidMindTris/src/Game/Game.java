@@ -23,7 +23,7 @@ public class Game {
 	protected Piece			_currentPiece;
 	protected int			_roundNb;
 	protected Board			_display;
-	protected IdMap<Integer>_waitingPenalties;
+	protected Queue<Penalty>_waitingPenalties;
 	private int				_rndGen;
 
 	
@@ -31,7 +31,7 @@ public class Game {
 	public Game ( int seed ) {
 		_pieces = new LinkedList<Piece>();
 		_board = new int[W][H];
-		_waitingPenalties = new IdMap<Integer>();
+		_waitingPenalties = new LinkedList<Penalty>();
 		
 		for( int i=0; i<W; i++ )
 			for( int j=0; j<H; j++ )
@@ -47,33 +47,6 @@ public class Game {
 
 	public void nextRound ( int r ) {
 		_roundNb = r;
-		
-		Integer penalties = _waitingPenalties.get(r);
-		if( penalties != null && penalties > 0 ) {
-			for( int i=0; i<Game.W; i++ ) {
-				for( int j=Game.H-1; j>=0; j-- ) {
-					if( j+penalties >= Game.H ) {
-						if( _board[i][j] != Piece.EMPTY ) {
-							System.out.println("peer game over by direct hit !");
-							gameOver();
-							return;
-						}
-					} else {
-						_board[i][j+penalties] = _board[i][j];
-					}
-                }
-            }
-            
-            for( int j=0; j<penalties; j++ ) {
-                    int hole = nextHoleInPenalty();
-                    
-                    for( int i=0; i<Game.W; i++ )
-                            _board[i][j] = ( i != hole ) ? Piece.PENALTY : Piece.EMPTY;
-            }
-            _display.repaint();
-		}
-		
-		_waitingPenalties.rm(r);
 	}
 	
 	public void addNewPiece ( Piece piece, int pieceOffset ) {
@@ -89,20 +62,18 @@ public class Game {
 			
 			try {
 				System.out.println("adv nb:"+m.pieceNb+" ("+p+") x:"+m.pieceX+" y:"+m.pieceY+" r:"+m.pieceRotation);
-				p.addToBoard(_board, m.pieceX-p.offsetX(), m.pieceY+p.offsetY());
+				placePiece(p, m.pieceX-p.offsetX(), m.pieceY+p.offsetY(), round);
 			} catch ( IndexOutOfBoundsException e ) {
 				gameOver();
 			}
-			
-			int nbLines = checkLines(m.pieceY+5);
-			_penaltiesWinner.winPenalties(nbLines, round);
 		}
 		
 		if( moves.size() > 0 ) _display.repaint();
 	}
 	
 	public void winPenalties ( int deletedLines, int initRound ) {
-		_waitingPenalties.add(initRound+10, deletedLines - 1);
+		if( deletedLines > 0 )
+			_waitingPenalties.add(new Penalty(initRound+10, deletedLines-1));
 	}
 	
 	public void setPenaltiesWinner ( Game winner ) {
@@ -136,6 +107,43 @@ public class Game {
 
 		synchronized (_pieces) {
 			return _pieces.poll();
+		}
+	}
+	
+	protected void placePiece ( Piece p, int x, int y, int round ) {
+		p.addToBoard(_board, x, y);
+		
+		// throw penalties
+		int nbLines = checkLines(y);
+		_penaltiesWinner.winPenalties(nbLines, round);
+		
+		// apply waiting penalties
+		Penalty penalty;
+		while( (penalty = _waitingPenalties.peek()) != null && penalty.round <= round ) {
+
+			for( int i=0; i<Game.W; i++ ) {
+				for( int j=Game.H-1; j>=0; j-- ) {
+					if( j+penalty.nbLines >= Game.H ) {
+						if( _board[i][j] != Piece.EMPTY ) {
+							System.out.println("peer game over by direct hit !");
+							gameOver();
+							return;
+						}
+					} else {
+						_board[i][j+penalty.nbLines] = _board[i][j];
+					}
+                }
+            }
+            
+            for( int j=0; j<penalty.nbLines; j++ ) {
+                    int hole = nextHoleInPenalty();
+                    
+                    for( int i=0; i<Game.W; i++ )
+                            _board[i][j] = ( i != hole ) ? Piece.PENALTY : Piece.EMPTY;
+            }
+            _display.repaint();
+			
+			_waitingPenalties.poll();
 		}
 	}
 	

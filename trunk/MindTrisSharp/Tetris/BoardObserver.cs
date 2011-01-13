@@ -9,15 +9,15 @@ namespace Tetris
     {
         SpriteBatch sBatch;
         Texture2D textures;
-        Rectangle[] rectangles;
+        Rectangle[] _rectangles;
         enum FieldState { Free, Static, Dynamic };
-        FieldState[,] boardFields;
+        FieldState[,] _boardFields;
         Vector2[, ,] Figures;
         readonly Vector2 StartPositionForNewFigure = new Vector2(3, 0);
         Vector2 PositionForDynamicFigure;
         Vector2[] DynamicFigure = new Vector2[BLOCKS_COUNT_IN_FIGURE];
         Random random = new Random();
-        int[,] BoardColor;
+        int[,] _boardColor;
         const int HEIGHT = 20;
         const int WIDTH = 10;
         const int BLOCKS_COUNT_IN_FIGURE = 4;
@@ -58,14 +58,14 @@ namespace Tetris
             this.textures = textures;
 
             // Rectangles to draw figures
-            this.rectangles = rectangles;
+            this._rectangles = rectangles;
 
             _offset_x = x;
             _offset_y = y;
 
             // Create tetris board
-            boardFields = new FieldState[WIDTH, HEIGHT];
-            BoardColor = new int[WIDTH, HEIGHT];
+            _boardFields = new FieldState[WIDTH, HEIGHT];
+            _boardColor = new int[WIDTH, HEIGHT];
 
             Figures = Tetrominos.CreateFiguresSRSTrueRotations();
 
@@ -100,7 +100,7 @@ namespace Tetris
             int BlockNumberInDynamicFigure = 0;
             for (int i = 0; i < WIDTH; i++)
                 for (int j = 0; j < HEIGHT; j++)
-                    if (boardFields[i, j] == FieldState.Dynamic)
+                    if (_boardFields[i, j] == FieldState.Dynamic)
                         DynamicFigure[BlockNumberInDynamicFigure++] = new Vector2(i, j);
         }
 
@@ -116,7 +116,7 @@ namespace Tetris
             {
                 BlockLine = true;
                 for (int i = 0; i < WIDTH; i++)
-                    if (boardFields[i, j] == FieldState.Free) BlockLine = false;
+                    if (_boardFields[i, j] == FieldState.Free) BlockLine = false;
                 //Destroy total lines
                 if (BlockLine)
                 {
@@ -125,13 +125,13 @@ namespace Tetris
                     for (int l = j; l > 0; l--)
                         for (int k = 0; k < WIDTH; k++)
                         {
-                            boardFields[k, l] = boardFields[k, l - 1];
-                            BoardColor[k, l] = BoardColor[k, l - 1];
+                            _boardFields[k, l] = _boardFields[k, l - 1];
+                            _boardColor[k, l] = _boardColor[k, l - 1];
                         }
                     for (int l = 0; l < WIDTH; l++)
                     {
-                        boardFields[l, 0] = FieldState.Free;
-                        BoardColor[l, 0] = -1;
+                        _boardFields[l, 0] = FieldState.Free;
+                        _boardColor[l, 0] = -1;
                     }
                 }
             }
@@ -142,14 +142,46 @@ namespace Tetris
             return BlockLineCount;
         }
 
+        public void ApplyPenalty(Penalty penalty)
+        {
+            int count = penalty.Lines - 1;
+            int y;
+            //On recopie les lignes
+            for (y = 0; y < HEIGHT - count; y++)
+            {
+                for (int x = 0; x < WIDTH; x++)
+                {
+                    CopyBlock(x, y, x, y + count);
+                }
+            }
+            //On ajoute des lignes grises avec un trou
+            for (; y < HEIGHT; y++)
+            {
+                int holeX = penalty.NextHoleX();
+                for (int x = 0; x < WIDTH; x++)
+                {
+                    if (x != holeX)
+                    {
+                        _boardFields[x, y] = FieldState.Static;
+                        _boardColor[x, y] = _rectangles.Length - 1;
+                    }
+                    else
+                    {
+                        _boardFields[x, y] = FieldState.Free;
+                        _boardColor[x, y] = -1;
+                    }
+                }
+            }
+        }
+
         bool DrawFigureOnBoard(Vector2[] vector, int color)
         {
             if (!TryPlaceFigureOnBoard(vector))
                 return false;
             for (int i = 0; i <= vector.GetUpperBound(0); i++)
             {
-                boardFields[(int)vector[i].X, (int)vector[i].Y] = FieldState.Dynamic;
-                BoardColor[(int)vector[i].X, (int)vector[i].Y] = color;
+                _boardFields[(int)vector[i].X, (int)vector[i].Y] = FieldState.Dynamic;
+                _boardColor[(int)vector[i].X, (int)vector[i].Y] = color;
             }
             return true;
         }
@@ -161,7 +193,7 @@ namespace Tetris
                     (vector[i].Y >= HEIGHT))
                     return false;
             for (int i = 0; i <= vector.GetUpperBound(0); i++)
-                if (boardFields[(int)vector[i].X, (int)vector[i].Y] == FieldState.Static)
+                if (_boardFields[(int)vector[i].X, (int)vector[i].Y] == FieldState.Static)
                     return false;
             return true;
         }
@@ -182,7 +214,13 @@ namespace Tetris
             return new Vector2(X_min, Y_max);
         }
 
-        public bool PlacePiece(byte piece, byte orientation, byte x, byte y)
+        void CopyBlock(int x_dest, int y_dest, int x_source, int y_source)
+        {
+            _boardFields[x_dest, y_dest] = _boardFields[x_source, y_source];
+            _boardColor[x_dest, y_dest] = _boardColor[x_source, y_source];
+        }
+
+        public int PlacePiece(byte piece, byte orientation, byte x, byte y)
         {
             Vector2[] piece_v = new Vector2[BLOCKS_COUNT_IN_FIGURE];
             for (int i = 0; i < BLOCKS_COUNT_IN_FIGURE; i++)
@@ -198,8 +236,8 @@ namespace Tetris
             }
             //On draw ça sur le board
             bool result = DrawFigureOnBoard(piece_v, piece);
-            DestroyLines();
-            return result;
+            int lines = DestroyLines();
+            return result ? lines : -1;
         }
 
         public void SortingVector2(ref Vector2[] vector, bool sortByX, int a, int b)
@@ -236,8 +274,8 @@ namespace Tetris
         }
         void ClearBoardField(int i, int j)
         {
-            boardFields[i, j] = FieldState.Free;
-            BoardColor[i, j] = -1;
+            _boardFields[i, j] = FieldState.Free;
+            _boardColor[i, j] = -1;
         }
         public override void Draw(GameTime gameTime)
         {
@@ -245,11 +283,11 @@ namespace Tetris
             // Draw the blocks
             for (int i = 0; i < WIDTH; i++)
                 for (int j = 0; j < HEIGHT; j++)
-                    if (boardFields[i, j] != FieldState.Free)
+                    if (_boardFields[i, j] != FieldState.Free)
                     {
-                        startPosition = new Vector2((10 + i) * rectangles[0].Width,
-                            (2 + j) * rectangles[0].Height) + new Vector2(_offset_x, _offset_y);
-                        sBatch.Draw(textures, startPosition, rectangles[BoardColor[i, j]], Color.White);
+                        startPosition = new Vector2((10 + i) * _rectangles[0].Width,
+                            (2 + j) * _rectangles[0].Height) + new Vector2(_offset_x, _offset_y);
+                        sBatch.Draw(textures, startPosition, _rectangles[_boardColor[i, j]], Color.White);
                     }
 
             base.Draw(gameTime);

@@ -21,7 +21,7 @@ namespace Tetris
         SpriteBatch spriteBatch;
         Texture2D tetrisBackground, tetrisTextures;
         SpriteFont gameFont;
-        readonly Rectangle[] blockRectangles = new Rectangle[8];
+        readonly Rectangle[] blockRectangles = new Rectangle[9];
         
         // Game
         Client _client;
@@ -33,6 +33,7 @@ namespace Tetris
         byte[] _first_pieces;
         uint _roundNumber = 0;
         LinkedList<Move> _pendingMoves = new LinkedList<Move>();
+        LinkedList<Penalty> _penalties = new LinkedList<Penalty>();
         TimeSpan _elapsedSinceLastRound = TimeSpan.Zero;
         const int FRAME_PER_SECONDS = 30;
         Score _score;
@@ -48,6 +49,7 @@ namespace Tetris
         TimeSpan _elapsedSwitch;
         LinkedList<Peer> _initPeers;
         static TimeSpan SWITCH_DELAY = new TimeSpan(0, 0, 3);
+        static TimeSpan CRITICAL_ROUND_DELAY = new TimeSpan(0, 0, 0, 0, Client.ROUND_DELAY_MILLISECONDS - 10);
 
         // Input
         KeyboardState oldKeyboardState = Keyboard.GetState();
@@ -83,6 +85,8 @@ namespace Tetris
             blockRectangles[k++] = new Rectangle(240, 72, 24, 24);
             //Ghost piece
             blockRectangles[k++] = new Rectangle(0, 48, 24, 24);
+            //Penalty piece
+            blockRectangles[k++] = new Rectangle(24, 48, 24, 24);
         }
 
         /// <summary>
@@ -122,7 +126,11 @@ namespace Tetris
             for (int i = 0; i < moves.Length; i++)
             {
                 Console.WriteLine("Received move {0} : ({1}, {2})", moves[i].PieceNumber, moves[i].X, moves[i].Y);
-                _observators[peer.ID].Board.PlacePiece(_pieces[(int)moves[i].PieceNumber], moves[i].Orientation, moves[i].X, TransformY(moves[i].Y));
+                int lines = _observators[peer.ID].Board.PlacePiece(_pieces[(int)moves[i].PieceNumber], moves[i].Orientation, moves[i].X, TransformY(moves[i].Y));
+                if (lines > 1)
+                {
+                    _penalties.AddLast(new Penalty(roundNumber + 10, lines));
+                }
             }
         }
 
@@ -316,6 +324,18 @@ namespace Tetris
                         _score.Value += lines;// (int)((5.0f / 2.0f) * lines * (lines + 3));
                         //_board.Speed += 0.005f;
                     }
+                    if (lines > 1)
+                    {
+                        //Add penalties to other players
+                        if (_observators.Count > 0)
+                        {
+                            int cherche = _rand.Next(0, _observators.Count);
+                            int i = 0;
+                            byte random = 0;
+                            foreach (byte bytouze in _observators.Keys) { if (i == cherche) random = bytouze; i++; }
+                            _penalties.AddLast(new Penalty(random, _roundNumber + 10, lines)); 
+                        }
+                    }
 
                     _score.Level = (int)(10 * _board.Speed);
 
@@ -375,12 +395,26 @@ namespace Tetris
 
             Fin:
                 //Sending Round packets
-                if (_elapsedSinceLastRound > new TimeSpan(0, 0, 0, 0, Client.ROUND_DELAY_MILLISECONDS - 20))
+                if (_elapsedSinceLastRound > CRITICAL_ROUND_DELAY)
                 {
                     _client.SendRoundPacket(_roundNumber, _pendingMoves);
                     _pendingMoves.Clear();
                     _roundNumber++;
                     _elapsedSinceLastRound = TimeSpan.Zero;
+                    //Apply penalties at the beginning of the next round
+                    while (_penalties.Count > 0 && _roundNumber >= _penalties.First.Value.RoundNumber)
+                    {
+                        Penalty pen = _penalties.First.Value;
+                        _penalties.RemoveFirst();
+                        if (pen.IsForMe)
+                        {
+                            _board.ApplyPenalty(pen);
+                        }
+                        else
+                        {
+                            _observators[pen.PeerID].Board.ApplyPenalty(pen);
+                        }
+                    }
                 }
             }
             _tous_les_X_updates = (_tous_les_X_updates + 1) % _updates_frequency_X;
@@ -425,8 +459,6 @@ namespace Tetris
             base.Draw(gameTime);
             spriteBatch.End();
         }
-
-        
     }
 
     class Observator

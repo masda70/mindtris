@@ -12,7 +12,7 @@ namespace Tetris
         Texture2D textures;
         Rectangle[] _rectangles;
 
-        FieldState[,] boardFields;
+        FieldState[,] _boardFields;
         Vector2[, ,] _figures;
         Vector2[,] _jlstz_offsetData;
         Vector2[,] _i_offsetData;
@@ -22,7 +22,7 @@ namespace Tetris
         Vector2 PositionForDynamicFigure;
         Vector2[] DynamicFigure = new Vector2[BLOCKS_COUNT_IN_FIGURE];
         Random random = new Random();
-        int[,] BoardColor;
+        int[,] _boardColor;
         public const int HEIGHT = 20;
         public const int WIDTH = 10;
         const int BLOCKS_COUNT_IN_FIGURE = 4;
@@ -71,8 +71,8 @@ namespace Tetris
             Tetrominos.CreateSRSTrueRotationsOffsetData(out _jlstz_offsetData, out _i_offsetData, out _o_offsetData);
 
             // Create tetris board
-            boardFields = new FieldState[WIDTH, HEIGHT];
-            BoardColor = new int[WIDTH, HEIGHT];
+            _boardFields = new FieldState[WIDTH, HEIGHT];
+            _boardColor = new int[WIDTH, HEIGHT];
 
             for (int i = 0; i < pieces.Length; i++)
             {
@@ -108,7 +108,7 @@ namespace Tetris
             int BlockNumberInDynamicFigure = 0;
             for (int i = 0; i < WIDTH; i++)
                 for (int j = 0; j < HEIGHT; j++)
-                    if (boardFields[i, j] == FieldState.Dynamic)
+                    if (_boardFields[i, j] == FieldState.Dynamic)
                         DynamicFigure[BlockNumberInDynamicFigure++] = new Vector2(i, j);
         }
 
@@ -123,7 +123,7 @@ namespace Tetris
             for (int j = 0; j < HEIGHT; j++)
             {
                 for (int i = 0; i < WIDTH; i++)
-                    if (boardFields[i, j] == FieldState.Static)
+                    if (_boardFields[i, j] == FieldState.Static)
                         BlockLine = true;
                     else
                     {
@@ -138,13 +138,12 @@ namespace Tetris
                     for (int l = j; l > 0; l--)
                         for (int k = 0; k < WIDTH; k++)
                         {
-                            boardFields[k, l] = boardFields[k, l - 1];
-                            BoardColor[k, l] = BoardColor[k, l - 1];
+                            CopyBlock(k, l, k, l - 1);
                         }
                     for (int l = 0; l < WIDTH; l++)
                     {
-                        boardFields[l, 0] = FieldState.Free;
-                        BoardColor[l, 0] = -1;
+                        _boardFields[l, 0] = FieldState.Free;
+                        _boardColor[l, 0] = -1;
                     }
                 }
             }
@@ -193,8 +192,8 @@ namespace Tetris
                 return false;
             for (int i = 0; i <= vector.GetUpperBound(0); i++)
             {
-                boardFields[(int)vector[i].X, (int)vector[i].Y] = FieldState.Dynamic;
-                BoardColor[(int)vector[i].X, (int)vector[i].Y] = color;
+                _boardFields[(int)vector[i].X, (int)vector[i].Y] = FieldState.Dynamic;
+                _boardColor[(int)vector[i].X, (int)vector[i].Y] = color;
             }
             return true;
         }
@@ -206,7 +205,7 @@ namespace Tetris
                     (vector[i].Y >= HEIGHT))
                     return false;
             for (int i = 0; i <= vector.GetUpperBound(0); i++)
-                if (boardFields[(int)vector[i].X, (int)vector[i].Y] == FieldState.Static)
+                if (_boardFields[(int)vector[i].X, (int)vector[i].Y] == FieldState.Static)
                     return false;
             return true;
         }
@@ -221,16 +220,16 @@ namespace Tetris
             {
                 if ((DynamicFigure[i].X == 0))
                     return;
-                if (boardFields[(int)DynamicFigure[i].X - 1, (int)DynamicFigure[i].Y] == FieldState.Static)
+                if (_boardFields[(int)DynamicFigure[i].X - 1, (int)DynamicFigure[i].Y] == FieldState.Static)
                     return;
             }
             // Move figure on board
             for (int i = 0; i < BLOCKS_COUNT_IN_FIGURE; i++)
             {
-                boardFields[(int)DynamicFigure[i].X - 1, (int)DynamicFigure[i].Y] =
-                    boardFields[(int)DynamicFigure[i].X, (int)DynamicFigure[i].Y];
-                BoardColor[(int)DynamicFigure[i].X - 1, (int)DynamicFigure[i].Y] = 
-                    BoardColor[(int)DynamicFigure[i].X, (int)DynamicFigure[i].Y];
+                _boardFields[(int)DynamicFigure[i].X - 1, (int)DynamicFigure[i].Y] =
+                    _boardFields[(int)DynamicFigure[i].X, (int)DynamicFigure[i].Y];
+                _boardColor[(int)DynamicFigure[i].X - 1, (int)DynamicFigure[i].Y] = 
+                    _boardColor[(int)DynamicFigure[i].X, (int)DynamicFigure[i].Y];
                 ClearBoardField((int)DynamicFigure[i].X, (int)DynamicFigure[i].Y);
                 // Change position for blocks in DynamicFigure
                 DynamicFigure[i].X = DynamicFigure[i].X - 1;
@@ -250,16 +249,16 @@ namespace Tetris
             {
                 if ((DynamicFigure[i].X == WIDTH - 1))
                     return;
-                if (boardFields[(int)DynamicFigure[i].X + 1, (int)DynamicFigure[i].Y] == FieldState.Static)
+                if (_boardFields[(int)DynamicFigure[i].X + 1, (int)DynamicFigure[i].Y] == FieldState.Static)
                     return;
             }
             // Move figure on board
             for (int i = BLOCKS_COUNT_IN_FIGURE - 1; i >=0; i--)
             {
-                boardFields[(int)DynamicFigure[i].X + 1, (int)DynamicFigure[i].Y] =
-                    boardFields[(int)DynamicFigure[i].X, (int)DynamicFigure[i].Y];
-                BoardColor[(int)DynamicFigure[i].X + 1, (int)DynamicFigure[i].Y] =
-                    BoardColor[(int)DynamicFigure[i].X, (int)DynamicFigure[i].Y];
+                _boardFields[(int)DynamicFigure[i].X + 1, (int)DynamicFigure[i].Y] =
+                    _boardFields[(int)DynamicFigure[i].X, (int)DynamicFigure[i].Y];
+                _boardColor[(int)DynamicFigure[i].X + 1, (int)DynamicFigure[i].Y] =
+                    _boardColor[(int)DynamicFigure[i].X, (int)DynamicFigure[i].Y];
                 ClearBoardField((int)DynamicFigure[i].X, (int)DynamicFigure[i].Y);
                 // Change position for blocks in DynamicFigure
                 DynamicFigure[i].X = DynamicFigure[i].X + 1;
@@ -279,7 +278,7 @@ namespace Tetris
             FixPieceAndSendEvent();
             showNewBlock = true;
             //Grab color
-            int color = BoardColor[(int)oldDynamic[0].X, (int)oldDynamic[0].Y];
+            int color = _boardColor[(int)oldDynamic[0].X, (int)oldDynamic[0].Y];
             //Delete former piece
             for (int i = 0; i < BLOCKS_COUNT_IN_FIGURE; i++)
             {
@@ -288,12 +287,44 @@ namespace Tetris
             // Move figure on board
             for (int i = 0; i < BLOCKS_COUNT_IN_FIGURE; i++)
             {
-                boardFields[(int)DynamicFigure[i].X, (int)DynamicFigure[i].Y] = FieldState.Static;
-                BoardColor[(int)DynamicFigure[i].X, (int)DynamicFigure[i].Y] = color;
+                _boardFields[(int)DynamicFigure[i].X, (int)DynamicFigure[i].Y] = FieldState.Static;
+                _boardColor[(int)DynamicFigure[i].X, (int)DynamicFigure[i].Y] = color;
             }
 
             PositionForDynamicFigure.Y += (DynamicFigure[0].Y - oldDynamic[0].Y);
             return;
+        }
+
+        public void ApplyPenalty(Penalty penalty)
+        {
+            int count = penalty.Lines - 1;
+            int y;
+            //On recopie les lignes
+            for (y = 0; y < HEIGHT - count; y++)
+            {
+                for (int x = 0; x < WIDTH; x++)
+                {
+                    CopyBlock(x, y, x, y + count);
+                }
+            }
+            //On ajoute des lignes grises avec un trou
+            for (; y < HEIGHT; y++)
+            {
+                int holeX = penalty.NextHoleX();
+                for (int x = 0; x < WIDTH; x++)
+                {
+                    if (x != holeX)
+                    {
+                        _boardFields[x, y] = FieldState.Static;
+                        _boardColor[x, y] = _rectangles.Length - 1;
+                    }
+                    else
+                    {
+                        _boardFields[x, y] = FieldState.Free;
+                        _boardColor[x, y] = -1;
+                    }
+                }
+            }
         }
 
         Vector2 GetPositionOfPlacedPiece(Vector2[] piece)
@@ -368,13 +399,18 @@ namespace Tetris
             return vrai ? orientation : result;
         }
 
-        
+        void CopyBlock(int x_dest, int y_dest, int x_source, int y_source)
+        {
+            _boardFields[x_dest, y_dest] = _boardFields[x_source, y_source];
+            _boardColor[x_dest, y_dest] = _boardColor[x_source, y_source];
+        }
+
         public bool CollideWithNextDown(Vector2[] piece)
         {
             for (int i = 0; i < BLOCKS_COUNT_IN_FIGURE; i++)
             {
                 if (piece[i].Y + 1 >= HEIGHT) return true;
-                if (boardFields[(int)piece[i].X, (int)piece[i].Y + 1] == FieldState.Static) return true;
+                if (_boardFields[(int)piece[i].X, (int)piece[i].Y + 1] == FieldState.Static) return true;
             }
             return false;
         }
@@ -416,10 +452,10 @@ namespace Tetris
             for (int i = 0; i < BLOCKS_COUNT_IN_FIGURE; i++)
             {
                 if ((DynamicFigure[i].Y == HEIGHT - 1) ||
-                    boardFields[(int)DynamicFigure[i].X, (int)DynamicFigure[i].Y + 1] == FieldState.Static)
+                    _boardFields[(int)DynamicFigure[i].X, (int)DynamicFigure[i].Y + 1] == FieldState.Static)
                 {
                     for (int k = 0; k < BLOCKS_COUNT_IN_FIGURE; k++)
-                        boardFields[(int)DynamicFigure[k].X, (int)DynamicFigure[k].Y] = FieldState.Static;
+                        _boardFields[(int)DynamicFigure[k].X, (int)DynamicFigure[k].Y] = FieldState.Static;
 
                     FixPieceAndSendEvent();
                     showNewBlock = true;
@@ -429,8 +465,8 @@ namespace Tetris
             // Move figure on board
             for (int i = BLOCKS_COUNT_IN_FIGURE - 1; i >= 0; i--)
             {
-                boardFields[(int)DynamicFigure[i].X, (int)DynamicFigure[i].Y + 1] = boardFields[(int)DynamicFigure[i].X, (int)DynamicFigure[i].Y];
-                BoardColor[(int)DynamicFigure[i].X, (int)DynamicFigure[i].Y + 1] = BoardColor[(int)DynamicFigure[i].X, (int)DynamicFigure[i].Y];
+                _boardFields[(int)DynamicFigure[i].X, (int)DynamicFigure[i].Y + 1] = _boardFields[(int)DynamicFigure[i].X, (int)DynamicFigure[i].Y];
+                _boardColor[(int)DynamicFigure[i].X, (int)DynamicFigure[i].Y + 1] = _boardColor[(int)DynamicFigure[i].X, (int)DynamicFigure[i].Y];
                 ClearBoardField((int)DynamicFigure[i].X, (int)DynamicFigure[i].Y);
                 // Change position for blocks in DynamicFigure
                 DynamicFigure[i].Y = DynamicFigure[i].Y + 1;
@@ -474,8 +510,8 @@ namespace Tetris
                 DynamicFigure = test;
                 for (int i = 0; i <= DynamicFigure.GetUpperBound(0); i++)
                 {
-                    boardFields[(int)DynamicFigure[i].X, (int)DynamicFigure[i].Y] = FieldState.Dynamic;
-                    BoardColor[(int)DynamicFigure[i].X, (int)DynamicFigure[i].Y] = DynamicFigureColor;
+                    _boardFields[(int)DynamicFigure[i].X, (int)DynamicFigure[i].Y] = FieldState.Dynamic;
+                    _boardColor[(int)DynamicFigure[i].X, (int)DynamicFigure[i].Y] = DynamicFigureColor;
                 }
             }
         }
@@ -514,8 +550,8 @@ namespace Tetris
         }
         void ClearBoardField(int i, int j)
         {
-            boardFields[i, j] = FieldState.Free;
-            BoardColor[i, j] = -1;
+            _boardFields[i, j] = FieldState.Free;
+            _boardColor[i, j] = -1;
         }
         public override void Draw(GameTime gameTime)
         {
@@ -523,11 +559,11 @@ namespace Tetris
             // Draw the blocks
             for (int i = 0; i < WIDTH; i++)
                 for (int j = 0; j < HEIGHT; j++)
-                    if (boardFields[i, j] != FieldState.Free)
+                    if (_boardFields[i, j] != FieldState.Free)
                     {
                         startPosition = new Vector2((10 + i) * _rectangles[0].Width,
                             (2 + j) * _rectangles[0].Height);
-                        sBatch.Draw(textures, startPosition, _rectangles[BoardColor[i, j]], Color.White);
+                        sBatch.Draw(textures, startPosition, _rectangles[_boardColor[i, j]], Color.White);
                     }
             Vector2[] ghostPiece = GetGhostPiece(DynamicFigure);
             //Draw ghost piece
@@ -535,11 +571,11 @@ namespace Tetris
             {
                 int x = (int)ghostPiece[i].X;
                 int y = (int)ghostPiece[i].Y;
-                if (boardFields[x, y] == FieldState.Free)
+                if (_boardFields[x, y] == FieldState.Free)
                 {
                     startPosition = new Vector2((10 + x) * _rectangles[0].Width,
                             (2 + y) * _rectangles[0].Height);
-                    sBatch.Draw(textures, startPosition, _rectangles[_rectangles.Length - 1], Color.White);
+                    sBatch.Draw(textures, startPosition, _rectangles[_rectangles.Length - 2], Color.White);
                 }
             }
 

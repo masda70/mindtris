@@ -119,6 +119,7 @@
   <ItemGroup>
     <Compile Include="Board.cs" />
     <Compile Include="BoardObserver.cs" />
+    <Compile Include="Penalty.cs" />
     <Compile Include="Tetrominos.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
     <Compile Include="Program.cs" />

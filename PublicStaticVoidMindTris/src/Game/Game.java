@@ -178,7 +178,7 @@ public class Game {
 	
 	protected int nextHoleInPenalty () {
 		_rndGen = 18000 * (_rndGen & 65535) + (_rndGen >> 16);
-		return _rndGen % Piece.PIECES_NB;
+		return _rndGen % W;
 	}
 	
 	////// STATIC FUNCTION //////
